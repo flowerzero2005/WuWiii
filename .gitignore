@@ -1,0 +1,209 @@
+.Trash/
+.trash/
+.DS_Store
+
+# Node.js
+node_modules
+
+# Logs
+*.log
+*.logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+.idea
+.temp
+**/temp/
+
+# Anything .local, especially for .env.local
+*.local
+# e.g. Claude Code settings.local.json
+*.local.*
+
+# Audio binaries
+*.pcm
+*.wav
+*.ogg
+*.mp3
+
+# Credentials
+cert*/
+*.pem
+*.crt
+*.cer
+*.key
+*.p12
+/.env
+
+# Test coverage
+coverage/
+
+# Build
+out/
+bundle/
+.flatpak-builder/
+.flatpak-repo/
+*.flatpak
+# WXT specified this too
+*.output
+
+# Vite
+dist
+# Nuxt
+.nuxt
+# vite-plugin-inspect
+.vite-inspect
+
+# auto import & auto fs based router
+components.d.ts
+**/typed-router.d.ts
+
+# Cache
+.eslintcache
+**/.cache/
+**/.vitepress/cache/
+**/tsconfig.tsbuildinfo
+.worktrees/
+
+# Local agent and browser-test artifacts
+.playwright-cli/
+.superpowers/
+.tmp/
+artifacts/
+docs/career/
+docs/.playwright-cli/
+/output/playwright/
+
+# Python local caches
+__pycache__/
+*.pyc
+
+# Local desktop packaging outputs
+apps/stage-tamagotchi/dist-*/
+apps/stage-tamagotchi/dist-next/
+apps/stage-tamagotchi/dist-restored/
+apps/stage-tamagotchi/electron.vite.config.*.mjs
+
+# Accidental Chromium probe output
+/--disable-gpu
+
+# Accidental network probe output
+/20.205.243.166
+
+# Netlify
+**/.netlify/*
+**/.netlify/functions-serve/*
+
+**/public/assets/js/*
+**/assets/live2d/models/*
+**/assets/vrm/models/*
+
+# Serving fonts locally
+**/public/assets/fonts/
+
+# Code generation
+**/vscode-airi/src/generated/
+**/vscode-airi/LICENSE
+
+# Make it easy for devenv users to override their local environment.
+# See: https://github.com/moeru-ai/airi/pull/110#discussion_r2024378953
+.direnv
+.pre-commit-config.yaml
+.envrc
+.devenv*
+devenv.*
+
+# Rust
+target/
+crates/*/target/
+
+# turborepo
+.turbo
+
+# WXT
+.wxt
+stats.html
+stats-*.json
+web-ext.config.ts
+
+# Data
+.postgres
+twitter-session.json
+
+# Symlinks created by nix build
+result*
+# Nix develop outputs
+outputs/
+
+# MediaPipe task assets
+packages/model-driver-mediapipe/tasks/assets/*
+
+# Plugins
+plugins/local
+plugins/development
+plugins-local
+plugins-development
+
+apps/stage-pocket/ios/buildServer.json
+
+# Local secrets and per-machine configuration in any workspace
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+!**/.env.template
+
+# Private development outputs and temporary export material
+/.work/
+/$tmp/
+/deliveries/
+/ffmpeg-tool/
+/license-current.raw
+/-license*.json
+/*-user.js
+/vitest-llm-*.json
+**/tsconfig.tsbuildinfo
+apps/stage-tamagotchi/deliveries/
+
+# WuWiii desktop development mirror: exclude private operations and other apps.
+/.github/
+/docs/
+/apps/server/
+/apps/stage-web/
+/apps/stage-pocket/
+/apps/component-calling/
+/services/
+/plugins/
+/integrations/
+/crates/
+/nix/
+/tools/
+/MEMORY_SYSTEM.md
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/.agents/
+/.codex/
+/.claude/
+/**/SKILL.md
+/apps/stage-tamagotchi/build/installer.nsh
+/apps/stage-tamagotchi/electron-builder.yml
+/apps/stage-tamagotchi/ai.moeru.airi.*
+/scripts/electron-builder.runtime*.cjs
+/apps/stage-tamagotchi/dist-*/
+/ffmpeg-tool/
+/voice/
+/.worktrees/
+/.tmp-*/
+
+# Internal prose stays out; runtime prompts and licenses may still be tracked.
+/**/*.md
+/**/*.mdx
+!/README.md
+!/DEVELOPMENT_REPOSITORY_SCOPE.md
+!/**/src/**/*.md
+!/**/LICENSE*.md
+!/**/NOTICE*.md

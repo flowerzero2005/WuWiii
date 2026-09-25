@@ -1,0 +1,3194 @@
+common:
+  save: 保存
+runtime:
+  official_speech_temporarily_unavailable: 当前官方语音链路暂时繁忙或不可用，本次保留文字；后续消息会自动重试原声线。
+  speech_provider_failed: 语音服务 {provider} 生成失败，已保留文字回复；不会自动切换到官方语音。
+animations:
+  stage-transitions:
+    title: 是否开启舞台动画
+  use-page-specific-transitions:
+    description: >-
+      某些页面会有自己的过场动画，这将覆盖舞台过场动画
+    title: 是否使用页面特定过场动画
+dialogs:
+  onboarding:
+    title: 欢迎来到呜异屋！
+    description: 先选择呜异屋连接 AI 的方式，再了解人物、语音、桌面工具和数据控制。
+    selectProvider: 选择服务来源
+    configureProvider: 配置 {provider}
+    apiKey: API 密钥
+    apiKeyHelp: 从 {provider} 获取您的 API 密钥并粘贴到这里
+    baseUrl: 基础 URL
+    baseUrlHelp: API 端点 URL（如果不确定请使用默认值）
+    accountId: 账户 ID
+    validationSuccess: 配置验证成功
+    validationFailed: 配置验证失败
+    validationError: '验证错误：{error}'
+    skipForNow: 暂时跳过
+    saveAndContinue: 保存并继续
+    next: 下一步
+    retry: 重试
+    start: 开始吧！
+    select-model: 选择模型
+    no-models: 找不到可用模型
+    no-models-help: >-
+      请返回前面的步骤，根据当前连接方式检查服务账号、API 密钥或本地模型服务。
+    back: 返回
+    credentials:
+      title: 请妥善保管服务密钥
+      description: API 密钥会保存在当前呜异屋安装中。请把它当作密码，不要与他人分享。
+    officialCloud:
+      title: 账号登录需要单独完成
+      description: 这里只会选择呜异屋官方云，不会自动登录或购买点数。完成向导后，请到“账号与点数”登录，再发起第一次云端请求。
+    localProvider:
+      title: 本地模型服务需要已经在运行
+      description: 呜异屋会保存并连接这个本地地址，但不会替你安装、下载或启动 Ollama 或 LM Studio。
+    steps:
+      path:
+        title: 选择呜异屋连接 AI 的方式
+        description: 按照账号、隐私和部署需求选择。完成后仍可随时更换服务来源。
+        options:
+          official-cloud:
+            title: 呜异屋官方云
+            description: 最省心的路径。完成向导后登录并使用账号点数，这里不需要填写第三方 API 密钥。
+          byok:
+            title: 使用自己的 API 密钥
+            description: 使用你自己管理的密钥，连接 OpenAI、Anthropic、Gemini、OpenRouter 或其他兼容服务。
+          local:
+            title: 纯本地模型
+            description: 连接本机运行的 Ollama 或 LM Studio。呜异屋不会替你安装或启动本地模型服务。
+        selected:
+          official-cloud: 你选择了官方云。这里不需要服务密钥，但仍需在“账号与点数”中单独登录。
+          byok: 你选择了自带密钥。请选择你已经持有密钥的云端服务来源。
+          local: 你选择了本地模型。请先确认 Ollama 或 LM Studio 已安装、正在运行并开放本地 API。
+      personalize:
+        title: 让数字居民更像你的伙伴
+        description: 人物与外观独立于 AI 服务来源。本向导不会替你导入或更换人物。
+        items:
+          character:
+            title: 人物与人格
+            description: 选择内置人物或导入人物包，并检查对应的人格和模型设置。
+            location: 设置 > 人物
+          theme:
+            title: 主题与对话外观
+            description: 在外观设置中选择明暗模式、颜色、背景和消息样式。
+            location: 设置 > 系统 > 外观与背景
+      voice:
+        title: 语音与麦克风
+        description: 语音输出和语音输入都是可选项。只有真正使用麦克风功能时，呜异屋才会请求设备权限。
+        items:
+          speech:
+            title: 语音输出
+            description: 选择并测试语音服务、模型和音色。选择聊天模型不会自动配置语音。
+            location: 设置 > 模块 > 语音
+          microphone:
+            title: 语音输入
+            description: 使用语音输入前，请选择转写服务和输入设备。
+            location: 设置 > 模块 > 听觉
+          permission:
+            title: 麦克风权限
+            description: 录音开始时再在系统弹窗中授权。本向导不会提前申请麦克风权限。
+            location: 开始录音时由操作系统请求
+      tools:
+        title: 桌面工具
+        description: 这些工具只有在你主动打开时才会出现，正式使用前可以先了解各自的工作方式。
+        items:
+          quick-chat:
+            title: 快捷聊天
+            description: 紧凑的桌面对话窗口，拥有独立的尺寸、位置和语音行为设置。
+            location: 设置 > 系统 > 快捷聊天
+          butler:
+            title: Butler 管家
+            description: 用于创建和确认提醒、闹钟与计时器。确认流程成功前，呜异屋不会声称任务已创建。
+            location: 从桌面控制区打开 Butler
+          workbench:
+            title: 工作台
+            description: 在工作区中处理文件、预览、工具和较长任务；有副作用的操作仍遵循各自的确认规则。
+            location: 从桌面控制区打开工作台
+      data:
+        title: 数据与诊断
+        description: 呜异屋会在当前安装中保存本地对话和偏好数据；破坏性清理始终需要明确确认。
+        items:
+          storage:
+            title: 数据控制
+            description: 修改前先查看已存数据以及导出、重置等选项。
+            location: 设置 > 数据
+          diagnostics:
+            title: 记忆诊断
+            description: 当记忆召回不符合预期时，可检查记忆健康状态和索引情况。
+            location: 设置 > 记忆 > 诊断
+          cleanup:
+            title: 数据清理
+            description: 向导不会自动清理数据。请之后到数据设置中操作，并确认具体会删除什么。
+            location: 设置 > 数据
+    summary:
+      title: 设置概览
+      description: 聊天服务和模型已经选好。人物、语音、工具与数据等可选设置可在完成后继续调整。
+      path: 连接方式
+      provider: 服务来源
+      model: 模型
+      notSelected: 未选择
+      afterTitle: 完成后继续设置
+      afterDescription: 下列区域包含向导提到的可选控制项；其中的设置没有被自动修改。
+      afterItems:
+        character: 人物与外观
+        voice: 语音与麦克风
+        tools: 桌面工具
+        data: 数据与诊断
+      complete: 完成设置
+language:
+  title: 语言
+  description: >
+    切换显示界面的语言
+startup:
+  section-title: Windows 启动
+  home-title: Windows 开机自启动
+  home-description: 设置登录 Windows 后是否正常启动呜异屋。
+  title: 登录 Windows 时自动启动呜异屋
+  description: 登录 Windows 后像手动打开一样正常启动呜异屋，使用相同的窗口和数据；此开关直接显示当前 Windows 系统启动项的真实状态。
+  loading: 正在读取 Windows 开机自启动状态…
+  unsupported: 当前操作系统暂不支持在这里设置开机自启动。
+  load-error: 无法读取 Windows 开机自启动状态。
+  save-error: 无法更新 Windows 开机自启动状态，已恢复原来的设置。
+controls-island:
+  icon-size:
+    title: 控制岛图标大小
+    description: 调整控制岛屿图标的大小
+    auto: 自动(响应式)
+    large: 大(默认)
+    small: 小
+live2d:
+  change-model:
+    from-file: 从文件加载
+    from-file-select: 选择
+    from-url: 从 URL 加载
+    from-url-confirm: 加载
+    from-url-placeholder: 输入 Live2D 模型 URL
+    title: 更换模型
+  edit-motion-map:
+    title: 编辑动作映射
+  map-motions:
+    play: 播放动作
+    title: 映射动作
+  actions:
+    apply: 应用设置
+    reset-value: 重置数值
+  title: Live2D 设置
+  panel-switcher:
+    title: Live2D 设置板块
+  panels:
+    basic: 基础
+    preview: 预览
+    resources: 动作与表情
+    actions: 动作卡
+    parameters: 参数
+    natural: 自然行为
+    advanced: 模型校准
+  performance-resources:
+    motions-title: 动作资源
+    expressions-title: 表情资源
+    no-motions: 当前模型没有可用动作资源。
+    no-expressions: 当前模型没有可用表情资源。
+    label: 给 AI 看的名称
+    emotion-tags: 情绪标签，多个用逗号分隔
+    scene-tags: 场景标签，多个用逗号分隔
+    ai-description: 详细描述呈现效果、适用时机和应避免的语境，供 AI 判断是否使用。
+  picture_character:
+    title: 图片角色
+    description: 选择待机图、可选说话图，并为其余图片创建可由角色演出选择的动作。
+    idle: 待机图片
+    speaking: 说话图片
+    unassigned: 未分配
+    action_name: 动作名称
+    action_label: 给 AI 看的名称
+    emotion_tags: 情绪标签，多个用逗号分隔
+    scene_tags: 场景标签，多个用逗号分隔
+    ai_description: 供 AI 参考的图片动作详细描述
+    select_image: 选择图片
+    add_action: 添加动作
+    remove_action: 删除动作
+    unassigned_images: 未分配图片
+    none: 没有
+    save: 保存图片角色配置
+    saved: 图片角色配置已保存
+  scale-and-position:
+    title: 缩放与位置
+    scale: 缩放
+    x: X
+    'y': 'Y'
+  switch-to-vrm:
+    title: 想切换至3D虚拟形象？
+    change-to-vrm: 切换至3D虚拟形象设定页面（VRM）
+  theme-color-from-model:
+    title: 从模型提取主题颜色
+    button-extract:
+      title: 提取
+  focus:
+    title: 禁用模型鼠标跟踪
+    button-disable:
+      title: 禁用
+  mouth-sync:
+    title: 口型同步
+    speed:
+      title: 张嘴速度
+      description: 调整语音播放时 Live2D 口型开合的变化速度；降低数值可减少过快的张嘴频率。
+    auto-speed:
+      title: 根据文本和音频长度自动调速
+      description: 根据文本长度估算张嘴闭嘴次数，再用语音时长反推口型开合节奏。
+  preview-test:
+    title: 预览测试
+    fields:
+      motion: 动作
+      expression: 表情
+    actions:
+      refresh: 刷新
+      reset-model: 重置预览
+      play-motion: 播放动作
+      play-expression: 播放表情
+      reset-expression: 重置
+    placeholders:
+      no-motion: 未选择动作
+      no-expression: 未选择表情
+  custom-expressions:
+    title: 自定义动作预设
+    description: 将一个现有动作和多个模型原始表情组合成完整动作；包含动作时会在播完后平滑回到待机，只有表情时按停留时间结束。
+    badge: 自定义动作
+    saved: 已保存动作
+    selected-count: 已选 {count} 个
+    part-count: '{count} 个表情'
+    unknown-expression: 未知表情
+    empty-source: 当前模型没有可用原始表情
+    empty: 还没有保存自定义动作
+    fields:
+      name: 预设名称
+      meaning: 给 AI 看的动作含义
+      description: 用户可读说明
+      emotion-tags: 情绪标签
+      scene-tags: 场景标签
+      suitable-when: 适合使用
+      avoid-when: 不适合使用
+      ai-description: 高级 AI 参考描述
+      parameter-claims: 参数占用声明
+      ai-selectable: 允许 AI 自主选择
+      interruptible: 允许被打断
+      parts: 叠加表情
+    placeholders:
+      name: 例如：挥手脸红
+      meaning: 例如：有点犹豫但亲近的小幅挥手，不像正式打招呼
+      description: 简短说明这个演出呈现什么效果
+      tags: 多个标签用逗号分隔
+      list: 多个情境用逗号分隔
+      ai-description: 详细描述情绪、动作幅度、使用时机和应避免的语境，供模型选择时参考
+      claims: 高级参数 ID，用逗号分隔
+    actions:
+      save: 保存
+      update: 更新
+      cancel: 清空
+      preview: 预览
+      edit: 编辑
+      delete: 删除
+      reset: 全部重置
+  ai-expressions:
+    title: AI 动作
+    description: 给 AI 状态选择普通动作或自定义动作预设。普通动作可选择播完回待机，或在指定时间后提前回到待机。
+    custom-action-finish: 结束方式由所选自定义动作决定。
+    reset: 重置
+    fields:
+      motion: 动作
+      expression: 表情
+      duration: 停留时间
+      cleanup: 结束后
+      auto: 自动
+    cleanup-modes:
+      auto: 定时回待机
+      restore-baseline: 自动回待机
+    scenes:
+      idle: 待机
+      thinking: 思考中
+      speaking: 说话中
+      listening: 倾听中
+      proactive: 主动话题
+      assistant-response: 回复完成
+      emotion:
+        happy: 开心
+        sad: 难过
+        angry: 生气
+        think: 思索
+        surprised: 惊讶
+        awkward: 尴尬
+        question: 疑惑
+        curious: 好奇
+        neutral: 平静
+      persona:
+        steady: 稳定
+        warm: 温柔
+        playful: 调皮
+        concerned: 关切
+        heavy: 沉重
+        guarded: 防备
+        repairing: 修复中
+  lifecycle-actions:
+    title: ActionCard 工作台
+    description: 将一个动作与多个表情组合成完整演出，并描述它的含义与使用条件，交给 AI 自主选择或不使用。
+  natural-behavior:
+    title: 自然行为
+  idle-sway:
+    title: 待机摆动
+    description: 调整当前居民待机时头部、身体和手臂的原生摆动幅度。
+  runtime-idle:
+    title: 持续待机循环
+    placeholder: 选择待机动作
+    empty: 没有可用动作
+  random-idle:
+    title: 偶发活跃动作
+    description: 角色保持待机一段时间后偶尔插入一次活跃动作，结束后自动回到常驻待机动作。
+    interval-min: 最短等待
+    interval-max: 最长等待
+    pool: 动作池
+    empty: 没有可用动作或自定义动作预设
+    enabled-count: 已启用 {count} 个
+    reset-intervals: 重置间隔
+  idle-pool:
+    title: 常驻待机动作
+    description: 选择待机时播放的成品动作，并调整实际播放顺序；全部取消时只保留自然眨眼、视线、呼吸和物理效果。
+    empty: 当前模型没有可用的动作
+    rotation-title: 播放方式
+    move-up: 提前播放
+    move-down: 延后播放
+    modes:
+      sequential: 按顺序
+      random: 随机
+      single: 单动作
+    mode-descriptions:
+      sequential: 按上方列表从前到后播放，播完最后一个后回到第一个。
+      random: 从已启用动作中随机选择，并避免与上一个动作紧邻重复。
+      single: 始终播放第一个已启用动作；将其他动作移到首位即可切换。
+  advanced-calibration:
+    title: 模型校准
+    description: 仅用于修正少数模型原始中立姿态的临时基准值，不属于动作、表情或 AI 情绪设置。
+    diagnostics:
+      owner: 当前演出写入者
+      epoch: 模型 / 回合序号
+      claims: 已声明参数所有权
+      rejected-writes: 被拒绝的演出写入
+      conflicts: 参数所有权冲突
+      migration: 配置投影状态
+      none: 无
+  parameters:
+    title: 参数
+    reset: 重置为默认参数
+    toggles:
+      auto-blink: 自动眨眼
+      force-auto-blink: 强制自动眨眼（备用计时器）
+      shadow: 阴影
+    groups:
+      head: 头部转动
+      eyes: 眼睛
+      eyebrows: 眉毛
+      mouth: 嘴部
+      face: 面部
+      body: 身体
+    fields:
+      angle-x: 头部左右转动
+      angle-y: 头部上下转动
+      angle-z: 头部倾斜
+      left-eye-open: 左眼睁开
+      right-eye-open: 右眼睁开
+      left-eye-smile: 左眼微笑
+      right-eye-smile: 右眼微笑
+      left-eyebrow-lr: 左眉左右
+      right-eyebrow-lr: 右眉左右
+      left-eyebrow-y: 左眉高度
+      right-eyebrow-y: 右眉高度
+      left-eyebrow-angle: 左眉角度
+      right-eyebrow-angle: 右眉角度
+      left-eyebrow-form: 左眉形状
+      right-eyebrow-form: 右眉形状
+      mouth-open: 张嘴
+      mouth-form: 嘴型
+      cheek: 脸颊
+      body-angle-x: 身体左右转动
+      body-angle-y: 身体上下转动
+      body-angle-z: 身体倾斜
+      breath: 呼吸
+  idle-motion-speed:
+    title: 待机动作速度
+    description: 调整 Live2D 待机动作的播放速度。
+  body-focus-follow:
+    title: 身体跟随强度
+    description: 调整当前居民待机时身体跟随头部和视线的幅度。
+  fps:
+    title: 帧率
+    description: 限制渲染帧率
+    options:
+      unlimited: 无限制
+microphone: 麦克风
+models: 模型
+pages:
+  group-scripts:
+    title: 群聊剧本与角色分配
+    description: 编辑可复用的故事剧本，再把角色槽位分配给某个群聊里的成员。
+    eyebrow: 群聊排练桌
+    local-note: 剧本保存在当前设备。导出的模板只包含公开故事与角色槽位，不包含角色卡、模型、声线、记忆或房间成员绑定。
+    tabs:
+      label: 剧本设置分区
+      template: 剧本模板
+      room: 房间应用
+    sections:
+      basic: 基本信息
+      scene: 故事与场景
+    defaults:
+      template-title: 未命名群聊剧本
+      slot-name: 角色 {number}
+    rooms:
+      title: 群聊房间
+      empty: 还没有群聊房间。请先在聊天界面创建至少包含两名成员的群聊。
+      loading: 正在读取这个房间的剧本设置…
+      member-count: '{count} 名成员'
+      untitled: 未命名群聊
+    library:
+      title: 剧本模板
+      empty: 还没有保存模板。可以从右侧新建第一份剧本。
+    editor:
+      title: 模板编辑
+      description: 修改模板不会自动改变已经应用到房间的剧本快照；需要时请重新应用。
+    fields:
+      title: 模板标题
+      room-name: 群聊名称
+      id: 模板 ID
+      summary: 简介
+      background: 世界与背景
+      premise: 故事前提
+      current-scene: 当前场景
+      rules: 场景规则
+      rules-placeholder: 每行一条公开规则
+      mention-guidance: "{'@'} 提及行为说明"
+      slot-name: 槽位名称
+      slot-id: 稳定槽位 ID
+      slot-description: 公开身份与扮演说明
+      relationship-description: 公开关系说明
+    slots:
+      title: 角色槽位
+      description: 模板只定义故事里的身份，不绑定任何角色卡；每个房间最多使用四个槽位。
+      role-number: 槽位 {number}
+    relationships:
+      title: 有向角色关系
+      description: 关系按左侧角色指向右侧角色；反向感受需要另建一条。
+      empty: 尚未设置公开关系。
+    cast:
+      eyebrow: 房间角色表
+      title: 选择一个群聊房间
+      description: 每个槽位必须恰好分配给一名当前群成员，同一成员不能占用两个槽位。
+      no-room: 请先从左侧选择一个群聊房间。
+      no-script: 这个房间尚未应用剧本
+      no-script-description: 在上方选择或编辑模板，然后应用到当前房间。
+      choose-member: 选择群成员
+    narration:
+      template-style: 旁白风格默认值
+      template-style-description: 模板只携带风格文字，不携带本机声线、服务端模型或消费配置。
+      room-title: 房间旁白设置
+      room-description: 这些开关和声线只属于当前房间；旁白模型由服务端统一管理，生成与旁白语音会按实际使用计费。
+      enabled: 在这个群聊中启用旁白
+      enabled-description: 开启后，后续旁白功能可按剧本描述环境、动作和多人场面。
+      room-style: 当前房间的旁白风格
+      speech-enabled: 允许旁白使用语音
+      speech-enabled-description: 旁白文字与语音相互独立；关闭语音不会影响文字。
+      voice: 旁白专属声线
+      voice-empty: 未单独设置，将使用舞台默认声线
+      room-status-enabled: 当前房间已开启旁白
+      room-status-disabled: 当前房间已关闭旁白
+      room-status-unconfigured: 当前房间尚未应用剧本
+    actions:
+      new: 新建
+      import: 导入 JSON
+      export: 导出 JSON
+      save-template: 保存模板
+      delete-template: 删除模板
+      confirm-delete-template: 确认删除
+      add-slot: 添加槽位
+      add-relationship: 添加关系
+      remove: 移除
+      apply-to-room: 应用到当前房间
+      save-room: 保存房间设置
+      save-room-name: 保存群聊名称
+      clear-room: 解除房间剧本
+      confirm-clear-room: 确认解除
+      use-current-voice: 使用当前语音声线
+      clear-voice: 清除声线
+      open-speech-settings: 打开语音设置
+      cancel: 取消
+    status:
+      template-saved: 剧本模板已保存。
+      template-deleted: 剧本模板已删除；已经应用到房间的快照不会受影响。
+      template-exported: 已导出可移植剧本模板。
+      template-imported: 剧本模板已导入并保存。
+      template-invalid: 剧本内容不完整或格式不符合要求，请检查字段、槽位和关系。
+      import-invalid: 无法导入这个文件。请确认它是有效的 airi-group-script:v1 JSON。
+      too-large: 单个剧本模板不能超过 64 KiB。
+      duplicate-id: 已存在相同模板 ID，请更换后再保存。
+      storage-failed: 无法保存本机剧本模板，请检查应用数据存储是否可用。
+      room-required: 请先选择一个群聊房间。
+      rooms-load-failed: 无法读取群聊房间，请返回聊天界面后重试。
+      room-load-failed: 无法读取这个房间的剧本设置，请重新选择房间。
+      slot-count-mismatch: 模板槽位数必须与当前群聊成员数完全一致。
+      template-applied: 已把剧本快照应用到“{room}”。
+      apply-first: 请先把一个模板应用到当前房间。
+      bindings-invalid: 角色分配无效。请确保每个槽位对应不同的当前群成员。
+      room-saved: 房间剧本与角色分配已保存。
+      room-renamed: 群聊名称已保存。
+      room-rename-failed: 无法保存群聊名称，请重试。
+      room-save-failed: 无法保存房间剧本设置，请检查角色分配后重试。
+      room-cleared: 已解除当前房间的剧本设置。
+      voice-unavailable: 当前语音设置没有完整的服务、模型和声线，请先完成语音设置。
+      voice-captured: 已把当前语音设置保存为这个房间的旁白声线；点击“保存房间设置”后生效。
+  home:
+    groups:
+      companion:
+        title: 陪伴设置
+        description: 调整角色、声音、记忆和回复习惯，让陪伴方式更贴近你的偏好。
+      app:
+        title: 应用与数据
+        description: 管理外观、窗口、聊天记录和本地数据，让应用保持清爽顺手。
+      advanced:
+        title: 高级设置
+        description: 创作工具、本地模型和诊断选项集中在这里，适合需要精细调试时使用。
+  account:
+    title: 账户
+    description: 管理内测资格、点数和激活码
+    home:
+      title: 账号与官方云模型
+      signed-in-summary: 当前为 {plan} 套餐，可用 {points} 点。默认官方云模型会从这里扣点。
+      signed-out-summary: 登录后可以使用默认官方云模型、兑换激活码，并在不同设备同步点数。
+      action: 查看账户
+      login-action: 登录 / 激活
+    common:
+      never: 长期有效
+      signed-in: 已登录
+      unknown: 未知
+    login-drawer:
+      title: 登录呜异屋
+      description: 一个账号连接桌面伙伴、官网与游戏点数。
+      code-sign-in: 验证码登录
+      identity: 手机号或邮箱
+      identity-placeholder: 请输入手机号或邮箱
+      password: 密码
+      password-placeholder: 至少 8 位
+      code: 验证码
+      code-placeholder: 6 位验证码
+      manage-account: 创建新账户或管理安全信息
+      legal: 登录即表示你同意使用条款和隐私政策。
+      sign-in-failed: 登录失败，请检查输入后重试。
+    actions:
+      cancel: 取消
+      claim-check-in: 领取点数
+      claim-check-in-upgrade: 补领升级点数
+      copy-user-id: 复制用户 ID
+      create-account: 创建账户
+      edit-profile: 编辑资料
+      upload-avatar: 上传头像
+      remove-avatar: 移除头像
+      github: GitHub
+      google: Google
+      refresh: 刷新
+      redeem: 兑换激活码
+      save-profile: 保存资料
+      sign-in-email: 登录
+      sign-out: 退出登录
+      switch-to-sign-in: 使用已有账户
+      switch-to-sign-up: 创建新账户
+      send-code: 发送验证码
+      resend-code-in: '重新发送（{seconds}s）'
+      use-email: 邮箱
+      use-phone: 手机号
+      use-email-code: 邮箱验证码
+      use-phone-code: 手机验证码
+      use-password: 密码登录
+      phone-unavailable: 手机号（待开放）
+      verify-code: 验证并登录
+      open-recharge: 购买点数
+      hide-recharge: 收起购买
+      manage-membership: 查看会员与续费
+    plans:
+      free: 免费版
+      lite: Lite
+      pro: Pro
+      creator: Creator
+      custom: 自定义
+    membership-identities:
+      free: 初见
+      lite: 常伴
+      pro: 知音
+      creator: 造梦
+    membership:
+      title: 会员与点数
+      current: 你在呜异屋的身份
+      description: 在这里查看每日点数、有效期，也可以续费或升级。
+      points: 可用点数
+      daily: 每日可领
+      expires: 有效期至
+      support-title: 谢谢你愿意陪呜异屋慢慢长大
+      support-description: 我们仍在开发初期。每一份支持都会用于服务成本、角色体验和新功能维护，也让这个小屋能更稳定地陪伴大家。
+      spend-responsibly: 请按实际需要选择，不必为了支持而勉强消费。会员不自动续费，免费功能、本地模型和自有 API Key 仍可正常使用；先好好生活，再来屋里坐坐。
+    points:
+      grant: 赠送
+      paid: 付费
+      reserved: 预留
+      trial: 试用
+    sections:
+      overview:
+        title: 账户与点数
+        description: 查看你的内测资格、剩余模型点数和激活码状态。
+      pricing:
+        title: 当前点数价格
+        description: 显示官方云功能的当前价格；管理端修改后会自动刷新。
+        loading: 正在读取当前价格
+        live: 实时价格 · 最多 5 秒更新
+        chat: 聊天模型参考价
+        speech: 官方语音
+        other: 其他官方能力
+        feature-title: 功能价格倍率
+        minimum: 最低 {points} 点
+        points-per-unit: 点 / 每 {tokens} tokens（参考）
+        chat-billing-explanation: 每 4000 tokens 仅用于比较价格，不是固定扣费档位。实际按本次完整输入与输出分别结算；输入包括系统规则、对话历史、记忆和工具上下文，因此可见回复较短时，总用量也可能较高。
+        points-per-minute: 点 / 分钟
+        asr: 实时语音识别：首个开始计费的 60 秒 {first} 点，之后每个开始计费的 60 秒 {additional} 点
+        embedding: 文本嵌入
+        web-search: 联网搜索
+        request: '{name}：{points} 点 / 次'
+        voice-surcharge-note: 声线可另设每次附加点数，选择声线时会显示实际价格。
+        no-official-charge: 本地能力和使用你自己 API Key 的服务不会扣除 Wuwiii 官方点数。
+        features:
+          official-chat: 官方聊天
+          workbench: 工作台
+          inner-voice-note: 内心札记
+          turtle-soup-host: 海龟汤主持
+          turtle-soup-hint: 海龟汤提示
+          turtle-soup-review: 海龟汤复盘
+          turtle-soup-generate: 海龟汤出题
+      recharge:
+        title: 会员与点数
+        description: 月卡改善每日点数权益，点数包用于一次性补充；所有核心功能均可正常使用。
+        choose-plan: 选择商品
+        choose-method: 支付方式
+        kinds:
+          membership: 会员月卡
+          points: 点数包
+        base-points: 基础 {points} 点
+        gift-points: 赠送 {points} 点
+        valid-days: 有效期 {days} 天
+        sign-in-required: 登录后才能创建订单。
+        channel-unavailable: 支付渠道暂不可用
+        empty-products: 当前没有可购买的充值套餐。
+        trust:
+          official: 官方支付通道
+          automatic: 支付成功自动到账
+          traceable: 订单全程可查询
+        package:
+          value-hint: 点数越多，单点成本越低
+          selected: 已选择
+          total: 总点数
+          included: 开通即到账
+          base: '{points} 基础点数'
+          gift: '+ {points} 赠送点数'
+          value: '{days} 天有效 · 约 {points} 点/元'
+          daily: '每日可领 {points} 点'
+          cap: '会员点数上限 {points}'
+          period: '权益期 {days} 天，不自动续费'
+          label: 点数包
+        availability:
+          available: 可用
+          unavailable: 暂不可用
+          none: 暂无可用渠道
+        secure-create: 前往支付
+        charge-notice: 订单创建不会自动扣款，确认支付后点数才会到账。
+        order:
+          amount: 订单金额
+          points: 到账点数
+          created: 创建时间
+          expires: 订单有效期
+        thanks:
+          title: 充值成功，点数已经到账
+          description: 谢谢你愿意支持呜异屋，小呜的猫耳都悄悄精神了一点。这份心意，我们会认真用在把这里做得更好上。
+        errors:
+          catalog-version-mismatch: 当前应用已更新，但商品目录服务尚未同步。更新服务端后重试。
+          checkout-unavailable: 该支付入口已失效，请重新创建订单。
+          provider-error: 支付渠道未能完成请求，系统未记录扣款，请稍后重试。
+          provider-not-configured: 该支付方式暂未开放。
+          rate-limited: 支付请求过于频繁，请稍后再试。
+          unauthorized: 登录状态已失效，请重新登录后查看或创建订单。
+          unknown-product: 该充值套餐已下架，请刷新套餐列表。
+        plans:
+          lite: Lite
+          pro: Pro
+          creator: Creator
+        methods:
+          wechat: 微信支付
+          alipay: 支付宝
+          manual: 人工处理
+        statuses:
+          creating: 正在创建
+          pending: 待支付
+          paid: 已支付
+          failed: 创建失败
+          closed: 已关闭
+          refunded: 已退款
+          refund-help: 退款说明
+        actions:
+          refresh: 刷新充值数据
+          refresh-order: 刷新订单状态
+          review: 核对订单
+          back: 返回
+          create: 创建订单
+        confirmation:
+          title: 订单确认
+          sku: 套餐
+          base: 基础点数
+          gift: 赠送点数
+          daily: 每日可领取
+          maximum: 30 天最多可得
+          method: 支付方式
+          expires: 点数有效期
+          amount: 应付金额
+        checkout:
+          title: 安全收银台
+          description: 请核对金额与支付方式。支付结果以平台通知为准，请勿重复付款。
+          failed-title: 订单创建失败，未发生扣款
+          failed-description: 支付平台没有返回有效收银入口。关闭后可重新创建订单。
+          mock-title: 本地支付引用
+          mock-description: 此引用仅用于本地测试，不能用于真实付款。
+          image-alt: 支付渠道提供的付款码
+          open: 打开支付渠道
+          open-alipay: 打开支付宝付款
+          scan-wechat: 请使用微信扫码支付
+          scan-alipay: 请使用支付宝扫码支付
+          scan-description: 完成付款后无需关闭页面，订单状态会自动刷新。
+          qr-failed: 付款码生成失败。请刷新订单状态后重试。
+          waiting: 支付渠道暂未返回可展示的付款入口。
+        history:
+          title: 订单记录
+          empty: 还没有支付订单。
+          points: 基础 {base} + 赠送 {gift}
+          refunded: 已退款
+          show-all: 查看全部订单
+          show-recent: 只看最近订单
+      beta:
+        collapsed-action: 查看内测套餐与购买方式
+        title: 付费 Beta 获取方式
+        description: 首月先使用人工收款和激活码开通，不做自动支付。拿到激活码后在本页兑换，点数会用于默认官方云模型、管家任务和后续工作台能力。
+        status-title: 当前状态
+        signed-in-status: '{plan} / {points} 点可用'
+        signed-out-status: 登录后查看会员、点数和订单
+        action-authenticated: 输入激活码
+        action-signed-out: 先登录
+        purchase-action: 获取激活码
+        recommended: 推荐
+        plans:
+          starter:
+            title: 轻量体验
+            price: ¥9.99
+            points: 999 点
+            description: 适合先试聊天、管家提醒和默认云模型，不绑定月度权益。
+          lite:
+            title: Lite Beta
+            price: ¥19.99
+            points: 1999 点 / 30 天
+            description: 适合轻度桌宠用户，保留一个月内测资格和基础点数。
+          pro:
+            title: Pro Beta
+            price: ¥39.99
+            points: 3999 点 / 30 天
+            description: 适合日常聊天、学习提醒、文档处理和较高频使用。
+          pro-plus:
+            title: Pro Plus
+            price: ¥59.99
+            points: 5999 点 / 30 天
+            description: 适合更高强度使用，但仍然保留 Beta 成本边界。
+          creator:
+            title: Creator
+            price: ¥99.99
+            points: 9999 点 / 30 天
+            description: 适合创作者、直播测试和重度体验用户。
+        steps:
+          buy:
+            title: 领取或购买激活码
+            description: 通过发布视频、社群或私信完成内测资格确认；自动支付上线前先人工发码。
+          redeem:
+            title: 在本页兑换
+            description: 兑换后套餐和点数会写入账户，下次打开应用仍然保留。
+          use:
+            title: 使用默认云模型
+            description: 聊天、管家提醒、文档处理和后续高级能力会优先从账户点数扣除。
+      sign-in:
+        title: 登录后使用官方云模型
+        description: 支持邮箱或中国大陆手机号，以密码或验证码登录；新用户请使用手机号验证码创建账户。
+        email-label: 邮箱
+        email-placeholder: "you{'@'}example.com"
+        name-label: 昵称
+        name-placeholder: 你的名字
+        phone-label: 手机号
+        phone-placeholder: 138 0013 8000
+        identity-label: 手机号或邮箱
+        identity-placeholder: 请输入手机号或邮箱
+        verification-code-label: 验证码
+        verification-code-placeholder: 6 位验证码
+        password-label: 密码
+        password-placeholder: 至少 8 位
+        confirm-password-label: 确认密码
+        confirm-password-placeholder: 再次输入密码
+        connected-title: 一个账户，三处相连
+        connected-desktop: 桌面伙伴与本地资料
+        connected-game: 海龟汤游戏点数
+        connected-web: 官网账户与订单
+      security:
+        title: 账户安全
+        description: 手机号用于注册与找回身份；验证邮箱可用于登录和接收安全通知。
+        email-unbound: 未绑定邮箱
+        verified-email: 已验证邮箱
+        verified: 已验证
+        email-placeholder: 绑定邮箱
+        bind: 绑定
+        phone: 注册手机号
+        phone-unbound: 未绑定手机号
+        password: 登录密码
+        change-password: 修改密码
+        current-password: 当前密码
+        new-password: 新密码（至少 8 位）
+        confirm-password: 再次输入新密码
+        save-password: 保存新密码
+      profile:
+        title: 当前登录
+        doorplate: 屋主门牌
+        edit-title: 个人资料
+        edit-description: 完善账户身份资料，为后续玩家社区功能做好准备。
+        display-name: 显示名称
+        handle: 公开用户名
+        avatar-url: 头像地址
+        avatar-note: 也可以填写 HTTP(S) 图片地址；上传本地图片会替换该地址。
+        avatar-upload-note: 支持 PNG、JPEG 和 WebP，图片会居中裁切并缩放为 256 × 256。
+        avatar-uploaded: 已选择本地头像。保存后会同步到当前账户。
+        bio: 个人简介
+        user-id: '用户 ID：{id}'
+      plan:
+        title: 当前套餐
+        valid-until: 有效期：{date}
+      points:
+        title: 可用点数
+        available: 可用于官方云模型调用
+        membership: 其中会员点数
+      check-in:
+        title: 每日签到
+        description: 每日领取点数，达到当前存储上限后暂停累积。
+        description-free: 'Free 每日可领 {points} 试用点，最多存储 {cap} 点。'
+        description-member: '{plan} 每日可领 {points} 会员点数，最多存储 {cap} 点。'
+        streak: 已连续 {days} 天
+        next-reward: 下次 +{points} 试用点
+        cap-reached: 已达到试用点上限
+        claimed: 今天已领取
+      balance:
+        title: 点数余额
+        description: 试用、赠送和付费点数会在调用模型时扣除，预留点数会在调用完成或失败后结算。
+        loading: 正在加载点数余额…
+        error: 暂时无法读取点数余额，请重试。当前显示不代表余额为零。
+        retry: 重试
+      details:
+        title: 点数明细
+        description: 清楚区分服务使用与余额变动，逐笔核对点数去向。
+      account-activity:
+        tabs:
+          usage: 使用记录
+          balance: 余额明细
+      redeem:
+        title: 兑换内测激活码
+        description: 人工收款或内测通过后，在这里输入激活码。
+        code-label: 激活码
+        code-placeholder: WUWIII-XXXX-XXXX
+      ledger:
+        title: 余额明细
+        description: 用于核对充值、签到、赠送、调整和最终余额变动；模型消费条目对应使用记录，不是第二次扣费。
+        loading: 正在加载余额明细…
+        error: 暂时无法读取余额明细，请重试。
+        retry: 重试
+        empty: 还没有点数记录。
+        load-more: 查看更多
+        load-failed: 无法加载更多点数记录，请稍后重试。
+        all-loaded: 已显示全部记录
+        balance-after: 本条变动后可用 {points} 点
+        related-usage: 对应“使用记录”中的同一笔服务，仅用于余额核对，不是第二次扣费。
+        settled-final: 本次实际扣除 {points} 点。
+        refunded-final: 请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点。
+        refunded-display-failure: 回复未能成功展示，已返还 {points} 点；本次净消费 0 点。
+        refunded-main-reply: 主回复请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点。
+        refunded-auxiliary: 后台“{purpose}”请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点，不代表主回复失败。
+        refunded-unknown: 此记录未包含可识别的请求用途；临时暂扣的 {points} 点已解除，本次净消费 0 点。
+        source-surfaces:
+          voice-call: 电话
+          group-chat: 群聊
+          quick-chat: 快捷聊天
+          chat: 聊天
+          proactive: 主动消息
+          unknown: 来源未知
+        purposes:
+          main-reply: 主回复
+          tool-routing: 工具判断
+          tool-processing: 工具处理
+          response-enhancement: 回复优化
+          inner-voice-note: 内心札记
+          memory: 记忆整理
+          recommended-replies: 推荐回复
+          group-narration: 群聊旁白生成
+          group-narration-speech: 群聊旁白语音
+          speech: 语音处理
+          web-search: 联网搜索
+          unknown: 用途未知
+        features:
+          daily-check-in: 每日签到
+          daily-check-in-membership-upgrade: 会员签到补领
+          official-chat: 聊天
+          official-speech: 语音合成
+          official-transcription: 语音识别
+          inner-voice-note: 内心札记
+          reply-display-failure-refund: 回复展示失败返还
+          workbench: 工作台
+          entertainment:
+            turtle_soup:
+              generate: 海龟汤出题
+              hint: 海龟汤提示
+              host: 海龟汤提问
+              review: 海龟汤复盘
+        types:
+          adjust: 调整
+          expire: 过期
+          grant: 发放
+          redeem: 兑换
+          refund: 已返还
+          refunded-in-full: 已全额返还
+          not-charged: 未扣费
+          release: 解除暂扣
+          reserve: 处理中
+          settle: 已消费
+      request-history:
+        title: 请求记录
+        description: 查看聊天、群聊和电话请求是否完成，以及实际扣费或返还。
+        loading: 正在加载请求记录…
+        unavailable: 当前服务版本暂不支持请求记录，点数明细仍可正常查看。
+        empty: 还没有请求记录。
+        load-more: 查看更多
+        load-failed: 无法加载更多请求记录，请稍后重试。
+        all-loaded: 已显示全部记录
+        kinds:
+          reply: 对话回复
+          recommended-replies: 推荐回复
+          speech: 语音
+          service: 服务处理
+        surfaces:
+          voice-call: 电话
+          group-chat: 群聊
+          quick-chat: 快捷聊天
+          chat: 聊天
+          proactive: 主动消息
+          unknown: 其他
+        statuses:
+          pending: 处理中
+          review_pending: 展示异常待复核
+          succeeded: 已完成
+          failed: 失败且未扣费
+          cancelled: 已取消且未扣费
+          refunded: 已返还
+        points:
+          pending: 暂未结算
+          review-pending: 已扣除 {points} 点，复核结果以账单为准
+          charged: 实际扣除 {points} 点
+          not-charged: 实际扣费 0 点
+          refunded: 已返还 {points} 点，实际扣费 0 点
+        failures:
+          not-needed: 本处无需旁白，本次未扣费。
+          no-content: 没有返回可显示的内容，本次未扣费。
+          incomplete-response: 回复未完整完成，本次未扣费。
+          provider-unavailable: 服务暂时不可用，本次未扣费。
+          request-too-large: 请求内容过长，本次未扣费。
+          billing-finalization: 结算未完成，本次未扣费。
+          display-failure: 回复未能正常显示，已登记等待复核；当前扣费状态未改变。
+          cancelled: 请求已取消，本次未扣费。
+          unknown: 请求未能完成，本次未扣费。
+      usage-history:
+        title: 使用记录
+        description: 每次独立服务只显示一次；群聊按回合汇总，可展开核对各项。
+        loading: 正在加载使用记录…
+        unavailable: 当前服务版本暂不支持使用记录。余额明细仍可正常核对。
+        error: 暂时无法读取使用记录，请重试。
+        retry: 重试
+        empty: 还没有使用记录。完成一次聊天或语音请求后会显示在这里。
+        load-more: 查看更多
+        load-failed: 无法加载更多使用记录，请稍后重试。
+        all-loaded: 已显示全部记录
+        statuses:
+          processing: 处理中
+          not_charged: 未收费
+          charged: 已扣除
+          refunded: 已返还
+          review_pending: 待复核
+          unknown: 状态未知
+        request-statuses:
+          pending: 请求处理中
+          succeeded: 请求已完成
+          failed: 请求失败
+          cancelled: 请求已取消
+          unknown: 请求状态未知
+        points:
+          processing: 临时占用 {points} 点，尚未扣除
+          charged-processing: 已扣除 {points} 点，另有 {held} 点临时占用
+          review-pending: 已扣除 {points} 点，等待复核
+          charged: 已扣除 {points} 点
+          not-charged: 未产生实际扣费
+          refunded: 已返还 {points} 点
+        time:
+          started: 发起 {time}
+          completed: 完成 {time}
+          processing: 处理中
+          local: 本地时间 {zone}
+        groups:
+          direct-title: 1v1 聊天回合
+          title: 群聊回合 · {count} 项服务
+          items: 本回合的 {count} 项服务
+          partial: 已加载小计
+        details:
+          reserved: 临时占用
+          charged: 实际扣除
+          refunded: 已返还
+          net: 净扣除
+          reference: 参考编号
+          request-outcome: 请求结果
+        surfaces:
+          voice-call: 电话
+          group-chat: 群聊
+          quick-chat: 快捷聊天
+          chat: 聊天
+          proactive: 主动消息
+          unknown: 其他
+        purposes:
+          main-reply: 主回复
+          tool-routing: 工具判断
+          tool-processing: 工具处理
+          response-enhancement: 回复优化
+          inner-voice-note: 内心札记
+          memory: 记忆整理
+          recommended-replies: 推荐回复
+          group-narration: 群聊旁白生成
+          group-narration-speech: 群聊旁白语音
+          speech: 语音处理
+          web-search: 联网搜索
+          unknown: 其他服务
+        failures:
+          not-needed: 本处无需旁白，本次未收费。
+          no-content: 没有返回可显示的内容，本次未收费。
+          incomplete-response: 回复未完整完成，本次未收费。
+          provider-unavailable: 服务暂时不可用，本次未收费。
+          request-too-large: 请求内容过长，本次未收费。
+          billing-finalization: 结算未完成，本次未收费。
+          display-failure: 回复展示异常，当前账面状态已登记待复核。
+          cancelled: 请求已取消，本次未收费。
+          unknown: 请求未完成，本次未收费。
+    status:
+      check-in-claimed: 已领取 {points} 试用点。
+      check-in-failed: 领取每日签到点数失败。
+      fetch-failed: 刷新账户状态失败。
+      email-auth-failed: 邮箱登录失败。
+      verification-auth-failed: 验证码登录失败。
+      verification-code-sent: 验证码已发送。
+      verification-code-rate-limited: 请求过于频繁，请在 {seconds} 秒后重试。
+      profile-update-failed: 更新个人资料失败。
+      profile-updated: 个人资料已更新。
+      password-changed: 密码已更新，其他设备已退出登录。
+      password-change-failed: 修改密码失败。
+      avatar-invalid-type: 请选择 PNG、JPEG 或 WebP 图片。
+      avatar-too-large: 原图不能超过 8 MB。
+      avatar-process-failed: 头像处理失败，请换一张图片重试。
+      redeem-failed: 兑换激活码失败。
+      redeemed: 激活码已兑换。
+      signed-in: 已登录。
+      sign-in-failed: 启动登录失败。
+      sign-out-failed: 退出登录失败。
+      signed-out: 已退出登录。
+      signed-up: 账户已创建。
+      user-id-copied: 已复制用户 ID。
+      user-id-copy-failed: 复制用户 ID 失败。
+      binding-code-sent: 邮箱验证码已发送。
+      binding-code-failed: 邮箱验证码发送失败。
+      email-bound: 邮箱已验证并绑定。
+      email-bind-failed: 邮箱绑定失败。
+  card:
+    activate: 激活
+    active: 已激活
+    active_badge: 当前使用中
+    cancel: 取消操作
+    save: 保存更改
+    card_not_found: 未找到角色卡
+    character: 角色设定
+    character_readonly: 这里显示角色设定，点击“卡片编辑”后修改。
+    close: 关闭
+    chat:
+      provider: 聊天 / 提供商
+    consciousness:
+      model: 意识 / 模型
+    created_by: 创建者
+    creator_notes: 创建者笔记
+    delete: 删除
+    delete_card: 删除角色卡
+    delete_confirmation: 确定要删除这张角色卡吗？
+    restore: 恢复设定
+    restore_default: 恢复默认设定
+    restore_default_confirmation: 此操作只会恢复默认角色卡。你的聊天、记忆、设置和其他角色卡都不会改变。
+    description: 整理角色设定、人设和回复风格，让角色逐渐成为你熟悉的伙伴。
+    description_label: 描述
+    runtime_effect: 运行时生效说明
+    runtime_effect_description: 描述、角色设定和人格包会在保存后加入角色上下文，并从下一次回复开始生效。
+    field_effects:
+      description: 模型用它理解角色背景、身份和关系，是人格生成和运行时提示词的主要依据。
+      personality: 模型用它决定稳定的性格倾向、语气和反应方式。
+      scenario: 模型用它理解当前世界、关系和对话发生的场景。
+      system_prompt: 高优先级角色指令，会直接进入系统上下文。
+      post_history: 每轮对话历史之后追加的行为提醒，用于校准回复方式。
+      persona_package: 保存后的身份、边界、写作和成长信息，会按启用区段加入角色上下文。
+    drop_here: 放开以上传文件
+    create_card: 创建新角色卡
+    edit_card: 卡片编辑
+    creation:
+      identity: 身份
+      name: 名字
+      nickname: 昵称
+      description: 描述
+      behavior: 行为
+      greetings: 问候语（每行一个）
+      settings: 设置
+      version: 版本
+      create: 创建
+      optimize_description: 优化描述
+      optimizing_description: 优化中...
+      optimize_description_with_web: 联网澄清专有名词
+      research_description_with_web: 联网深入研究参考
+      generate_character_settings: 根据描述生成设定草稿
+      generating_character_settings: 正在生成设定...
+      character_generation_description: 使用当前聊天模型补全性格、场景、系统提示、历史后指令和问候语。结果只进入当前草稿，检查并保存后才会生效。
+      character_generation_ready: 角色设定草稿已生成，请检查后保存。
+      character_generation_errors:
+        missing-description: 请先填写角色描述。
+        missing-provider-model: 请先配置当前聊天提供商和模型。
+        parse-failed: 模型没有返回完整、有效的角色设定。
+        provider-unavailable: 当前提供商不能生成聊天文本。
+        request-failed: 当前模型生成角色设定失败。
+      defaults:
+        name: 名字
+        description: 一个有明确身份、情绪和交流习惯的角色。请先补充她的背景与关系，再生成更完整的人格设定。
+        personality: 你是一个普通人，对一切都充满好奇。
+        scenario: 你最近醒来，忘记了之前的所有生活。
+        systemprompt: 你将收到消息，请像真实人类一样回复。
+        posthistoryinstructions: 记得模仿人类的行为。
+      modules_info: >-
+        为此角色卡配置模块。如未设置，将使用默认模块配置。
+      use_default: 使用默认
+      use_default_not_configured: 使用默认（未配置）
+      fields_info:
+        subtitle: >-
+          您可以在这里填写有关您正在创建的角色的一些详细信息，解释他的背景和情境，以及应该如何回应您的互动。
+        name: 是该角色的正式名称。
+        nickname: 您也可以提供一个昵称，它将被优先使用。
+        description: 该角色的描述。
+        notes: 如果您想添加一些个人备注。
+        personality: 描述稳定性格、情绪反应、价值取向和表达边界；模型会用它决定语气与判断方式。
+        scenario: 描述世界、关系和当前处境；这是情境事实，不适合填写每轮都必须执行的命令。
+        greetings_field: 问候语
+        greetings: 首次打开新会话时可选的开场示例，不会强制每次回复照抄。
+        systemprompt: 角色的高优先级行为规则，适合写身份、自主判断和长期边界；不必重复平台规则。
+        posthistoryinstructions: 每轮对话历史后追加的简短校准提醒；避免固定语尾、固定关心或整套回复模板。
+        version: >-
+          卡片版本，如果您从之前的卡片做了更改，应当增加此版本号。
+        consciousness_model: 为这个角色选择 AI 模型。
+        speech_model: 为此角色指定语音合成模型与音色。
+      errors:
+        name: 错误：你必须提供一个有效的名称！
+        version: '错误：版本号无效！'
+        description: '错误：你必须为此卡片提供描述。'
+        personality: '错误：必须为该角色提供性格描述。'
+        scenario: '错误：必须提供一个情境。'
+        systemprompt: '错误：请提供系统提示。'
+        posthistoryinstructions: '错误：必须提供消息历史后的提示。'
+        card_not_found: '错误：找不到角色卡片。'
+    modules: 模块
+    name_asc: 名称 (A-Z)
+    name_desc: 名称 (Z-A)
+    no_cards: 还没有任何角色卡，点击上方按钮上传一个吧！
+    no_results: 没有找到匹配的角色卡
+    personality: 性格
+    posthistoryinstructions: 历史提示指令
+    recent: 最近添加
+    scenario: 场景
+    search: 搜索角色卡...
+    sort_by: 排序方式
+    sort_placeholder: 选择排序方式
+    speech:
+      provider: 语音 / 提供商
+      model: 声音 / 模型
+      voice: 声音 / 声线
+    display_model:
+      title: 角色外观
+      description: 选择该角色在单聊中启用时，舞台与管家球显示的本机 Live2D、图片 OC 或 VRM 模型。
+      use_default: 使用默认外观
+      active: 已应用到当前角色
+      when_active: 激活该角色时使用
+      missing: 绑定的模型（{id}）未安装在此设备上，当前暂时显示默认外观。
+      local_reference: 人格包只导出本地模型引用，不会包含 Live2D、图片 OC 或 VRM 原文件。
+      import_live2d: 导入 Live2D
+      import_vrm: 导入 VRM
+      import_picture_oc: 导入图片 OC
+      actions_title: 图片 OC 动作
+      actions_description: 从这个角色包已通过检查的图片或 GIF 中选择各状态；不会改变角色 ID。
+      actions_save: 保存动作映射
+      actions_saved: 图片 OC 动作映射已保存。
+      actions_save_failed: 动作映射保存失败，请重新选择包内图片。
+      actions:
+        idle: 待机
+        speaking: 说话
+        thinking: 思考
+        listening: 聆听
+        reminder: 提醒
+        happy: 开心
+        sad: 难过
+        angry: 生气
+        surprised: 惊讶
+      invalid_file: 请选择有效的 {extension} 文件。
+      import_success: 已导入 {name} 并绑定到当前角色。
+      import_failed: 模型导入失败，请检查文件后重试。
+    systemprompt: 系统提示词
+    title: 居民档案
+    try_different_search: 尝试使用其他关键词搜索
+    upload: 上传
+    upload_desc: 点击或拖拽文件到此处上传
+    persona_package:
+      title: 人格包
+      compile: 根据角色描述整理人格包
+      generate_with_model: 用模型生成可编辑草稿
+      generating: 生成中...
+      generated_preview: 生成预览
+      apply_generated: 应用生成草稿
+      applied_generated: 已应用生成人格变更。
+      undo_applied: 撤销
+      discard_generated: 丢弃
+      select_changed_generated: 选择变化项
+      clear_generated_selection: 清空选择
+      selected_generated_sections: 已选 {selected} 项；变化 {changed} 项
+      regenerate_all: 重新根据当前设定整理全部字段
+      sync_growth: 同步成长
+      export: 导出人格包
+      save_draft: 保存并用于之后的回复
+      edit_help: 这些字段会在保存后进入角色上下文并影响之后的回复；每行写一条规则，留空表示不额外限制。
+      section_enabled: 启用
+      regenerate_section: 重新整理本字段
+      include_growth_memories: 本次导出包含已固化成长记忆
+      empty: 还没有人格包草稿
+      status: 更新时间 {updatedAt}；已同步 {growthCount} 条固化成长记忆
+      never: 从未
+      growth_candidates: 成长候选
+      no_growth_candidates: 暂无待处理成长候选
+      solidify_candidate: 固化
+      solidify_all_candidates: 全部固化
+      ignore_candidate: 忽略
+      ignore_all_candidates: 全部忽略
+      import_title: 导入人格包
+      import_description: 导入前先预览；默认新建卡。私有记忆、反馈来源、心声、聊天历史以及 provider、聊天模型、API 和语音设置不会跟随导入。外观可以携带安全的本地模型引用，但不会携带模型原文件。
+      import_changes: 导入差异
+      import_package_meta: 包信息
+      import_as_new: 作为新卡导入
+      overwrite_active: 覆盖当前卡
+      cancel_import: 取消
+      privacy_default: 人格包不会导入 provider、聊天模型、API 和语音设置；外观绑定只包含安全的本地模型引用，不包含模型原文件。
+      privacy_includes_growth: 该包声明包含成长记忆；导入时仍只作为当前人格包数据处理。
+      privacy_excludes_growth: 该包不包含私有成长记忆。
+      generation_error:
+        missing-card: 请先选择一张角色卡再生成人格包。
+        missing-description: 请先填写并保存角色描述，再生成人格包。
+        missing-provider-model: 请先选择意识提供商和模型。
+        parse-failed: 模型没有返回有效的人格包 JSON。
+        provider-unavailable: 当前提供商不能生成聊天文本。
+        request-failed: 当前模型生成人格包失败。
+      compiler:
+        risks: 风险
+        search_candidates: 搜索候选
+        density:
+          minimal: 短描述
+          balanced: 适中描述
+          detailed: 详细描述
+          overstuffed: 过载描述
+        mode:
+          expand-minimal: 谨慎扩写
+          split-balanced: 拆分小节
+          preserve-detailed: 保留并分层
+          compress-overstuffed: 先压缩
+        risk:
+          message-example-copy-pool: 检测到示例；只作为风格信号，不作为标准回复。
+          fixed-catchphrase-rule: 检测到固定语尾或回复形状；应转成反模板边界。
+          relationship-overclaim: 检测到关系过度承诺；亲密表达需受记忆和上下文约束。
+          runtime-instruction-leakage: 检测到运行时或隐藏提示词写法；不要进入可见身份。
+          universal-task-rule-in-card: 检测到通用任务模板；任务回合应优先回答任务。
+          overstuffed-source: 描述过长；生成前先压缩成结构化锚点。
+      diff:
+        name: 名称
+        version: 版本
+        description: 描述
+        personality: 性格
+        scenario: 场景
+        system_prompt: 系统提示词
+        advanced_sections: 高级小节
+        added: 将导入
+        changed: 将覆盖
+        unchanged: 无变化
+      sections:
+        summary: 扩展摘要
+        identity: 身份锚点
+        personality: 高级性格锚点
+        scenario_boundaries: 高级场景与关系规则
+        response_boundaries: 回复边界
+        writing_preferences: 写作偏好
+        feedback_calibration: 反馈校准
+        growth_memories: 已固化成长记忆
+        web_search_interests: 联网兴趣
+        expression_notes: 表达备注
+      section_help:
+        summary: 用一两句话概括角色是谁以及相处方式，模型会把它作为人格总览。
+        identity: 角色稳定身份、自我认知和不会随场景改变的事实。
+        personality: 长期性格倾向、情绪反应、价值判断和主动性。
+        scenario_boundaries: 对话所处的世界、关系阶段及不可擅自假定的关系事实。
+        response_boundaries: 角色可以怎样回应、拒绝或关心，以及必须避免的回复套路。
+        writing_preferences: 用词、节奏、长短和语气偏好，不要填写具体标准答案。
+        feedback_calibration: 从用户反馈中确认的表达校准；只记录稳定规律。
+        growth_memories: 已确认会长期影响角色的共同经历和变化。
+        web_search_interests: 需要联网时优先关注的主题，不会被当成角色亲历事实。
+        expression_notes: 情绪如何通过措辞、表情和动作表现，不是固定口头禅。
+  memory:
+    description: 查看当前居民记下的片段，也可以亲手整理或修正这些回忆。
+    title: 记忆
+    diary:
+      title: 角色日记
+      description: 查看角色根据近期对话生成的日记草稿和已确认日记。
+      drafts: 待确认草稿
+      history: 已确认日记
+      empty: 还没有已确认的日记。
+      untitled: 未命名日记
+      edit: 编辑
+      save: 保存草稿
+      cancel: 取消
+      discard: 丢弃
+      confirm: 确认日记
+      important-events: 重要事件
+      generated-title: 新日记已经写好了
+      open: 打开日记
+      collapse: 收起
+      delete: 删除
+      delete-confirm: 确认删除？
+    workspace:
+      title: 记忆账本
+      description: 查看并管理当前人格私有空间中的 {count} 条长期记忆。
+    scope:
+      current-persona: 当前人格记忆
+      default-persona: 当前人格
+      isolated: 已隔离
+      private-title: 人格私有记忆
+      private-description: 当前人格的长期记忆与其他人格分开保存，不会互相串写。
+      room-title: 房间历史
+      room-description: 群聊消息会在会话历史中保留房间与发言角色身份。
+      group-auto-title: 群聊自动记忆已暂停
+      group-auto-description: 在房间与人格作用域可显式隔离前，群聊不会自动提取长期记忆。
+      private-persona: 人格私有
+      shared-user: 用户共享
+      system: 系统
+    tabs:
+      config: 配置
+      keywords: 辅助规则（{count}）
+      manage: 管理（{count}）
+      merge: 合并
+      maintenance: 维护
+      stats: 统计
+      logs: 日志（{count}）
+    common:
+      cancel: 取消
+      content: 内容
+      delete: 删除
+      description: 描述
+      disable: 禁用
+      disabled: 已禁用
+      edit: 编辑
+      enable: 启用
+      importance: 重要性
+      save: 保存
+      tags: 标签
+      tags-help: 使用逗号分隔多个标签。
+      type: 类型
+    time:
+      today: 今天
+      yesterday: 昨天
+      days-ago: '{count} 天前'
+    importance:
+      low: 低
+      medium: 中
+      high: 高
+      normal: 普通
+    kind:
+      note: 笔记
+      focus: 焦点
+      diary: 日记
+    config:
+      enabled-title: 启用记忆系统
+      enabled-description: 允许当前人格保存、修正、强化和按要求遗忘长期记忆。
+      extract-title: 自动提取
+      extract-description: 每轮对话完成后，由当前模型自主判断是否值得记住，并提炼事实与相关上下文。
+      autonomy-title: 由模型决定真正值得记住的内容
+      autonomy-description: 模型会结合已有记忆判断新建、纠正或强化；用户声明会保留确定性，不会把推测当成事实。辅助关键词只在模型不可用或明确记忆请求落空时兜底。
+    keywords:
+      title: 兜底关键词
+      description: 这些规则不负责替模型判断，只在模型提取失败，或高优先级明确记忆请求没有返回结果时辅助保留信息。
+      add: 添加关键词
+      edit: 编辑关键词
+      pattern: 关键词模式
+      pattern-placeholder: '例如：我叫|我是|我的名字'
+      pattern-help: 使用 | 分隔多个关键词。
+      tags-placeholder: '例如：个人信息, 姓名'
+      description-placeholder: '例如：用户姓名'
+      enable-rule: 启用此规则
+    manage:
+      search-placeholder: 搜索事实、标签或相关上下文...
+      select-multiple: 批量选择
+      delete-selected: 删除（{count}）
+      content-placeholder: 记忆内容
+      tags-placeholder: '用逗号分隔，例如：个人信息, 姓名'
+      no-results: 没有找到匹配的记忆。
+      empty: 暂无记忆。
+      context: 相关上下文
+      source-time: 对话发生时间
+      recorded-time: 记忆创建时间
+      updated-time: 最近更新时间
+      reinforced-count: 强化或修正
+      reinforced-count-value: '{count} 次'
+      last-referenced: 最近引用
+      original-time-expression: 对话中的时间
+    memory-types:
+      identity: 身份事实
+      preference: 偏好
+      relationship: 关系
+      event: 重要事件
+      plan: 计划
+      boundary: 边界
+      communication: 沟通偏好
+      other: 其他
+    certainty:
+      stated: 用户陈述
+      confirmed: 已确认
+      inferred: 谨慎推断
+    merge:
+      title: 记忆合并
+      description: 检测并合并相似记忆，同时保留完整时间线。
+      threshold: '相似度阈值：{value}%'
+      threshold-help: 阈值越高，只会合并越相似的记忆。
+      scan: 扫描重复记忆
+      scanning: 扫描中...
+      group-summary: '发现 {count} 条相似记忆（相似度：{similarity}%）'
+      none: 未发现重复记忆。
+      estimate: '当前阈值下预计可合并 {groups} 组，合并后约减少 {count} 条记忆。'
+      merge-all: 一键合并当前筛选结果
+      merging-all: 一键合并中...
+      batch-summary: '一键合并完成：成功 {success} 组，失败 {failed} 组，共减少 {reduced} 条记忆。'
+      batch-failed: '有 {count} 组合并失败，可稍后重试或单独合并。'
+      stats-total: 总记忆条目
+      stats-groups: 可合并组数
+      stats-reducible: 合并后预计减少
+      node-summary: '共 {count} 个事件 - {events}'
+      ai-prompt: |-
+        以下是多条相似记忆，请合并去重并总结为不超过 100 字的一条记忆：
+
+        {memories}
+
+        要求：
+        1. 去除重复信息。
+        2. 保留所有不同的信息点。
+        3. 使用自然流畅的语言。
+        4. 不要添加原文没有的信息。
+
+        只输出合并后的记忆。
+    maintenance:
+      title: 记忆维护
+      description: 选择要在“立即维护”中执行的整理操作。
+      deduplication-title: 去重选项
+      deduplication-enable: 在维护时去重
+      deduplication-description: 运行“立即维护”时合并相似记忆。
+      deduplication-threshold: '去重阈值：{value}%'
+      deduplication-help: 阈值越高，合并越严格。
+      archive-title: 归档选项
+      archive-enable: 在维护时归档
+      archive-description: 运行“立即维护”时标记旧长期记忆为已归档，使自动召回跳过它们；维护不会创建或改动角色日记。
+      archive-days: 归档天数
+      archive-help: 归档只写入可恢复的状态标记，不会删除原记忆。
+      cleanup-title: 清理选项
+      cleanup-enable: 在维护时清理
+      cleanup-description: 仅清理当前人格范围内由模型自动提取、非焦点且非高优先级的长期记忆。
+      max-memories: 最大记忆数量
+      max-memories-help: 超过此数量后删除最旧的低重要性记忆。
+      low-importance-first: 优先清理低重要性记忆
+      manual-title: 立即维护
+      manual-description: 运行当前勾选的维护操作。
+      run: 立即执行
+      view-logs: 查看日志
+      report-title: 维护报告：
+      report-merged: '- 合并了 {count} 组重复记忆'
+      report-merge-failed: '- {count} 组重复记忆合并失败，已跳过'
+      report-no-duplicates: '- 未发现重复记忆'
+      report-archived: '- 归档了 {count} 条旧记忆'
+      report-no-archive: '- 无需归档'
+      report-cleaned: '- 清理了 {count} 条记忆'
+      report-protected: '- 仍有 {count} 条受保护的日记、焦点、高优先级或手工记忆超过上限，未删除'
+      report-no-cleanup: '- 无需清理'
+      report-complete: '维护完成，当前记忆总数：{count}'
+      report-failed: '维护失败：{error}'
+    stats:
+      total: 总记忆数
+      high: 高重要性
+      medium: 中重要性
+      focus: 焦点记忆
+      note: 笔记记忆
+    logs:
+      title: 维护日志
+      description: 记录记忆维护操作。
+      clear: 清空日志
+      empty: 暂无维护日志。
+      auto: 自动
+      manual: 手动
+      affected: '影响 {count} 条记忆'
+      error: '错误：{error}'
+      actions:
+        deduplication: 去重
+        merge: 合并
+        archive: 归档
+        cleanup: 清理
+      details:
+        deduplicated: '去重操作合并了 {count} 组记忆（阈值：{threshold}）。'
+        archived: '归档了 {count} 条超过 {days} 天的记忆。'
+        cleaned: '删除了 {count} 条记忆（当前：{current}，限制：{limit}）。'
+        failed: 维护操作失败。
+    confirm:
+      title: 确认记忆操作
+      confirm: 确认
+      working: 处理中...
+      delete-entry: 确定删除这条记忆吗？
+      delete-selected: 确定删除选中的 {count} 条记忆吗？
+      delete-keyword: 确定删除这个关键词规则吗？
+      run-maintenance: 确定立即执行当前勾选的维护操作吗？这可能需要一些时间。
+      merge-group: 确定合并这 {count} 条相似记忆吗？
+      merge-all: 确定一键合并当前筛选出的 {count} 组相似记忆吗？
+  data:
+    title: 数据管理
+    description: 备份聊天记录与角色配置，或按类别重置本地数据。
+    sections:
+      chats:
+        title: 聊天会话
+        description: 导出或导入保存的聊天会话。
+        export: 导出聊天记录
+        import: 导入聊天记录
+        delete: 删除所有聊天会话
+      models:
+        title: 角色与模型配置
+        description: 导出或导入角色配置包，也可删除已导入的 Live2D、VRM 和 Picture OC 模型。
+        export: 导出角色配置包
+        import: 导入角色配置包
+        delete: 删除所有模型
+      modules:
+        title: 模块设置
+        description: 重置模块偏好和模块专用凭据，不会导入或导出模型。
+        reset: 重置模块设置
+      providers:
+        title: 服务来源
+        description: 重置所有提供商设置和凭据。
+        reset: 重置提供商设置
+      danger:
+        title: 危险区域
+        description: 不可逆操作。继续之前，请导出您需要的内容。
+      all:
+        title: 删除所有数据
+        description: 删除本地聊天、人格、记忆、反馈、模型、凭据、设置、缓存和桌面工作数据。
+        delete: 删除所有数据
+      desktop:
+        title: 重置桌面设置和状态
+        description: 清除呜异屋桌面设置和运行状态。
+        reset: 重置桌面数据
+    confirmations:
+      tooltip: 您确定吗？
+      'yes': '是'
+    status:
+      exported: 聊天会话已导出。
+      imported: 聊天会话已导入。
+      models_exported: 角色与模型配置已导出。
+      models_imported: 角色与模型配置已导入。
+      import_error: 无法导入聊天会话。请检查文件格式。
+      chats_deleted: 聊天会话已删除。
+      models_deleted: 模型已删除。
+      modules_reset: 重置模块设置。
+      providers_reset: 服务端设置重置。
+      all_deleted: 已删除所有本地数据，呜异屋将使用干净配置重新启动。
+      desktop_reset: 桌面数据重置。
+  reply-feedback:
+    title: 回复反馈
+    description: 查看你留下的回复评价，让当前居民逐步学会更合你心意的回应方式。
+    learning:
+      title: 学习
+      description: 把保存的评价整理成轻量提示，用于调整之后的回应方式。
+      toggle: 启用回复反馈学习
+      enabled: 学习已启用
+      disabled: 学习已暂停
+      state:
+        ready: 已是最新
+        refreshing: 刷新中
+        stale: 等待刷新
+        empty: 暂无摘要
+      empty: 还没攒出稳定的偏好线索。继续留下反馈，当前居民会一点点学会的。
+      principles: 当前校准
+      samples: 样本
+      confidence: 置信度
+      last-generated: 上次生成于 {date}
+      pending-since: 已排队刷新 {date}
+      preferred-styles: 偏好表达
+      avoid-patterns: 避免模式
+      answering-biases: 回复倾向
+      emotional-cues: 情绪提示
+      priority-note: 会以低优先级校准的形式应用在当前人格卡之下。
+    scope:
+      title: 当前作用域
+      user: 用户
+      persona: 人格卡
+    stats:
+      total: 总计
+      active: 生效中
+      disabled: 已停用
+      liked: 点赞
+      disliked: 点踩
+    filters:
+      title: 筛选
+      rating: 评价
+      status: 状态
+      window: 时间窗口
+      surface: 来源界面
+      search-placeholder: 搜索预览内容或备注
+      options:
+        all: 全部
+        up: 点赞
+        down: 点踩
+        active: 生效中
+        disabled: 已停用
+        days-7: 7天
+        days-30: 30天
+        days-90: 90天
+        main-chat: 主聊天
+        quick-chat-expanded: 展开快捷聊
+        quick-chat-collapsed-bubble: 气泡快捷聊
+    results:
+      title: 记录
+      summary: 显示 {visible} / {total}
+      loading: 正在加载反馈...
+    record:
+      user-message: 用户消息
+      assistant-reply: 助手回复
+      note: 备注
+      note-empty: 这条反馈还没有备注。
+      note-placeholder: 写下喜欢或不合适的原因，方便以后看懂这条反馈。
+      created-at: 创建时间
+      updated-at: 更新时间
+      disabled-at: 停用时间
+      session: 会话
+      status:
+        active: 生效中
+        disabled: 已停用
+      rating:
+        up: 点赞
+        down: 点踩
+    actions:
+      edit: 编辑备注
+      save: 保存备注
+      cancel: 取消
+      disable: 停用
+      enable: 重新启用
+      delete: 删除
+      confirm-delete: 确认删除
+    empty:
+      title: 没有找到反馈记录
+      no-feedback: 先在聊天里留下一点反馈，记录就会乖乖出现在这里。
+      no-results: 没有找到相符的记录，换一组筛选或搜索词试试吧。
+  models:
+    description: 为角色换上你喜欢的 Live2D、图片 OC 或 VRM 形象，想看哪一身都可以～
+    title: 角色模型
+    model-selector:
+      button: 选择模型
+      apply: 应用到舞台
+      applying: 正在应用…
+      applied: 角色设置已应用到舞台。
+      title: 模型选择器
+      options: 显示模型选项
+      add: 添加
+      loading: 正在加载显示模型...
+      remove: 移除
+      name_placeholder: 模型名称
+      preview_unavailable: 暂无预览
+      pick: 使用此模型
+      confirm: 确认
+      picture_oc: 图片 OC（ZIP）
+      import_success: 已导入「{name}」。
+      picture_oc_import_success: 已导入图片 OC「{name}」。
+      picture_oc_import_failed: 图片 OC 导入失败，请检查压缩包和 oc.json。
+      callout:
+        title: 支持 2D 与 3D 模型
+        import-description: 使用模型选择器可以导入 Live2D ZIP、图片 OC ZIP 或 VRM 文件。
+        format-description: Live2D 驱动 2D 骨骼角色，图片 OC 使用静态图或 GIF 动作，VRM 与 MMD 用于 3D 角色。
+    sections:
+      section:
+        live2d:
+          title: Live2D
+          description: 配置 Live2D 模型
+        vrm:
+          title: VRM
+          description: 配置 3D VRM 模型
+        scene: 工作方式
+    theme-color-from-model:
+      no-frame: 暂时无法读取模型画面，请等待模型加载完成后再试。
+      no-colors: 当前模型画面没有找到可用的主题颜色。
+      applied: 已从模型画面应用主题颜色。
+      failed: 提取模型主题颜色失败，请稍后再试。
+    preview:
+      zoom-out: 缩小预览
+      reset-view: 重置预览视图
+      zoom-in: 放大预览
+    vrm-controls:
+      model-position: 模型位置
+      directional-rotation-x: 平行光旋转 - X
+      directional-rotation-y: 平行光旋转 - Y
+      directional-color: 平行光颜色
+      directional-intensity: 平行光强度
+      ambient-intensity: 环境光强度
+      ambient-color: 环境光颜色
+      environment: 环境光
+      hemisphere: 半球光
+      skybox: 天空盒
+      intensity: 强度
+      hemisphere-intensity: 半球光强度
+      hemisphere-sky-color: 半球天空颜色
+      hemisphere-ground-color: 半球地面颜色
+      rotation-x: X 轴旋转
+      rotation-y: Y 轴旋转
+      tips: 使用下方参数调整 VRM 的位置、光照和环境；窄窗口下可滚动查看全部设置。
+  modules:
+    beat_sync:
+      description: 随音源节拍律动
+      title: 同步音律
+      sections:
+        audio_source:
+          actions:
+            start_screen_capture: 开始屏幕录制
+            stop: 停止
+          description: 选择音频来源以检测其中的节拍
+          title: 音频来源
+        beat_visualizer:
+          title: 节拍可视化
+        parameters:
+          advanced_parameters: 高级参数
+          description: 调整节拍检测参数
+          title: 参数
+          parameters:
+            adaptive_threshold:
+              description: >-
+                是否根据信号随时间变化的方差应用自适应阈值
+              label: 自适应阈值
+            buffer_duration:
+              description: 内部分析缓冲区的持续时间
+              label: 缓冲时长
+            envelope_filter_frequency:
+              description: >-
+                应用于平滑能量变化的包络滤波器频率
+              label: 包络滤波器频率
+            highpass_filter_frequency:
+              description: >-
+                高通滤波器的频率设置，用于抑制低频噪声（如次低频噪声）
+              label: 高通滤波器频率
+            lowpass_filter_frequency:
+              description: >-
+                低通滤波器的频率设置，用于削减高频信号（如人声）
+              label: 低通滤波器频率
+            min_beat_interval:
+              description: 最大每分钟节拍数（BPM）或检测到的节拍之间最小间隔
+              label: 最大BPM / 最小节拍间隔
+            sensitivity:
+              label: 灵敏度
+            spectral_flux:
+              description: 启用基于频谱流的节拍起始检测。
+              label: 频谱流
+            warmup:
+              description: 在检测节拍之前进行预热，以提高准确性
+              label: 预热
+    consciousness:
+      description: 选择当前居民思考和回应时使用的人格与模型。
+      sections:
+        section:
+          provider-model-selection:
+            collapse: 折叠
+            custom_model_placeholder: 输入自订模型名称
+            description: 选择合适的语言模型服务，让当前居民可以正常思考和回应。
+            error: 获取出错啦
+            health_check_failed: 健康检查失败
+            no_providers_configured_title: 没有配置服务来源
+            no_providers_configured_description: 当前居民还没有可用的语言模型服务，请先完成设置。
+            expand: 展开
+            loading: 获取模型中...
+            manual_model_name: 模型名字
+            manual_model_placeholder: 输入与该服务来源一起使用的模型名称
+            no_models: 没有任何可用的模型
+            no_models_description: 该服务来源的模型列表没有返回任何的数据
+            no_search_results: 没有匹配的模型
+            no_search_results_description: 没有模型匹配 '{query}' 关键字，请尝试一下别的关键词呢
+            not_supported: 无法列出模型
+            not_supported_description: 此服务来源不支持列出模型的功能
+            search_placeholder: 搜索模型...
+            search_results: 找到 {count} / {total} 个模型
+            show_less: 显示更多
+            show_more: 收起
+            subtitle: 选择一个默认模型
+            title: 模型
+      title: 意识
+    description: 在这里管理思考、视觉、声音、记忆与游戏能力，按需启用对应模块。
+    gaming-factorio:
+      description: 一起玩 Factorio！
+      title: 异星工厂 Factorio
+      enable: 启用异星工厂集成
+      enable-description: 允许当前居民与异星工厂游戏互动
+      server-address: 服务器地址
+      server-address-description: 异星工厂服务器的IP地址或主机名
+      server-address-placeholder: 输入服务器地址（例如：localhost或192.168.1.100）
+      server-port: 服务器端口
+      server-port-description: 异星工厂服务器的端口号（默认 34197）
+      username: 用户名
+      username-description: 您在异星工厂服务器中的用户名
+      username-placeholder: 输入您的异星工厂用户名
+      configured: 异星工厂已正确配置！
+    gaming-minecraft:
+      description: 一起玩 Minecraft！
+      title: 我的世界 Minecraft
+      enable: 启用我的世界集成
+      enable-description: 允许当前居民与我的世界游戏互动
+      server-address: 服务器地址
+      server-address-description: 我的世界服务器的IP地址或主机名
+      server-address-placeholder: 输入服务器地址（例如：localhost或play.example.com）
+      server-port: 服务器端口
+      server-port-description: 我的世界服务器的端口号（默认 25565）
+      username: 用户名
+      username-description: 您在我的世界服务器中的用户名
+      username-placeholder: 输入您的我的世界用户名
+      configured: 我的世界已正确配置！
+    hearing:
+      description: 配置语音识别，并决定识别出的文字如何送入聊天。
+      title: 听觉
+      audio-input:
+        label: 音频输入设备
+        description: 选择当前居民用来接收语音的麦克风或音频设备。
+        placeholder: 选择当前居民要使用的音频设备
+        input-device: 输入设备
+        input-device-description: 选择要使用的麦克风。
+        input-device-placeholder: 选择麦克风
+        unknown-device: 未知设备
+      auto-send:
+        title: 自动发送
+        description: 决定识别出的文字是否自动送进聊天。
+        enabled-label: 自动发送转写文本
+        enabled-description: 开启后会在短暂延迟后把转写文本发送到聊天。可能消耗模型额度；如果想先检查和编辑，请关闭它。
+        delay-label: 自动发送延迟
+        delay-description: 自动发送前等待的毫秒数（0 = 立即发送，建议 1000-3000ms）。
+        immediate: 立即
+      dialog:
+        title: 听觉输入
+        microphone-enabled: 麦克风已开启
+        microphone-disabled: 麦克风已关闭
+        permission-required: 需要麦克风权限
+        permission-description: 应用目前没有麦克风访问权限。请在系统设置中允许麦克风权限后再使用语音输入。
+      monitoring:
+        title: 语音输入监测
+        error-title: 出现错误
+        start: 开始监测
+        stop: 停止监测
+        input-level: 输入音量
+        probability: 语音概率
+        silence: 静音
+        speech: 语音
+        threshold: 检测阈值
+        sensitivity: 灵敏度
+        sensitivity-description: 调整语音检测阈值。
+        speaking-detected: 检测到说话
+        model-based: 模型检测
+        volume-based: 音量检测
+        use-model-label: 使用模型检测
+        use-model-description: 使用 AI 模型提高语音活动检测准确度。
+        loading: 加载中...
+        inference-error: 推理错误
+        activated: 已启用
+        probability-value: 概率：{value}%
+        voice-activity: 语音活动
+        last-seconds: 最近 2 秒
+        voice-detected: 检测到语音
+        speech-threshold: 语音阈值
+      provider-empty:
+        title: 尚未配置服务来源
+        description: 先选择语音识别服务，配置完成后即可开始转写。
+      provider-model:
+        manual-description: 输入要使用的语音识别模型（例如 whisper-1、gpt-4o-transcribe）。
+      pricing:
+        loading: 正在读取官方云当前价格…
+        official: '官方云：首个开始计费的 60 秒 {first} 点，之后每个开始计费的 60 秒 {additional} 点。'
+        byok: 浏览器、本地和自带密钥识别不消耗 Wuwiii 官方点数；第三方费用由你自己的服务账户承担。
+      test:
+        title: 语音转文字测试
+        description: 对着当前音频设备说几句话，检查语音是否被准确转写。
+        select-provider: 请先在上方选择语音识别服务来源
+        select-device: 请先选择音频输入设备
+        start: 开始语音转文字测试
+        stop: 停止测试
+        transcribing: 转写中...
+        error-title: 转写错误
+        status-recording: 正在录音用于转写...（3 秒）
+        status-processing: 正在处理转写...
+        status-recording-transcribing: 正在转写录音...
+        status-starting-stream: 正在启动音频流...
+        status-starting-streaming: 正在启动流式转写...
+        status-streaming: 正在转写...（流式）
+        status-listening: 正在倾听语音...（流式模式已开启）
+        status-waiting: 正在等待说话...
+        status-complete: 转写完成
+        status-failed: 转写失败
+        status-stopped: 已停止
+        status-error-prefix: 错误：{message}
+        points-estimate-waiting: 录音完成后，会在上传前从音频容器估算点数。
+        points-estimate-estimating: 正在读取录音的实际时长...
+        points-estimate-ready: 预计 {seconds} 秒音频消耗 {points} 点。
+        points-estimate-unavailable: 无法估算点数：当前录音没有服务端支持的 PCM WAV 可信时长。
+        points-estimate-rule: 首个开始计费的 60 秒为 {first} 点，之后每个开始计费的 60 秒增加 {additional} 点；最终以服务端测量为准。
+        no-result: 没有收到转写结果
+        stream-start-failed: 音频流启动失败，请检查麦克风权限。
+        stream-start-error: 错误：音频流启动失败
+        streaming-mode: 流式模式：你说话时转写会实时显示。
+        result-label: 转写结果
+        current-streaming: 当前转写（流式）：
+        final: 最终转写：
+        empty: 还没有识别到内容。点击“开始语音转文字测试”后说几句话。
+        provider: 服务来源
+        model: 模型
+        mode: 模式
+        mode-streaming: 流式（实时）
+        mode-recording: 录音（文件）
+      sections:
+        section:
+          provider-selection:
+            description: 选择合适的语音识别服务，把接收到的声音转换为文字。
+    memory-long-term:
+      description: 整理希望当前居民长期记住的内容。
+      title: 长期记忆
+      stats:
+        total: 总记忆数
+        focus: ⭐ 重要记忆
+        note: 📌 普通记忆
+        growth-candidate: 人格候选
+      filters:
+        search-placeholder: 搜索记忆内容或标签...
+        all: 全部
+        focus: ⭐ 重要
+        note: 📌 普通
+        growth-candidate: 人格候选
+      list-title: 记忆列表 ({count})
+      list-title-growth: 人格成长候选 ({count})
+      relative:
+        today: 今天
+        yesterday: 昨天
+        days-ago: '{count} 天前'
+        weeks-ago: '{count} 周前'
+      source-surface:
+        chat-area: 完整聊天
+        chat-area-auto-speech: 听觉自动发送
+        chat-area-auto-speech-stop: 听觉停止补发
+        chat-orchestrator: 聊天链路
+        page: 桌宠主聊天
+        proactive-topic: 主动话题
+        stage: 舞台链路
+        widget: 快捷聊天
+      reference-source:
+        context-injection: 自动注入
+        search-memory-tool: 记忆工具
+      scope:
+        current-persona: 当前人格
+        global-system: 系统全局
+        shared-by-user: 用户共享
+      growth-status:
+        solidified: 已固化
+        disabled: 已忽略
+        candidate: 候选
+      growth-source:
+        reply-feedback-summary: 回复评价
+      trace:
+        source: 来源：{trace}
+        session: 会话 {id}
+        message: 消息 {id}
+        source-message-date: 源消息 {date}
+        recent-reference-date: 最近引用：{date}
+        reference-count: '{count} 次'
+        scope-prefix: 生效：{scope}
+        persona: 人格 {id}
+        user: 用户 {id}
+        growth-prefix: 人格成长：{status}
+        confidence: 置信度 {value}
+        source-label: 来源：{source}
+      actions:
+        save: 💾 保存
+        cancel: 取消
+        open-source: 跳回来源消息
+        solidify-growth: 固化为人格成长记忆
+        ignore-growth: 忽略候选
+        edit: 编辑
+        delete: 删除
+      confirm:
+        delete: 确定要删除这条记忆吗？
+        solidify-growth: 确定要把这条候选固化为人格成长记忆吗？固化后会参与普通长期记忆召回。
+        ignore-growth: 确定要忽略这条候选吗？忽略后同一条反馈总结不会再自动生成它。
+      empty:
+        loading: 加载中...
+        no-memory: 暂无记忆
+    memory-short-term:
+      description: 查看最近对话中正在使用的短期记忆。
+      title: 短期记忆
+      auto-cleanup:
+        title: 自动清理
+        enabled-label: 自动清理短期记忆
+        enabled-description: 开启后，当短期记忆消息数量达到清理上限时自动清空（与手动清空行为一致）。
+        limit-label: 清理上限
+        limit-description: 消息数量达到或超过该值时触发自动清理，范围 1-400 条。
+        unit: 条
+      session-selector:
+        label: 记忆会话
+        description: 选择要查看或清理记忆的会话（包含群聊会话）。
+    messaging-discord:
+      description: Discord 发消息和语音聊天
+      title: Discord
+      enable: 启用Discord集成
+      enable-description: 允许当前居民通过 Discord 进行互动
+      token: 机器人令牌
+      token-description: 您的Discord机器人令牌
+      token-placeholder: 输入您的Discord机器人令牌
+      configured: Discord已正确配置！
+    speech-playback:
+      title: 语音播放
+      description: 配置播放缓冲、TTS 超时和语音打断。
+      info:
+        title: 播放策略会直接影响首段延迟
+        description: 低延迟中文回复建议先关闭播放缓冲，并保留较短的 TTS 超时，避免慢 provider 阻塞后续语音。
+      sections:
+        output:
+          title: 语音输出
+          description: 控制聊天回复是否自动合成并播放语音。
+        buffering:
+          title: 播放缓冲
+          description: 控制语音片段是立即播放还是等待更多片段后再播放。
+          how-it-works-title: 工作原理
+          how-it-works-description: 启用缓冲后，系统会等待至少 {minSegments} 个语音片段，或等待 {bufferTimeout}ms 后开始播放。关闭缓冲时首段语音更快，开启缓冲时长回复会更连贯。
+        interruption:
+          title: 语音打断
+          description: 控制用户说话时如何打断正在播放的 AI 语音。
+          how-it-works-title: 工作原理
+          how-it-works-description: 启用智能打断后，系统会检测用户语音状态。只有持续检测到用户说话超过 {threshold}ms 时，才会打断 AI 语音，降低环境噪声误触发。
+      fields:
+        speech-output-enabled:
+          label: 启用 AI 回复语音
+          description: 关闭后聊天回复不会发起 TTS 请求，可避免无意消耗语音额度；测试声音不受影响。
+        output-volume:
+          label: 播放音量
+          description: 调整当前居民的语音播放音量，不影响系统音量。
+        emotion-mode:
+          label: 情感语音
+          description: 选择语气是否跟随当前角色和对话情境；不支持情感控制的语音模型会保持原本的中性输出。
+        emotion-intensity:
+          label: 情感强度
+          description: 控制情感语气偏离中性的程度。默认保持克制，调到 0% 等同于中性语气。
+        display-sync-with-speech:
+          label: 气泡跟随语音输出
+          description: 开启后，回复气泡会等待语音合成或播放事件后再显示，让思考气泡持续到语音准备好。
+        display-sync-trigger:
+          label: 气泡显示触发点
+          description: “开始播放”更适合对齐 Live2D 嘴型；“合成完成”会更早显示，但可能早于实际声音。
+        display-sync-late-speech-policy:
+          label: 迟到语音处理
+          description: 当前轮语音超过同步兜底时间仍未准备好时，是继续等语音，还是先显示文字并丢弃迟到语音。
+        display-sync-delay:
+          label: 气泡显示延迟微调
+          description: 在语音事件后额外等待多久再显示气泡，用于手动校准嘴型和气泡时机。
+        display-sync-fallback:
+          label: 同步兜底时间
+          description: 如果语音合成失败或没有返回音频，超过该时间后仍然显示文字，避免一直停在思考状态。
+        buffering-enabled:
+          label: 启用播放缓冲
+          description: 等待多个语音片段合成完成后再播放。语音更连贯，但首段延迟会增加。
+        tts-request-timeout:
+          label: TTS 请求超时
+          description: 单个语音片段超过该时间仍未返回时跳过，并降低该 provider 在推荐系统里的优先级。中文低延迟建议 3500-6000ms。
+        tts-request-min-interval:
+          label: TTS 请求最小间隔
+          description: 每次语音合成请求之间至少等待多久。默认 0 表示不主动限速；遇到 provider 429 时可适当调高。
+        tts-rate-limit-retry-delay:
+          label: 限流重试冷却
+          description: Provider 返回 429 或 rate limit 后等待多久再重试。复刻声线或严格限流模型可调高到 6000-12000ms。
+        min-segments:
+          label: 最少缓冲片段数
+          description: 至少缓冲多少个语音片段后才开始播放。低延迟建议 1-2，流畅模式建议 3-5。
+        buffer-timeout:
+          label: 缓冲超时时间
+          description: 超过此时间后自动开始播放，避免等待过久。低延迟建议 600-1200ms。
+        interruption-enabled:
+          label: 启用智能打断
+          description: 只有持续检测到用户语音输入时才会打断 AI 语音，避免短噪声误触发。
+        continuous-detection-threshold:
+          label: 持续检测阈值
+          description: 需要持续检测到用户语音多久才触发打断。建议 300-1000ms。
+        speech-end-buffer:
+          label: 语音结束缓冲
+          description: 用户停止说话后等待多久才认为语音结束。建议 300-800ms。
+      units:
+        segments: '{count} 个片段'
+      options:
+        emotion-mode:
+          follow-character: 跟随角色
+          natural: 自然克制
+          off: 关闭
+        display-sync-trigger:
+          playback-start: 开始播放
+          tts-result: 合成完成
+        display-sync-late-speech-policy:
+          text-first-drop-late: 文字优先，丢弃迟到语音
+          wait-for-speech: 等待语音优先
+    speech:
+      description: 语音合成
+      pricing:
+        loading: 正在读取官方云当前价格…
+        official: '官方云：基础 {points} 点/分钟，单次最低 {minimum} 点；当前声线另加 {surcharge} 点/次。'
+        byok: 本地和自带密钥语音合成不消耗 Wuwiii 官方点数；第三方费用由你自己的服务账户承担。
+      voice-configuration:
+        official-managed-description: 官方云模型由服务端维护；进入声线库切换主、副链路，搜索并试听声线。
+        title: 声音表现
+        description: 调整当前声线的音高、语音标记和测试方式。
+        load-error: 声线加载失败
+        pitch: 音高
+        pitch-description: 调整声音的高低，不会改变当前声线。
+        ssml: 启用 SSML
+        ssml-description: 使用语音合成标记语言控制停顿、读法等细节。
+        model: 模型
+        custom-ssml: 使用自定义 SSML
+        custom-ssml-description: 直接输入 SSML，而不是普通文本。
+        stop: 停止
+      provider-empty:
+        title: 尚未配置语音合成服务
+        description: 打开服务来源设置，添加一个语音合成服务。
+      sections:
+        section:
+          playground:
+            buttons:
+              stop:
+                label: 停止
+            select-voice:
+              loading: 正在加载模型...
+              required: 请选择声线
+          provider-voice-selection:
+            alibaba_custom_voice_note_title: 阿里百炼复刻声线
+            alibaba_custom_voice_note_content: 如果你在百炼里创建的是 Qwen 复刻声线，请把接口返回的 target_model 填到自定义模型，把返回的 voice 填到自定义声线 ID。默认声线列表通常只包含可枚举的公开声线，不一定包含你的私有复刻声线。
+            custom_model_label: 自定义模型
+            custom_model_description: 输入要用于语音合成的模型。阿里百炼复刻声线请优先使用复刻接口返回的 target_model。
+            custom_model_placeholder: 输入指定模型名称...
+            custom_voice_label: 自定义声线 ID
+            custom_voice_description: 输入服务商返回的声线 ID。阿里百炼 Qwen 复刻声线请填 voice 字段。
+            custom_voice_placeholder: 输入指定声线 ID...
+            test_config_missing: 请先选择或填写语音模型和声线 ID，再测试声音。
+            test_error_title: 语音测试失败
+            test_provider_init_failed: 语音服务初始化失败，请检查 API Key 和 Base URL。
+            test_unknown_error: 语音生成失败，但没有返回详细错误。
+            points_estimate_unavailable: '生成音频前无法取得可信时长，因此暂时不能精确估算总点数；当前声线每次附加 {voicePoints} 点。'
+            points_estimate_reserving: 服务端正在预留点数并生成音频...
+            points_estimate_ready: 根据音频时长估算为 {points} 点。
+            points_estimate_rule: '基础 {points} 点/分钟，单次最低 {minimum} 点，另加当前声线 {voicePoints} 点/次；服务端按生成音频的实际时长结算。'
+            description: 选择合适的语音服务来源
+            language_all: 全部语言
+            language_description: 优先显示所选语言声线；没有匹配时会保留全部可用声线。
+            language_label: 语音语言
+            language_zh_priority: 中文优先
+            no_models: 没有任何可用的模型
+            no_models_description: 该服务来源的模型列表没有返回任何的数据
+            no_voices: 没有任何可用的声线
+            no_voices_description: 该服务来源的声线列表没有返回任何的数据
+            no_voices_hint: 可以在下方输入自定义声线名字
+            pause: 暂停
+            play_sample: Play
+            search_models_placeholder: 搜索模型...
+            search_models_results: 找到 {count} / {total} 个模型
+            search_voices_placeholder: 搜索声线...
+            search_voices_results: 找到 {count} / {total} 个声线
+            unsupported_voice_warning_title: 没有支持的声线
+            unsupported_voice_warning_content: >-
+              我们正在尽快支持该模型的所有音色；如需帮助，请访问 https://www.wuwiii.cn/help/refund
+            show_less: 显示更少
+            show_more: 显示更多
+            title: 选择语音合成服务来源
+          voice-settings:
+            input-ssml:
+              placeholder: 请输入 SSML 文本
+            use-ssml:
+              description: 启用后可以输入原始 SSML 而不是纯文本
+              label: 选用自定义 SSML
+      title: 发声
+    title: 机体模块
+    web-search:
+      title: 智能联网
+      description: 配置联网搜索服务与人格内容过滤。
+      pricing:
+        loading: 正在读取官方云当前价格…
+        official: '官方云：每次搜索 {points} 点。本地与自带密钥服务不消耗官方点数。'
+    vision:
+      description: 视觉
+      title: 视觉
+    x:
+      description: X / Twitter 的浏览和使用
+      title: X / Twitter
+      enable: 启用X / Twitter集成
+      enable-description: 允许当前居民与 X / Twitter 互动
+      api-key: API密钥
+      api-key-description: 您的X / Twitter API密钥
+      api-key-placeholder: 输入您的X / Twitter API密钥
+      api-secret: API密钥密文
+      api-secret-description: 您的X / Twitter API密钥密文
+      api-secret-placeholder: 输入您的X / Twitter API密钥密文
+      access-token: 访问令牌
+      access-token-description: 您的X / Twitter访问令牌
+      access-token-placeholder: 输入您的X / Twitter访问令牌
+      access-token-secret: 访问令牌密文
+      access-token-secret-description: 您的X / Twitter访问令牌密文
+      access-token-secret-placeholder: 输入您的X / Twitter访问令牌密文
+      configured: X / Twitter已正确配置！
+    mcp-server:
+      description: 连接和管理 MCP 服务器及工具
+      title: MCP 服务器
+      config-path: 配置文件路径
+      runtime-title: 运行状态
+      actions:
+        open-config: 打开 mcp.json
+        apply-and-restart: 保存并重启 stdio MCP
+      messages:
+        opened: 配置文件已于{path}打开
+        restarted: >-
+          MCP 服务已重新启动，启动了{started}，未启动{failed}，跳过{skipped}
+  providers:
+    categories:
+      navigation: 服务来源分类
+      chat:
+        title: 对话
+        description: 负责理解上下文并生成回复，例如呜异屋官方云、DeepSeek、OpenAI 和本地模型。
+      speech:
+        title: 语音
+        description: 把回复合成为声音，例如呜异屋官方语音、阿里云和 ElevenLabs。
+      transcription:
+        title: 听觉识别
+        description: 把麦克风语音转换成文字，例如呜异屋官方听觉、阿里 NLS 和浏览器语音识别。
+      web-search:
+        title: 联网搜索
+        description: 为当前回复获取实时公开信息，例如 Tavily、Exa 和 Brave Search。
+    explained:
+      chat: 文本生成模型服务来源，例如 OpenRouter, OpenAI, Ollama
+      Speech: 语音（文本转语音）模型服务来源，例如 ElevenLabs, Azure Speech
+      Transcription: >-
+        转录（语音转文本）模型服务来源，例如 Whisper.cpp, OpenAI, Azure Speech
+    helpinfo:
+      title: 第一次使用？
+      description: >
+        当前居民需要至少一个 {chat} 服务来源，才能正常思考和回应。你可以把它看作数字居民的大脑。
+    catalog:
+      edit:
+        config-id-not-found: 未找到服务来源配置。
+        definition-id-not-found: 找不到服务来源定义。
+        actions:
+          more-options: 更多选项
+          delete: 删除
+        validation:
+          failed:
+            title: 请检查您的服务来源设置，验证失败。
+            description: >-
+              如果你想要继续，你仍然可以保存当前的配置。
+            action: 仍要保存
+        config:
+          common:
+            fields:
+              field:
+                api-key:
+                  label: API 密钥
+                  description: API 密钥用于授权此服务来源的请求
+                  placeholder: sk-……
+                base-url:
+                  label: Base URL
+                  description: >-
+                    用于连接远程服务的 baseUrl。通常看起来像是 http://localhost:11434/v1 或 https://example.com/v1。
+                  placeholder: 基础 Url……
+                headers:
+                  label: 添加自定义 HTTP 标头
+                  description: 添加自定义 HTTP 标头
+                  key:
+                    placeholder: 请求头名字
+                  value:
+                    placeholder: 请求头数值
+                thinking-mode:
+                  label: Thinking Mode
+                  description: >
+                    Controls Ollama thinking behavior. GPT-OSS only supports low/medium/high levels.
+                  options:
+                    auto: Auto (provider default)
+                    disable: Disable
+                    enable: Enable
+                    low: Low
+                    medium: Medium
+                    high: High
+        validators:
+          actions:
+            validate: 验证
+          empty: 没有可用的验证步骤。
+          openai-compatible:
+            check-config:
+              title: 配置
+            check-connectivity:
+              title: 连通性
+            check-supports-model-listing:
+              title: 能够列出模型
+            check-supports-chat-completion:
+              title: 能够处理 Chat Completion（聊天补全）请求
+          tavily:
+            check-config:
+              title: 配置
+            check-search:
+              title: 搜索
+          web-search:
+            check-config:
+              title: 配置
+            check-search:
+              title: 搜索
+          status:
+            validating: 验证中……
+            valid: 通过
+            invalid: 错误
+          title: 检查
+        providers:
+          provider:
+            ollama:
+              troubleshooting:
+                validators:
+                  openai-compatible-check-connectivity:
+                    label: Ollama需要额外的配置
+                    content: >-
+                      很抱歉，Ollama 连接检查失败。不要担心，如果是 Ollama，需要额外配置才能通过 Ollama。您需要在启动 Ollama 应用程序或 Ollama CLI 服务器时明确设置 OLLAMA_HOST。详情请查看 Project AIRI 上游 Ollama 集成指南：https://airi.moeru.ai/docs/en/docs/manual/integrations/providers/chat/ollama
+    common:
+      continueAnyway: 仍然继续
+      fields:
+        field:
+          api-key:
+            label: API 密钥
+      section:
+        advanced:
+          fields:
+            field:
+              headers:
+                description: 添加自定义 HTTP 标头
+                key:
+                  placeholder: 请求头名字
+                label: HTTP 请求头
+                value:
+                  placeholder: 请求头数值
+          title: 高级配置
+        basic:
+          description: 基本设置
+          title: 基础配置
+        voice:
+          title: 声音配置
+    description: LLM，语音合成，语音识别服务来源等
+    provider:
+      app-local-audio-transcription:
+        title: 应用内（本地）
+        description: https://github.com/moeru-ai/xsai-transformers
+      app-local-audio-speech:
+        title: 应用内（本地）
+        description: https://github.com/moeru-ai/xsai-transformers
+      browser-local-audio-transcription:
+        title: 浏览器内（本地）
+        description: https://github.com/moeru-ai/xsai-transformers
+      browser-local-audio-speech:
+        title: 浏览器内（本地）
+        description: https://github.com/moeru-ai/xsai-transformers
+      alibaba-cloud-model-studio:
+        description: bailian.console.aliyun.com
+        title: 阿里百炼
+      anthropic:
+        description: anthropic.com
+        title: Anthropic | Claude
+        helpinfo:
+          title: 开始之前
+          description:
+            part1: >-
+              虽然 Anthropic 最近宣布他们正在提供对 OpenAI SDK 兼容性的 Beta 版支持
+            part2: '（您可以在此处阅读更多信息）'
+            part3: 但由于实现细节附带
+            part4: >-
+              与 OpenAI SDK 不一致，目前无法在浏览器中使用此提供程序。
+            part5: >-
+              如果您确实需要使用此提供程序，则需要一个专用的代理后端，例如在
+            part6: 上运行的Serverless Function，或者一些绕过 CORS 的服务，以绕过 CORS 限制。
+      cloudflare-workers-ai:
+        description: Cloudflare.com
+        fields:
+          field:
+            account-id:
+              description: Cloudflare 帐户 ID
+              label: Cloudflare Account ID
+              placeholder: 请输入 Cloudflare Account ID
+            api-key:
+              placeholder: 请输入 Cloudflare Workers AI 的 API Key
+        title: Workers AI
+      common:
+        status:
+          validating: 正在验证配置
+          valid: 配置似乎有效。
+        fields:
+          field:
+            pitch:
+              description: 调节合成语音的音高（比如更尖锐或者更粗旷）
+              label: 音高
+            speed:
+              description: 调节说话的语速
+              label: 语速
+            volume:
+              description: 调节语音的响度
+              label: 响度
+      deepgram-tts:
+        description: deepgram.com
+        title: Deepgram
+      speech-noop:
+        title: None
+        description: No speech output.
+      deepseek:
+        description: DeepSeek.com
+        title: 深度求索 DeepSeek
+      elevenlabs:
+        description: Elevenlabs.io
+        fields:
+          field:
+            simularity-boost:
+              description: 声音相似性与依从性
+              label: 相似度修正
+            speaker-boost:
+              description: 增强说话者的相似性
+              label: 扬声器增强
+            speed:
+              description: 语音生成速度
+              label: 语速
+            stability:
+              description: 语音稳定性和随机性
+              label: 稳定性
+            style:
+              description: 夸张的语音风格
+              label: 风格
+        playground:
+          buttons:
+            button:
+              test-voice:
+                generating: 生成中...
+                label: 测试声音
+          fields:
+            field:
+              input:
+                placeholder: 输入用于测试发音的文本
+              language:
+                description: 选择语音语言
+                label: 语言
+              voice:
+                description: 选择首选语音
+                label: 声线
+          title: 实验平台
+          validation:
+            error-missing-api-key: 需要填写 API Key 才能用哦！
+        title: ElevenLabs (11labs)
+      kokoro-local:
+        description: 基于 Kokoro-82M 的本地语音合成
+        fields:
+          field:
+            model:
+              label: 模型选择
+              description: 较小的模型加载更快，但质量可能略有下降。
+        models:
+          fp32-webgpu:
+            description: >-
+              基于 WebGPU 的全精度模型 - 建议在支持的设备上使用
+          fp32:
+            description: 全精度模型
+          fp16:
+            description: 半精度
+          q8:
+            description: 8-bit 量化
+          q4:
+            description: 4-bit 量化
+          q4f16:
+            description: 4-bit 量化 (FP16)
+        playground:
+          default-text: 您好！这是 Kokoro 文本转语音（TTS）系统的测试。
+          title: 实验平台
+        title: Kokoro TTS (本地)
+      fireworks:
+        description: Fireworks.ai
+        title: Fireworks.ai
+      microsoft-speech:
+        description: speech.microsoft.com
+        fields:
+          field:
+            region:
+              description: 服务 Endpoint 地区（比如亚太 eastasia 区域）
+              label: Endpoint 地区
+        title: Microsoft / Azure 语音服务
+      index-tts-vllm:
+        description: https://index-tts.github.io/
+        title: Bilibili / IndexTTS
+        callout_indextts2_unavailable_title: 暂不支持
+        callout_indextts2_unavailable: 目前尚未支持 IndexTTS2，请使用 IndexTTS。
+      azure-ai-foundry:
+        description: Azure AI Foundry
+        title: Azure AI Foundry
+      minimax:
+        description: minimaxi.com
+        title: MiniMax
+      minimax-global:
+        description: minimax.io
+        title: MiniMax Global
+      mistral:
+        description: mistral.ai
+        title: Mistral
+      moonshot:
+        description: Moonshot.ai
+        title: 月之暗面
+      modelscope:
+        description: modelscope.cn
+        title: 魔搭社区 ModelScope
+      novita:
+        description: novita.ai
+        title: Novita
+      ollama:
+        description: ollama.ai
+        title: Ollama
+      official-cloud:
+        description: 呜异屋官方云端智能服务
+        title: 官方云模型
+        models:
+          airi-default: Wuwiii 默认
+          airi-fast: Wuwiii 快速
+          airi-balanced: Wuwiii 均衡
+          airi-smart: Wuwiii 智能
+          airi-reasoning: Wuwiii 推理
+          airi-long: Wuwiii 长上下文
+          airi-codex: 官方 Codex / 工作台
+          airi-claude: 官方 Claude / 工作台
+      official-cloud-speech:
+        description: 官方云语音合成服务。仅在用户主动选择并启用后消耗账户点数。
+        title: 官方云语音合成
+        models:
+          airi-speech: Wuwiii 语音合成
+        voices:
+          airi-default: Wuwiii 默认
+      official-cloud-transcription:
+        description: 官方云语音识别服务。
+        title: 官方云语音识别
+        models:
+          airi-transcription: Wuwiii 语音识别
+      official-cloud-embed:
+        description: 用于长期记忆语义召回的官方云嵌入服务。
+        title: 官方云嵌入
+      official-cloud-web-search:
+        description: 用于查询当前网络信息的官方云搜索服务。
+        title: 官方云联网搜索
+      openai:
+        description: OpenAi.com
+        title: OpenAI
+      openai-compatible:
+        description: OpenAI 兼容 API
+        title: OpenAI 兼容 API
+      tavily:
+        description: 用于查询当前信息的联网搜索服务来源
+        title: Tavily
+      exa:
+        description: 独立的神经搜索与关键词联网搜索 API。
+        title: Exa
+      brave-search:
+        description: 独立的 Brave Search API 服务来源。
+        title: Brave Search
+      google-custom-search:
+        description: Google Programmable Search / Custom Search JSON API 服务来源。
+        fields:
+          field:
+            search-engine-id:
+              description: Google Programmable Search Engine 中的 Search Engine ID（cx）。
+              label: Search Engine ID
+              placeholder: Programmable Search Engine ID
+        title: Google Custom Search
+      serpapi:
+        description: 通过 SerpAPI 获取独立 Google 搜索结果。
+        title: SerpAPI
+      serper:
+        description: 通过 Serper 获取独立 Google 搜索 API 结果。
+        title: Serper
+      n1n:
+        description: n1n.ai - 高性能的 AI API 提供商
+        title: n1n
+      openrouter:
+        description: OpenRouter.ai
+        title: OpenRouter
+      perplexity:
+        description: perplexity.ai
+        title: Perplexity
+      player2:
+        description: player2.game
+        title: Player2
+      together:
+        description: together.ai
+        title: Together.ai
+      google-generative-ai:
+        description: gemini.google.com
+        title: Google Gemini
+      groq:
+        description: groq.com
+        title: Groq
+      featherless:
+        description: featherless.ai
+        title: Featherless AI
+      lm-studio:
+        description: lmstudio.ai
+        title: LM Studio
+      vllm:
+        description: vllm.ai
+        title: vLLM
+      volcengine:
+        description: volcengine.com
+        fields:
+          field:
+            appId:
+              description: 可在控制台获取的 App ID
+              label: App ID
+        title: 火山引擎
+      xai:
+        description: X.AI
+        title: xAI
+      302-ai:
+        description: 302.AI
+        title: 302.AI
+      comet-api:
+        description: CometAPI.com
+        title: Comet API
+      cerebras:
+        description: cerebras.ai
+        title: Cerebras
+      aliyun-nls:
+        description: Aliyun 智能语音服务
+        title: Aliyun 智能语音服务
+        fields:
+          access-key-id: Access Key ID
+          access-key-secret: Access Key Secret
+          app-key: App Key
+          app-key-placeholder: 输入 NLS 项目的 App Key
+          region: 服务区域
+          model: 识别模型
+        models:
+          realtime: NLS 实时语音识别
+        nls-notice:
+          title: NLS 与百炼使用不同的接入方式
+          description: NLS 的识别场景由 App Key 对应的项目决定。百炼/Qwen ASR 模型不能直接填入这个 NLS 连接，后续应使用独立的百炼语音识别 Provider。
+        actions:
+          start: 开始实时转写
+          streaming: 正在转写...
+          stop: 停止
+          abort: 中止会话
+        status:
+          recording: 正在录音
+          connected: 已连接
+        transcripts:
+          title: 转写结果
+          partial: 实时结果
+          waiting: 等待语音输入...
+          awaiting-final: 等待最终结果...
+      browser-web-speech-api:
+        description: 浏览器原生STT (需要 Chrome/Edge/Safari)
+        title: Web 语音API
+        common:
+          'yes': 是
+          'no': 否
+        availability:
+          title: 当前环境不支持 Web Speech API
+          description: Web Speech API 需要 Chrome、Edge、Safari 或其他 Chromium 浏览器，当前环境无法使用该服务。
+        introduction:
+          title: 浏览器原生免费转写
+          description: Web Speech API 使用浏览器内置的语音识别能力，不需要 API Key 或额外服务。
+          no-api-key: 无需 API Key，语音识别由浏览器原生提供。
+        fields:
+          language:
+            label: 识别语言
+            description: 选择语音识别使用的语言。
+          continuous:
+            label: 连续识别
+            description: 持续监听，而不是在每句话后停止。
+          interim-results:
+            label: 显示临时结果
+            description: 说话时实时显示尚未最终确认的识别结果。
+        languages:
+          en-US: 英语（美国）
+          en-GB: 英语（英国）
+          es-ES: 西班牙语
+          fr-FR: 法语
+          de-DE: 德语
+          it-IT: 意大利语
+          pt-BR: 葡萄牙语（巴西）
+          ja-JP: 日语
+          ko-KR: 韩语
+          zh-CN: 中文（简体）
+          zh-TW: 中文（繁体）
+          ru-RU: 俄语
+        test:
+          title: 语音转文字测试
+          description: 使用所选音频设备测试 Web Speech API；此处不会改用默认听觉服务。
+          audio-device:
+            label: 音频输入设备
+            description: 选择测试使用的麦克风或音频输入设备。
+            placeholder: 选择音频输入设备
+          start: 开始语音转文字测试
+          stop: 停止测试
+          transcribing: 转写中...
+          error-title: 转写错误
+          streaming-mode: 流式模式会在你说话时实时显示 Web Speech API 的识别结果。
+          result: 转写结果
+          current: 当前转写（流式）：
+          final: 最终转写：
+          empty: 还没有识别到内容。选择设备并开始测试后说几句话。
+          provider: 服务来源
+          language: 语言
+          mode: 模式
+          mode-streaming: 流式（实时）
+          continuous: 连续识别
+          interim-results: 临时结果
+          errors:
+            select-device: 请先选择用于测试的音频输入设备。
+            stream-start: 音频流启动失败，请检查麦克风权限。
+            stream-start-short: 音频流启动失败
+            stream-unavailable: 音频流当前不可用
+          status:
+            starting-stream: 正在启动音频流...
+            starting-transcription: 正在启动 Web Speech API 转写...
+            transcribing: 正在转写...（流式）
+            complete: 转写完成
+            waiting: 正在等待说话...
+            listening: 正在倾听语音...（Web Speech API 流式模式）
+            stopped: 已停止
+            error: 错误：{message}
+      transcriptions:
+        playground:
+          title: 实验平台
+      aihubmix:
+        title: AIHubMix
+        description: https://aihubmix.com (10% off)
+    title: 服务来源
+  connection:
+    description: 配置 WebSocket 服务器连接
+    title: 连接
+    websocket-url:
+      description: WebSocket 服务器的完整地址(例如，ws://localhost:6121/ws)
+      label: WebSocket 服务器地址
+      placeholder: ws://localhost:6121/ws
+  scene:
+    description: 配置当前居民在呜异工作台里的工作与汇报方式
+    title: 工作方式
+    workbench:
+      title: 工作台工作方式
+      description: 控制当前居民在工作台里说话、汇报进度和处理细节的方式。这里会补充当前居民档案，不会替代它。
+      actions:
+        restore-default: 还原默认
+      presets:
+        title: 预设
+        description: 选择一个基础工作方式；下面仍然可以继续微调。
+        balanced:
+          label: 平衡
+          description: 简短汇报，保留熟悉同事感。
+        concise:
+          label: 简短
+          description: 先给结果，少铺垫，快速交接。
+        warmer-companion:
+          label: 更有陪伴感
+          description: 更亲近一点，但仍然以完成任务为主。
+        professional-focus:
+          label: 专业专注
+          description: 更强调结构、细节和验证状态，减少陪伴式色彩。
+      controls:
+        title: 常用控制
+        description: 不编辑提示词文本，也能调整汇报密度、细节折叠和陪伴感。
+      advanced:
+        title: 高级自定义说明
+        description: 只有当基础控制不够具体时，再覆盖预设里的工作方式说明。
+      fields:
+        scene-description:
+          label: 自定义工作方式说明
+          description: 描述当前居民在工作台里应该使用的同事式工作风格。留空会回到默认预设。
+          placeholder: 当前居民正在工作台里和用户一起处理任务……
+        concise-reports:
+          label: 简短汇报
+          description: 默认先给出有用结果，并尽量用短句汇报进度。
+        fold-internal-details:
+          label: 折叠内部细节
+          description: 当工作台可以单独展示时，不把原始计划、提示词机制和命令日志直接塞进主回复。
+        companion-warmth:
+          label: 陪伴感强度
+          description: 调整熟悉陪伴者的语气占比，但整体仍以认真做事为主。
+      hard-rules:
+        title: 受保护的工作台规则
+        description: 这些规则会始终应用在工作台里，不能在这个页面删除。
+        rule-1: 这个工作方式只用于工作台任务，并作为当前人物卡的补充。
+        rule-2: 先给出有用结果；除非用户要求细节，否则可见回复保持简短。
+        rule-3: 允许当前人格轻微体现在措辞里，但工作时不进行角色扮演和闲聊。
+        rule-4: 能折叠时，把内部计划、提示词机制、安全边界措辞和命令日志放到细节区。
+        rule-5: 文件编辑采用先预览再应用；真正写入仍需要明确的界面动作或清楚的应用/写入表述。
+        rule-6: 策略允许时可以执行低风险辅助检查；安装、删除、提权动作、未批准的外部访问和跨工作区动作仍受保护。ok、继续、好、yes 这类短确认不等于同意写入、应用或运行。
+      prompt-preview:
+        title: 高级模型指令预览
+        description: 查看之后模型调用会收到的工作台工作方式片段。
+  system:
+    color-scheme:
+      description: 给聊天空间换一套顺眼的配色与背景。
+      title: 外观与背景
+    developer:
+      description: 为开发者提供的选项
+      title: 开发者
+    general:
+      description: 管理 Windows 开机自启动、界面语言和其他日常偏好。
+      title: 通用与启动
+    description: 一起把数字居民的舞台布置成你喜欢的模样吧。
+    sections:
+      section:
+        background:
+          title: 聊天背景
+          description: 选中的图片会铺到聊天与快捷聊天里；设置页会保留清晰的阅读层。没有单独准备暗色背景时，我会替你压低亮度和饱和度，夜里看着更舒服。
+          picker:
+            title: 背景选择器
+            add-custom: 添加自定义背景
+            custom-background: 自定义背景
+            no-preview: 暂无预览
+            remove: 移除背景
+            preview: 预览
+            blur: 模糊
+            select: 选择一个背景
+            sampling: 正在取色...
+            apply: 使用此背景
+            presets:
+              colorful-wave:
+                title: 彩色波浪
+                description: 十字网格上的动态波浪
+              airi-companion-studio-light:
+                title: 晨光小屋
+                description: 为浅色模式准备的清透樱花房间。
+              airi-companion-studio-dark:
+                title: 夜樱小屋
+                description: 与晨光小屋相配的安静夜间房间
+              airi-message-light:
+                title: 呜异屋樱羽气泡·浅色
+                description: 樱花、羽毛与星光组成的居民消息背景
+              airi-message-dark:
+                title: 呜异屋樱羽气泡·暗色
+                description: 为夜晚准备的樱花与羽毛消息背景
+              user-message-light:
+                title: 我的苏打气泡·浅色
+                description: 纸飞机、耳机和幸运草组成的清爽消息背景
+              user-message-dark:
+                title: 我的苏打气泡·暗色
+                description: 为夜晚准备的纸飞机与耳机消息背景
+          light:
+            title: 浅色模式
+          dark:
+            title: 暗色模式
+            automatic: 自动护眼滤镜
+          actions:
+            change: 更换背景
+            use-automatic: 使用自动暗色滤镜
+          surface:
+            title: 设置界面材质
+            description: 决定背景要透出多少，让设置页像轻纱一样清透，或像小窝一样安稳清晰。
+            options:
+              clear: 清透
+              comfort: 舒适
+              solid: 清晰阅读
+          chat-surface:
+            title: 聊天界面透明度
+            description: 调整聊天内容区与输入框的通透程度，背景想多露一点还是乖乖退后，都由你决定。
+        chat-appearance:
+          title: 消息外观
+          description: 分别装扮当前居民和你的消息气泡，让对话一眼就能认出来。
+          roles:
+            assistant: 当前居民
+            user: 我的消息
+          modes:
+            light: 浅色预览
+            dark: 暗色预览
+          preview:
+            assistant: 这样说话，你看得舒服吗？
+            user: 嗯，这个样子很像我。
+          separate-dark:
+            title: 单独设置暗色模式
+            description: 关闭时会沿用浅色模式的图片与形状，再自动换成适合夜晚的表面。
+            automatic: 我正在把浅色气泡轻轻调成适合暗色模式的效果。
+          background:
+            title: 气泡图片
+            description: 从背景图库里挑一张，让这枚气泡也拥有自己的小风景。
+            none: 不使用图片
+          image-strength: 图片显示强度
+          image-fit:
+            title: 图片怎么铺进气泡
+            contain: 完整缩放
+            cover: 裁切铺满
+            stretch: 拉伸铺满
+            original: 原始尺寸
+            repeat: 原图平铺
+            descriptions:
+              contain: 保留整张图片与原始比例，空出的区域会露出气泡底色。
+              cover: 保持比例并铺满气泡，超出边缘的部分会被裁掉。
+              stretch: 不裁切，直接把图片拉到气泡四边；图案可能会稍微变形。
+              original: 保持图片原始尺寸并放在选定位置，超出气泡的部分会隐藏。
+              repeat: 保持原始尺寸重复排列，最适合纹理或小图案。
+          image-position:
+            title: 图片对齐位置
+            top: 顶部
+            center: 居中
+            bottom: 底部
+          base-color: 底色
+          auto-text:
+            title: 自动文字颜色
+            description: 我会根据底色挑选清楚的深色或浅色文字。
+            contrast-warning: 这个颜色会和底色混在一起，我先换成更容易看清的文字颜色。
+          text-color: 文字颜色
+          radius:
+            title: 圆角
+            compact: 紧凑
+            rounded: 圆润
+            soft: 柔和
+          border:
+            title: 边框
+            none: 无
+            subtle: 轻微
+            strong: 清晰
+          shadow:
+            title: 阴影
+            none: 无
+            soft: 柔和
+            lifted: 悬浮
+          typography:
+            title: 消息文字
+            description: 调整当前居民和你的消息字号、字重与行距，让整段对话更容易阅读。
+            size: 字号
+            weight: 字重
+            line-height: 行距
+          weight:
+            regular: 常规
+            medium: 中等
+            semibold: 半粗
+          reset: 恢复消息默认外观
+        custom-color:
+          fields:
+            field:
+              primary-color:
+                label: 强调色
+                rgb-on:
+                  title: RGB ON!
+          title: 配色
+        developer:
+          title: 开发者
+          sections:
+            section:
+              performance-visualizer:
+                title: 性能可视化工具
+                description: 切换 FPS/长任务/内存叠加
+              markdown-stress:
+                title: Markdown Stress
+                description: 用大量聊天负载来测试 Markdown 的解析和渲染能力
+              use-magic-keys:
+                title: useMagicKeys Tool
+                description: 测试快捷键
+              audio-record:
+                title: 音频录制
+                description: 测试音频相关逻辑
+              background-gradient-blending:
+                title: 背景主题颜色混合
+                description: 测试混合与主题
+              background-removal:
+                title: 背景移除 (需要 WebGPU)
+                description: 背景移除工具
+              chat:
+                title: 聊天
+                description: 聊天测试
+              gesture-circle:
+                title: 手势识别（仅限桌面端）
+                description: 测试手势识别
+              image:
+                title: 图像
+                description: 图像测试
+              polaroid:
+                title: 拍立得
+                description: 拍摄模型照片的工具
+              context-flow:
+                description: >-
+                  检查传入的上下文更新和传出的聊天流事件
+              websocket-inspector:
+                title: WebSocket 检查器
+                description: 检查原始 WebSocket 流量
+              vibrant:
+                title: 颜色提取
+                description: 测试颜色提取
+              providers-transcription-realtime-aliyun-nls:
+                title: 阿里云实时转写
+                description: >-
+                  将麦克风音频流式传输到阿里云 NLS 并检查实时转写
+              performance-playground:
+                title: 性能测试场地
+                description: '测试性能运行时：VRM 表情 + TTS 口型同步'
+        theme-presets:
+          presets:
+            default:
+              colors:
+                color-1: 呜异屋绿
+              description: 呜异屋熟悉的绿色主题，清爽又有一点元气。
+              title: 默认颜色
+            morandi:
+              colors:
+                color-1: 灰褐色
+                color-2: 米色
+                color-3: 灰白色
+                color-4: 浅灰褐色
+                color-5: 象牙色
+                color-6: 橄榄灰
+                color-7: 沙色
+                color-8: 暖灰色
+              description: 像莫兰迪画布一样柔和低调，适合安静陪伴的日子。
+              title: Morandi 颜色
+            monet:
+              colors:
+                color-1: 天蓝色
+                color-2: 薄雾色
+                color-3: 沙色
+                color-4: 苔藓绿
+                color-5: 睡莲色
+                color-6: 小麦色
+                color-7: 板岩蓝
+                color-8: 浅灰绿色
+              description: 把莫奈画里的雾光与睡莲色收进舞台，轻轻柔柔的。
+              title: 莫奈颜色
+            japanese:
+              colors:
+                color-1: 棕褐色
+                color-2: 暖灰褐色
+                color-3: 赭色
+                color-4: 咖啡色
+                color-5: 青铜色
+                color-6: 金色
+                color-7: 芥末色
+                color-8: 琥珀色
+              description: 暖灰、赭色与金色交织的传统日式配色。
+              title: 日本颜色
+            nordic:
+              colors:
+                color-1: 北欧蓝
+                color-2: 冰色
+                color-3: 峡湾色
+                color-4: 钢铁色
+                color-5: 冰川色
+                color-6: 板岩色
+                color-7: 云色
+                color-8: 石头色
+              description: 冰川与云层般清爽的北欧极简配色。
+              title: 北欧颜色
+            chinese:
+              colors:
+                color-1: 霞光红
+                color-2: 枣红
+                color-3: 烟棕色
+                color-4: 竹青
+                color-5: 乌梅紫
+                color-6: 金黄色
+                color-7: 天蓝色
+                color-8: 赭黄色
+              description: >-
+                中国传统色彩，源自古代纺织品、瓷器和绘画
+              title: 中国传统颜色
+          title: 预设
+    title: 外观
+  page:
+    developers:
+      open-devtools:
+        title: 打开开发者工具
+        button: 打开
+sections:
+  section:
+    general:
+      title: 通用
+theme:
+  title: 主题
+  description: |
+    替数字居民的舞台切换亮色或暗色主题，选你看着最舒服的一套。
+title: 设置
+voices: 声线
+vrm:
+  change-model:
+    from-file: 从文件加载
+    from-file-select: 选择
+    from-url: 从 URL 加载
+    from-url-confirm: 加载
+    from-url-placeholder: 输入 VRM 模型 URL
+    title: 更换模型
+  title: VRM 设置
+  scale-and-position:
+    model-info-title: 模型尺寸信息
+    model-info-x: 宽度（X轴）
+    model-info-y: 高度（Y轴）
+    model-info-z: 深度（Z轴）
+    tips: |
+      设定模型放置的空间坐标。
+      坐标轴已被可视化。
+    scale: 缩放
+    x: X轴偏移
+    'y': Y 轴偏移
+    z: Z轴偏移
+    fov: 视角调整（度）
+    rotation-y: 模型朝向（Y轴旋转）
+    camera-distance: 相机距离（画面缩放）
+    eye-tracking-mode:
+      title: 模型注视方向
+      options:
+        option:
+          camera: 相机
+          mouse: 鼠标
+          disabled: 禁用
+  switch-to-vrm:
+    title: 想切换至Live2D虚拟形象？
+    change-to-vrm: 切换至Live2D虚拟形象设定页面
+  skybox:
+    skybox-intensity: 天空盒光照强度
+    skybox-specular-mix: 漫反射/镜面反射混合系数
+websocket-secure-enabled:
+  title: 启用安全 WebSocket (WSS)
+  description: >-
+    启用 WSS（WebSocket Secure）以允许开发模式下移动端（pocket）的 HTTPS 连接。这将自动生成自签名证书。
+analytics:
+  title: 共享可选的产品分析数据
+  description: >-
+    默认关闭。开启后，Wuwiii 只发送应用版本、服务商选择和首次消息耗时等有限产品事件，不采集自动点击、页面浏览、会话录制或聊天内容；你可以随时关闭。
+wip:
+  title: 正在开发中
+  description: >-
+    此功能正在开发中，尚未公开发布。请在未来的更新中再次查看此功能。

@@ -1,0 +1,21 @@
+Wuwiii Development Source: Third-Party Notices
+
+Project AIRI
+WuWiii is derived from Project AIRI, Copyright (c) 2024-PRESENT Neko Ayaka,
+under the MIT License. The license and attribution are in the repository's
+root LICENSE file.
+
+Fonts
+The Xiaolai font is attributed to ʟxɢᴡ and identified as licensed under the
+SIL Open Font License in packages/font-xiaolai/package.json. Upstream:
+https://github.com/lxgw/kose-font
+
+The cjkFonts 全瀨體 font and its SIL Open Font License text are included in
+packages/font-cjkfonts-allseto/license.txt.
+
+Live2D
+Live2D SDK and sample model assets are not committed to this development
+repository. Builds that fetch them must follow the terms published by Live2D:
+https://www.live2d.com/en/download/cubism-sdk/release-license/
+
+Dependencies and other assets remain subject to their respective licenses.

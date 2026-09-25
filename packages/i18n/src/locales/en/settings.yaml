@@ -1,0 +1,3231 @@
+common:
+  save: Save
+runtime:
+  official_speech_temporarily_unavailable: The selected official voice route is busy or unavailable. This reply stays as text, and later replies will retry the same voice automatically.
+  speech_provider_failed: Speech provider {provider} failed. The text reply is preserved and Wuwiii will not switch to official speech automatically.
+animations:
+  stage-transitions:
+    title: Disable Stage Transitions
+  use-page-specific-transitions:
+    description: >-
+      Some pages will have their own transitions, this will override the stage
+      transitions
+    title: Use Page Specific Transitions
+dialogs:
+  onboarding:
+    title: Welcome to Wuwiii!
+    description: Choose how Wuwiii connects to AI, then review character, voice, desktop tools, and data controls.
+    selectProvider: Choose an AI Provider
+    configureProvider: Configure {provider}
+    apiKey: API Key
+    apiKeyHelp: Get your API key from {provider} and paste it here
+    baseUrl: Base URL
+    baseUrlHelp: API endpoint URL (use default if unsure)
+    accountId: Account ID
+    validationSuccess: Configuration validation success
+    validationFailed: Configuration validation failed
+    validationError: 'Validation error: {error}'
+    skipForNow: Skip for now
+    saveAndContinue: Save and Continue
+    next: Next
+    retry: Retry
+    start: Let's do it!
+    select-model: Choose model
+    no-models: No available models
+    no-models-help: >-
+      Return to the previous steps and check the provider account, API key, or
+      local model runtime selected for this setup path.
+    back: Back
+    credentials:
+      title: Keep your provider credentials private
+      description: Your API key is stored in this Wuwiii installation. Treat it like a password and do not share it.
+    officialCloud:
+      title: Account sign-in is completed separately
+      description: This selects Wuwiii Official Cloud, but it does not sign you in or purchase points. After onboarding, open Account & Points to sign in before your first cloud request.
+    localProvider:
+      title: The local model service must already be running
+      description: Wuwiii stores this local endpoint and connects to it. It does not install, download, or start Ollama or LM Studio.
+    steps:
+      path:
+        title: Choose how Wuwiii connects to AI
+        description: Pick the route that matches your account and privacy needs. You can change providers later.
+        options:
+          official-cloud:
+            title: Wuwiii Official Cloud
+            description: The simplest route. Sign in after onboarding and use account points; no provider API key is entered here.
+          byok:
+            title: Use my own API key
+            description: Connect OpenAI, Anthropic, Gemini, OpenRouter, or another compatible hosted provider with credentials you control.
+          local:
+            title: Pure local model
+            description: Connect Ollama or LM Studio running on this device. Wuwiii does not install or start the local model runtime for you.
+        selected:
+          official-cloud: You chose Official Cloud. No provider key is required here; account sign-in remains a separate step.
+          byok: You chose your own provider credentials. Pick the hosted provider whose key you already have.
+          local: You chose a local runtime. Make sure Ollama or LM Studio is installed, running, and exposing its local API.
+      personalize:
+        title: Make your digital resident feel at home
+        description: Character and appearance are independent from the AI provider. This guide does not replace or import a character automatically.
+        items:
+          character:
+            title: Character & persona
+            description: Choose the built-in character or import a character package, then review its persona and model settings.
+            location: Settings > Character
+          theme:
+            title: Theme & conversation appearance
+            description: Choose light or dark mode, colors, backgrounds, and message appearance from the appearance settings.
+            location: Settings > System > Appearance & Background
+      voice:
+        title: Voice and microphone
+        description: Voice output and speech input are optional. Wuwiii asks for device permission only when you use a microphone feature.
+        items:
+          speech:
+            title: Speech output
+            description: Select and test a speech provider, model, and voice. Choosing an AI chat provider does not automatically configure speech.
+            location: Settings > Modules > Speech
+          microphone:
+            title: Speech input
+            description: Select a transcription provider and input device before using voice input.
+            location: Settings > Modules > Hearing
+          permission:
+            title: Microphone permission
+            description: Grant access only in the operating-system prompt shown when recording starts. This onboarding step does not request permission.
+            location: Requested by the operating system when recording starts
+      tools:
+        title: Desktop tools
+        description: These tools remain off-screen until you open them. Review each workflow before relying on it.
+        items:
+          quick-chat:
+            title: Quick Chat
+            description: A compact desktop conversation window with its own size, placement, and speech behavior settings.
+            location: Settings > System > Quick Chat
+          butler:
+            title: Butler
+            description: Create and confirm reminders, alarms, and timers. Wuwiii does not create a task until the confirmation flow succeeds.
+            location: Open Butler from the desktop controls
+          workbench:
+            title: Workbench
+            description: Use a workspace for files, previews, tools, and longer tasks. Actions with side effects retain their own confirmation rules.
+            location: Open Workbench from the desktop controls
+      data:
+        title: Your data and diagnostics
+        description: Wuwiii keeps local conversation and preference data on this installation. Destructive cleanup stays behind explicit confirmation.
+        items:
+          storage:
+            title: Data controls
+            description: Review stored data and export or reset options before making changes.
+            location: Settings > Data
+          diagnostics:
+            title: Memory diagnostics
+            description: Inspect memory health and indexing status when recall does not behave as expected.
+            location: Settings > Memory > Diagnostics
+          cleanup:
+            title: Cleanup
+            description: Cleanup is not run by onboarding. Use the data settings later and confirm exactly what will be removed.
+            location: Settings > Data
+    summary:
+      title: Setup overview
+      description: Your chat provider and model are selected. Optional character, voice, tool, and data settings remain available afterward.
+      path: Connection path
+      provider: Provider
+      model: Model
+      notSelected: Not selected
+      afterTitle: Continue in Settings
+      afterDescription: These areas contain the optional controls described in the guide. Nothing there was changed automatically.
+      afterItems:
+        character: Character & appearance
+        voice: Voice & microphone
+        tools: Desktop tools
+        data: Data & diagnostics
+      complete: Finish setup
+language:
+  title: Language
+  description: >
+    Change the language of the Wuwiii interface. This will not affect the language
+    of the character's responses.
+startup:
+  section-title: Windows startup
+  home-title: Start with Windows
+  home-description: Control whether Wuwiii starts normally when you sign in to Windows.
+  title: Start Wuwiii when I sign in to Windows
+  description: Start Wuwiii normally after you sign in to Windows, with the same windows and data as a manual launch. This switch reflects the current Windows startup setting.
+  loading: Reading the current Windows startup setting...
+  unsupported: Automatic startup is not available on this operating system.
+  load-error: Could not read the Windows startup setting.
+  save-error: Could not update the Windows startup setting. The previous value was restored.
+controls-island:
+  icon-size:
+    title: Controls Island Icon Size
+    description: Adjust the size of the controls island icons
+    auto: Auto (responsive)
+    large: Large (default)
+    small: Small
+live2d:
+  change-model:
+    from-file: Load from File
+    from-file-select: Select
+    from-url: Load from URL
+    from-url-confirm: Load
+    from-url-placeholder: Enter Live2D model URL
+    title: Change Model
+  edit-motion-map:
+    title: Edit motion map
+  map-motions:
+    play: Play Motion
+    title: Map Motions
+  actions:
+    apply: Apply Settings
+    reset-value: Reset value
+  title: Live2D Settings
+  panel-switcher:
+    title: Live2D setting sections
+  panels:
+    basic: Basic
+    preview: Preview
+    resources: Resources
+    actions: ActionCards
+    parameters: Parameters
+    natural: Natural behavior
+    advanced: Model calibration
+  performance-resources:
+    motions-title: Motion resources
+    expressions-title: Expression resources
+    no-motions: This model has no motion resources.
+    no-expressions: This model has no expression resources.
+    label: Name shown to AI
+    emotion-tags: Emotion tags, separated by commas
+    scene-tags: Scene tags, separated by commas
+    ai-description: Describe how this resource looks, when it helps, and when AI should avoid it.
+  picture_character:
+    title: Picture character
+    description: Choose an idle image, an optional speaking image, and name the remaining images as performance actions.
+    idle: Idle image
+    speaking: Speaking image
+    unassigned: Unassigned
+    action_name: Action name
+    action_label: Name shown to AI
+    emotion_tags: Emotion tags, separated by commas
+    scene_tags: Scene tags, separated by commas
+    ai_description: Advanced AI reference for this image action
+    select_image: Select image
+    add_action: Add action
+    remove_action: Remove action
+    unassigned_images: Unassigned images
+    none: None
+    save: Save picture character configuration
+    saved: Picture character configuration saved
+  scale-and-position:
+    title: Scale And Position
+    scale: Scale
+    x: X
+    'y': 'Y'
+  switch-to-vrm:
+    title: Switch to 3D Avatar?
+    change-to-vrm: Click here to switch to the 3D avatar setting (VRM)
+  theme-color-from-model:
+    title: Extract colors from model
+    button-extract:
+      title: Extract
+  focus:
+    title: Disable model mouse tracking
+    button-disable:
+      title: Disable
+  mouth-sync:
+    title: Mouth Sync
+    speed:
+      title: Mouth Movement Speed
+      description: Slow down or speed up Live2D mouth movement during speech playback.
+    auto-speed:
+      title: Auto adjust by text and audio length
+      description: Estimate how many mouth open-close cycles the text needs, then use the audio duration to tune the rhythm.
+  preview-test:
+    title: Preview Test
+    fields:
+      motion: Motion
+      expression: Expression
+    actions:
+      refresh: Refresh
+      reset-model: Reset Preview
+      play-motion: Play Motion
+      play-expression: Play Expression
+      reset-expression: Reset
+    placeholders:
+      no-motion: No motion selected
+      no-expression: No expression selected
+  custom-expressions:
+    title: Custom Action Presets
+    description: Combine a motion with source expressions. Motion presets return smoothly to idle when playback ends; expression-only presets use the hold time.
+    badge: Custom action
+    saved: Saved actions
+    selected-count: '{count} selected'
+    part-count: '{count} expressions'
+    unknown-expression: Unknown expression
+    empty-source: No source expressions available
+    empty: No custom actions saved
+    fields:
+      name: Preset name
+      meaning: Meaning shown to AI
+      description: User-facing description
+      emotion-tags: Emotion tags
+      scene-tags: Scene tags
+      suitable-when: Suitable when
+      avoid-when: Avoid when
+      ai-description: Advanced AI reference
+      parameter-claims: Parameter claims
+      ai-selectable: Allow AI selection
+      interruptible: May be interrupted
+      parts: Overlay expressions
+    placeholders:
+      name: e.g. Wave with blush
+      meaning: e.g. A small hesitant wave that feels warm, not ceremonial
+      description: Briefly describe the visible performance
+      tags: Separate multiple tags with commas
+      list: Separate situations with commas
+      ai-description: Describe emotion, motion scale, suitable moments, and contexts the model should avoid
+      claims: Advanced parameter IDs, separated with commas
+    actions:
+      save: Save
+      update: Update
+      cancel: Clear
+      preview: Preview
+      edit: Edit
+      delete: Delete
+      reset: Reset all
+  ai-expressions:
+    title: AI Actions
+    description: Map AI states to motions or custom action presets. Plain motions can return to idle when playback ends or after a fixed hold time.
+    custom-action-finish: The selected custom action controls how it returns to idle.
+    reset: Reset
+    fields:
+      motion: Motion
+      expression: Expression
+      duration: Hold Time
+      cleanup: After Playback
+      auto: Auto
+    cleanup-modes:
+      auto: Timed return
+      restore-baseline: Automatic return
+    scenes:
+      idle: Idle
+      thinking: Thinking
+      speaking: Speaking
+      listening: Listening
+      proactive: Proactive Topic
+      assistant-response: Assistant Response
+      emotion:
+        happy: Happy
+        sad: Sad
+        angry: Angry
+        think: Thoughtful
+        surprised: Surprised
+        awkward: Awkward
+        question: Questioning
+        curious: Curious
+        neutral: Neutral
+      persona:
+        steady: Steady
+        warm: Warm
+        playful: Playful
+        concerned: Concerned
+        heavy: Heavy
+        guarded: Guarded
+        repairing: Repairing
+  lifecycle-actions:
+    title: ActionCard studio
+    description: Combine one motion with any expressions, then describe the complete performance for optional AI selection.
+  natural-behavior:
+    title: Natural behavior
+  idle-sway:
+    title: Idle Sway
+    description: Control the current resident's head, body, and arm sway during Live2D idle motions.
+  runtime-idle:
+    title: Runtime Idle Loop
+    placeholder: Select motion
+    empty: No motions available
+  random-idle:
+    title: Occasional Activity
+    description: Insert an occasional activity motion after the current resident has been idle, then return to the resident idle pool.
+    interval-min: Minimum Wait
+    interval-max: Maximum Wait
+    pool: Motion Pool
+    empty: No motions or custom action presets available
+    enabled-count: '{count} enabled'
+    reset-intervals: Reset interval
+  idle-pool:
+    title: Resident Idle Motions
+    description: Choose authored idle motions and arrange their playback order. Leave every item off to keep only natural blink, gaze, breathing, and physics.
+    empty: No motions are available for this model
+    rotation-title: Playback mode
+    move-up: Move earlier
+    move-down: Move later
+    modes:
+      sequential: In order
+      random: Random
+      single: Single
+    mode-descriptions:
+      sequential: Play enabled motions from top to bottom, then start again from the first one.
+      random: Pick from enabled motions without immediately repeating the previous one.
+      single: Always use the first enabled motion; move another motion to the top to switch it.
+  advanced-calibration:
+    title: Model calibration
+    description: Temporary baseline values for models whose authored neutral pose needs correction. These are not actions or AI emotion settings.
+    diagnostics:
+      owner: Current performance owner
+      epoch: Model / turn epoch
+      claims: Declared parameter claims
+      rejected-writes: Rejected performance writes
+      conflicts: Conflicting claims
+      migration: Configuration projection
+      none: None
+  parameters:
+    title: Parameters
+    reset: Reset To Default Parameters
+    toggles:
+      auto-blink: Auto Blink
+      force-auto-blink: Force Auto Blink (fallback timer)
+      shadow: Shadow
+    groups:
+      head: Head Rotation
+      eyes: Eyes
+      eyebrows: Eyebrows
+      mouth: Mouth
+      face: Face
+      body: Body
+    fields:
+      angle-x: Angle X
+      angle-y: Angle Y
+      angle-z: Angle Z
+      left-eye-open: Left Eye Open
+      right-eye-open: Right Eye Open
+      left-eye-smile: Left Eye Smile
+      right-eye-smile: Right Eye Smile
+      left-eyebrow-lr: Left Eyebrow Left / Right
+      right-eyebrow-lr: Right Eyebrow Left / Right
+      left-eyebrow-y: Left Eyebrow Y
+      right-eyebrow-y: Right Eyebrow Y
+      left-eyebrow-angle: Left Eyebrow Angle
+      right-eyebrow-angle: Right Eyebrow Angle
+      left-eyebrow-form: Left Eyebrow Form
+      right-eyebrow-form: Right Eyebrow Form
+      mouth-open: Mouth Open
+      mouth-form: Mouth Form
+      cheek: Cheek
+      body-angle-x: Body Angle X
+      body-angle-y: Body Angle Y
+      body-angle-z: Body Angle Z
+      breath: Breath
+  idle-motion-speed:
+    title: Idle Motion Speed
+    description: Adjust how fast Live2D idle motions play.
+  body-focus-follow:
+    title: Body Follow Strength
+    description: Adjust how much the current resident's body follows their head and gaze while idle.
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
+microphone: Microphone
+models: Model
+pages:
+  group-scripts:
+    title: Group scripts and casting
+    description: Edit a reusable story script, then cast its role slots with members of a specific group chat.
+    eyebrow: Group rehearsal desk
+    local-note: Scripts stay on this device. Exported templates contain only public story material and role slots—never character cards, models, voices, memories, or room member bindings.
+    tabs:
+      label: Group script sections
+      template: Script template
+      room: Room application
+    sections:
+      basic: Basics
+      scene: Story and scene
+    defaults:
+      template-title: Untitled group script
+      slot-name: Role {number}
+    rooms:
+      title: Group rooms
+      empty: No group rooms yet. Create a chat with at least two members first.
+      loading: Loading this room's script settings…
+      member-count: '{count} members'
+      untitled: Untitled group chat
+    library:
+      title: Script templates
+      empty: No saved templates yet. Create the first script on the right.
+    editor:
+      title: Template editor
+      description: Editing a template never changes a script snapshot already attached to a room. Apply it again when you want that change.
+    fields:
+      title: Template title
+      room-name: Group name
+      id: Template ID
+      summary: Summary
+      background: World and background
+      premise: Story premise
+      current-scene: Current scene
+      rules: Scene rules
+      rules-placeholder: One public rule per line
+      mention-guidance: "{'@'} mention guidance"
+      slot-name: Slot name
+      slot-id: Stable slot ID
+      slot-description: Public identity and role guidance
+      relationship-description: Public relationship summary
+    slots:
+      title: Role slots
+      description: Templates define story identities without binding character cards. A room can use up to four slots.
+      role-number: Slot {number}
+    relationships:
+      title: Directed relationships
+      description: A relationship points from the left role to the right role. Add another entry for the reverse perspective.
+      empty: No public relationships yet.
+    cast:
+      eyebrow: Room cast sheet
+      title: Select a group room
+      description: Every slot must map to exactly one current room member, and a member cannot fill two slots.
+      no-room: Select a group room from the left first.
+      no-script: This room has no script yet
+      no-script-description: Select or edit a template above, then apply it to this room.
+      choose-member: Choose a room member
+    narration:
+      template-style: Default narration style
+      template-style-description: A template carries style text only, never this device's voice, the server model, or billing configuration.
+      room-title: Room narration settings
+      room-description: These switches and the voice belong only to this room. The server owns the narration model, and narration plus narration speech are billed by actual usage.
+      enabled: Enable narration in this group chat
+      enabled-description: When enabled, the later narration feature can describe environments, actions, and multi-character scenes.
+      room-style: Narration style for this room
+      speech-enabled: Allow narration speech
+      speech-enabled-description: Narration text and speech are independent. Turning speech off never blocks the text.
+      voice: Dedicated narration voice
+      voice-empty: Uses the stage default voice
+      room-status-enabled: Narration is enabled for this room
+      room-status-disabled: Narration is disabled for this room
+      room-status-unconfigured: No script has been applied to this room
+    actions:
+      new: New
+      import: Import JSON
+      export: Export JSON
+      save-template: Save template
+      delete-template: Delete template
+      confirm-delete-template: Confirm delete
+      add-slot: Add slot
+      add-relationship: Add relationship
+      remove: Remove
+      apply-to-room: Apply to current room
+      save-room: Save room settings
+      save-room-name: Save group name
+      clear-room: Detach room script
+      confirm-clear-room: Confirm detach
+      use-current-voice: Use current speech voice
+      clear-voice: Clear voice
+      open-speech-settings: Open speech settings
+      cancel: Cancel
+    status:
+      template-saved: Script template saved.
+      template-deleted: Script template deleted. Existing room snapshots are unchanged.
+      template-exported: Portable script template exported.
+      template-imported: Script template imported and saved.
+      template-invalid: The script is incomplete or invalid. Check its fields, slots, and relationships.
+      import-invalid: This file could not be imported. Confirm that it is valid airi-group-script:v1 JSON.
+      too-large: A script template cannot exceed 64 KiB.
+      duplicate-id: Another template already uses this ID. Choose a different ID before saving.
+      storage-failed: The local script library could not be saved. Check whether app data storage is available.
+      room-required: Select a group room first.
+      rooms-load-failed: Group rooms could not be loaded. Return to chat and try again.
+      room-load-failed: This room's script settings could not be loaded. Select the room again.
+      slot-count-mismatch: The template slot count must exactly match the current group member count.
+      template-applied: A script snapshot was applied to “{room}”.
+      apply-first: Apply a template to the current room first.
+      bindings-invalid: The casting is invalid. Map every slot to a different current room member.
+      room-saved: The room script and cast have been saved.
+      room-renamed: The group name has been saved.
+      room-rename-failed: The group name could not be saved. Try again.
+      room-save-failed: The room script could not be saved. Check the cast and try again.
+      room-cleared: The script settings were detached from this room.
+      voice-unavailable: The current speech settings do not include a complete provider, model, and voice. Configure speech first.
+      voice-captured: The current speech settings were saved as this room's narration voice. Save the room settings to apply it.
+  home:
+    groups:
+      companion:
+        title: Companion Settings
+        description: Tune persona, voice, memory, and reply habits for the current resident.
+      app:
+        title: App & Data
+        description: Keep appearance, windows, chat history, and local data comfortably in order.
+      advanced:
+        title: Advanced Settings
+        description: Creative tools, local models, and diagnostics for when you feel like tinkering.
+  account:
+    title: Account
+    description: Manage beta access, points, and activation codes
+    home:
+      title: Account & Official Cloud
+      signed-in-summary: You are on {plan}; {points} point(s) available. The default official cloud model spends points from this balance.
+      signed-out-summary: Sign in to use the default official cloud model, redeem activation codes, and sync points across devices.
+      action: View account
+      login-action: Sign in / Activate
+    common:
+      never: No expiry
+      signed-in: Signed in
+      unknown: Unknown
+    login-drawer:
+      title: Sign in to Wuwiii
+      description: One account connects your desktop companion, the website, and game points.
+      code-sign-in: Verification code
+      identity: Mobile number or email
+      identity-placeholder: Enter your mobile number or email
+      password: Password
+      password-placeholder: At least 8 characters
+      code: Verification code
+      code-placeholder: 6-digit code
+      manage-account: Create an account or manage security
+      legal: By signing in, you agree to the Terms of Use and Privacy Policy.
+      sign-in-failed: Sign-in failed. Check your details and try again.
+    actions:
+      cancel: Cancel
+      claim-check-in: Claim points
+      claim-check-in-upgrade: Claim upgrade points
+      copy-user-id: Copy user ID
+      create-account: Create account
+      edit-profile: Edit profile
+      upload-avatar: Upload avatar
+      remove-avatar: Remove avatar
+      github: GitHub
+      google: Google
+      refresh: Refresh
+      redeem: Redeem code
+      save-profile: Save profile
+      sign-in-email: Sign in
+      sign-out: Sign out
+      switch-to-sign-in: Use existing account
+      switch-to-sign-up: Create a new account
+      send-code: Send code
+      resend-code-in: 'Resend in {seconds}s'
+      use-email: Email
+      use-phone: Mobile
+      use-email-code: Email code
+      use-phone-code: Mobile code
+      use-password: Password
+      phone-unavailable: Mobile (coming soon)
+      verify-code: Verify & sign in
+      open-recharge: Buy points
+      hide-recharge: Hide purchase options
+      manage-membership: View membership and renewal
+    plans:
+      free: Free
+      lite: Lite
+      pro: Pro
+      creator: Creator
+      custom: Custom
+    membership-identities:
+      free: First Meet
+      lite: Companion
+      pro: Confidant
+      creator: Dreammaker
+    membership:
+      title: Membership
+      current: Your place in Wuwiii
+      description: View your daily points, validity and available upgrades in one place.
+      points: Available
+      daily: Daily claim
+      expires: Valid until
+      support-title: Thank you for helping Wuwiii grow
+      support-description: We are still early in development. Your support helps cover service costs, improve character experiences and keep new features maintained.
+      spend-responsibly: Choose only what you genuinely need. Passes never auto-renew, and free features, local models and your own API keys remain available. Real life comes first.
+    points:
+      grant: Grant
+      paid: Paid
+      reserved: Reserved
+      trial: Trial
+    sections:
+      overview:
+        title: Account & Points
+        description: View your beta access, remaining model points, and activation code status.
+      pricing:
+        title: Current point prices
+        description: Current official-cloud prices. Admin changes refresh automatically.
+        loading: Loading current prices
+        live: Live prices · updates within 5 seconds
+        chat: Chat model reference prices
+        speech: Official speech
+        other: Other official capabilities
+        feature-title: Feature price multipliers
+        minimum: minimum {points} points
+        points-per-unit: points / {tokens} tokens (reference)
+        chat-billing-explanation: The per-4,000-token figure is for price comparison, not a fixed billing block. Actual charges use the full input and output of each request separately. Input includes system rules, conversation history, memory, and tool context, so a short visible reply can still have higher total usage.
+        points-per-minute: points / minute
+        asr: 'Realtime transcription: {first} points for the first started 60 seconds, then {additional} points for each additional started 60 seconds'
+        embedding: Text embedding
+        web-search: Web search
+        request: '{name}: {points} points / request'
+        voice-surcharge-note: Voices may add a per-request surcharge; the effective price is shown when selecting a voice.
+        no-official-charge: Local capabilities and services using your own API key do not consume Wuwiii official points.
+        features:
+          official-chat: Official chat
+          workbench: Workbench
+          inner-voice-note: Inner voice notes
+          turtle-soup-host: Turtle Soup host
+          turtle-soup-hint: Turtle Soup hint
+          turtle-soup-review: Turtle Soup review
+          turtle-soup-generate: Turtle Soup generation
+      recharge:
+        title: Membership & points
+        description: Passes improve daily point value; point packs provide one-off refills. Core features remain available to everyone.
+        choose-plan: Choose a product
+        choose-method: Payment method
+        kinds:
+          membership: Membership pass
+          points: Point packs
+        base-points: '{points} base'
+        gift-points: '{points} gift'
+        valid-days: '{days} days'
+        sign-in-required: Sign in before creating an order.
+        channel-unavailable: Payment channel unavailable
+        empty-products: No recharge packages are available.
+        trust:
+          official: Official payment channels
+          automatic: Points arrive automatically after payment
+          traceable: Every order remains traceable
+        package:
+          value-hint: Larger packages offer more points per yuan
+          selected: Selected
+          total: Total points
+          included: Credited immediately
+          base: '{points} base points'
+          gift: '+ {points} bonus points'
+          value: 'Valid for {days} days · about {points} points/CNY'
+          daily: 'Claim {points} points daily'
+          cap: 'Membership point cap {points}'
+          period: '{days}-day pass · no auto-renewal'
+          label: Point package
+        availability:
+          available: Available
+          unavailable: Unavailable
+          none: No payment channel available
+        secure-create: Continue to payment
+        charge-notice: Creating an order does not charge you. Points arrive only after payment is confirmed.
+        order:
+          amount: Order amount
+          points: Points credited
+          created: Created at
+          expires: Order expires
+        thanks:
+          title: Payment confirmed and points credited
+          description: Thank you for supporting Wuwiii. Xiao Wu's cat ears perked up just a little; we will put that support into making this place better.
+        errors:
+          catalog-version-mismatch: The app is up to date, but the product service has not been updated yet. Deploy the latest server and try again.
+          checkout-unavailable: This payment link is no longer available. Create a new order.
+          provider-error: The payment provider could not complete the request. No charge was recorded. Try again later.
+          provider-not-configured: This payment method is not available yet.
+          rate-limited: Too many payment requests. Wait a moment and try again.
+          unauthorized: Sign in again before creating or viewing an order.
+          unknown-product: This recharge package is no longer available. Refresh the package list.
+        plans:
+          lite: Lite
+          pro: Pro
+          creator: Creator
+        methods:
+          wechat: WeChat Pay
+          alipay: Alipay
+          manual: Manual
+        statuses:
+          creating: Creating
+          pending: Pending
+          paid: Paid
+          failed: Failed
+          closed: Closed
+          refunded: Refunded
+          refund-help: Refund policy
+        actions:
+          refresh: Refresh recharge data
+          refresh-order: Refresh order status
+          review: Review order
+          back: Back
+          create: Create order
+        confirmation:
+          title: Order confirmation
+          sku: Package
+          base: Base points
+          gift: Gift points
+          daily: Daily claim
+          maximum: Maximum over 30 days
+          method: Payment method
+          expires: Point validity
+          amount: Amount due
+        checkout:
+          title: Secure checkout
+          description: Confirm the amount and payment method. Provider confirmation is authoritative; do not pay twice.
+          failed-title: Order creation failed; you were not charged
+          failed-description: The provider did not return a valid checkout. Close this window and create a new order.
+          mock-title: Local payment reference
+          mock-description: This reference is for local testing and cannot be used to make a real payment.
+          image-alt: Payment code supplied by the payment channel
+          open: Open payment channel
+          open-alipay: Open Alipay
+          scan-wechat: Scan with WeChat Pay
+          scan-alipay: Scan with Alipay
+          scan-description: Keep this window open after payment; the order status refreshes automatically.
+          qr-failed: The payment code could not be generated. Refresh the order and try again.
+          waiting: The payment channel has not supplied a displayable checkout yet.
+        history:
+          title: Order history
+          empty: No payment orders yet.
+          points: '{base} base + {gift} gift'
+          refunded: Refunded
+          show-all: View all orders
+          show-recent: Show recent orders
+      beta:
+        collapsed-action: View beta plans and purchase options
+        title: Paid Beta Access
+        description: The first beta uses manual payment and activation codes, not automatic checkout. Redeem your code here; points are spent by the default official cloud model, butler tasks, and later workbench features.
+        status-title: Current status
+        signed-in-status: '{plan} / {points} point(s) available'
+        signed-out-status: Sign in to view membership, points, and orders
+        action-authenticated: Enter code
+        action-signed-out: Sign in first
+        purchase-action: Get code
+        recommended: Recommended
+        plans:
+          starter:
+            title: Starter
+            price: RMB 9.99
+            points: 999 points
+            description: Try chat, butler reminders, and the default cloud model without a monthly entitlement.
+          lite:
+            title: Lite Beta
+            price: RMB 19.99
+            points: 1999 points / 30 days
+            description: For light desktop companion use with one month of beta access and basic points.
+          pro:
+            title: Pro Beta
+            price: RMB 39.99
+            points: 3999 points / 30 days
+            description: For daily chat, study reminders, document work, and higher-frequency use.
+          pro-plus:
+            title: Pro Plus
+            price: RMB 59.99
+            points: 5999 points / 30 days
+            description: For heavier use while keeping paid beta cost boundaries clear.
+          creator:
+            title: Creator
+            price: RMB 99.99
+            points: 9999 points / 30 days
+            description: For creators, stream tests, and heavy early users.
+        steps:
+          buy:
+            title: Get an activation code
+            description: Confirm beta access through launch videos, community channels, or direct messages; codes are issued manually before checkout is ready.
+          redeem:
+            title: Redeem it here
+            description: After redemption, plan and points are saved to your account and stay available after reopening the app.
+          use:
+            title: Use official cloud
+            description: Chat, butler reminders, document work, and later advanced features spend points from your account first.
+      sign-in:
+        title: Sign in to use official cloud
+        description: Sign in with a password or verification code using email or a mainland China mobile number. New users create an account with a verified mobile number.
+        email-label: Email
+        email-placeholder: "you{'@'}example.com"
+        name-label: Display name
+        name-placeholder: Your name
+        phone-label: Mobile number
+        phone-placeholder: 138 0013 8000
+        identity-label: Mobile number or email
+        identity-placeholder: Enter your mobile number or email
+        verification-code-label: Verification code
+        verification-code-placeholder: 6-digit code
+        password-label: Password
+        password-placeholder: At least 8 characters
+        confirm-password-label: Confirm password
+        confirm-password-placeholder: Enter the password again
+        connected-title: One account, three connected places
+        connected-desktop: Desktop companion and local profile
+        connected-game: Turtle Soup game points
+        connected-web: Website account and orders
+      security:
+        title: Account security
+        description: Your mobile number establishes and recovers your identity; a verified email can be used to sign in and receive security notices.
+        email-unbound: No email linked
+        verified-email: Verified email
+        verified: Verified
+        email-placeholder: Link an email
+        bind: Link
+        phone: Registration phone
+        phone-unbound: No phone linked
+        password: Sign-in password
+        change-password: Change password
+        current-password: Current password
+        new-password: New password (8+ characters)
+        confirm-password: Confirm new password
+        save-password: Save new password
+      profile:
+        title: Signed in as
+        doorplate: Resident profile
+        edit-title: Profile details
+        edit-description: Keep the identity shown in your account ready for future community features.
+        display-name: Display name
+        handle: Public username
+        avatar-url: Avatar URL
+        avatar-note: You can also enter an HTTP(S) image URL. Uploading a local image replaces this URL.
+        avatar-upload-note: PNG, JPEG, and WebP are supported. Images are center-cropped and resized to 256 × 256.
+        avatar-uploaded: A local avatar is ready. Save the profile to sync it to this account.
+        bio: Bio
+        user-id: 'User ID: {id}'
+      plan:
+        title: Current plan
+        valid-until: 'Valid until: {date}'
+      points:
+        title: Available points
+        available: Ready for official cloud model calls
+        membership: Membership points included
+      check-in:
+        title: Daily check-in
+        description: Claim points daily until the current storage cap is reached.
+        description-free: 'Free includes {points} trial points per day, stored up to {cap}.'
+        description-member: '{plan} includes {points} membership points per day, stored up to {cap}.'
+        streak: '{days} day streak'
+        next-reward: '+{points} trial points next'
+        cap-reached: Trial point cap reached
+        claimed: Claimed today
+      balance:
+        title: Point balance
+        description: Trial, grant, and paid points are spent when the model is called; reserved points are settled or released after the request.
+        loading: Loading point balance…
+        error: Point balance could not be loaded. Try again. This does not mean your balance is zero.
+        retry: Retry
+      details:
+        title: Point details
+        description: Separate service usage from balance movements and verify where every point went.
+      account-activity:
+        tabs:
+          usage: Usage history
+          balance: Balance activity
+      redeem:
+        title: Redeem beta code
+        description: Enter an activation code after manual payment or beta approval.
+        code-label: Activation code
+        code-placeholder: WUWIII-XXXX-XXXX
+      ledger:
+        title: Balance activity
+        description: Verify top-ups, check-ins, grants, adjustments, and final balance movements. Model usage entries correspond to usage history and are not a second charge.
+        loading: Loading balance activity…
+        error: Balance activity could not be loaded. Try again.
+        retry: Retry
+        empty: No point records yet.
+        load-more: Load more
+        load-failed: Unable to load more point records. Try again later.
+        all-loaded: All records are shown
+        balance-after: '{points} points available after this movement'
+        related-usage: This corresponds to the same service in Usage history. It is a balance audit entry, not a second charge.
+        settled-final: This request charged {points} points.
+        refunded-final: 'The request did not complete. The temporary {points}-point hold was released; net charge: 0.'
+        refunded-display-failure: 'The reply could not be shown. {points} points were returned; net charge: 0.'
+        refunded-main-reply: 'The main reply did not complete. The temporary {points}-point hold was released; net charge: 0.'
+        refunded-auxiliary: 'The background "{purpose}" request did not complete. The temporary {points}-point hold was released; net charge: 0. This does not mean the main reply failed.'
+        refunded-unknown: 'This record has no recognized request purpose. The temporary {points}-point hold was released; net charge: 0.'
+        source-surfaces:
+          voice-call: Phone call
+          group-chat: Group chat
+          quick-chat: Quick chat
+          chat: Chat
+          proactive: Proactive message
+          unknown: Unknown source
+        purposes:
+          main-reply: Main reply
+          tool-routing: Tool decision
+          tool-processing: Tool processing
+          response-enhancement: Reply refinement
+          inner-voice-note: Inner voice note
+          memory: Memory organization
+          recommended-replies: Recommended replies
+          group-narration: Group narration
+          group-narration-speech: Narration voice
+          speech: Voice processing
+          web-search: Web search
+          unknown: Unknown purpose
+        features:
+          daily-check-in: Daily check-in
+          daily-check-in-membership-upgrade: Membership check-in top-up
+          official-chat: Chat
+          official-speech: Speech generation
+          official-transcription: Speech recognition
+          inner-voice-note: Inner voice notes
+          reply-display-failure-refund: Reply display failure refund
+          workbench: Workbench
+          entertainment:
+            turtle_soup:
+              generate: Turtle Soup puzzle generation
+              hint: Turtle Soup hint
+              host: Turtle Soup question
+              review: Turtle Soup review
+        types:
+          adjust: Adjustment
+          expire: Expiry
+          grant: Grant
+          redeem: Redeem
+          refund: Returned
+          refunded-in-full: Refunded in full
+          not-charged: Not charged
+          release: Hold released
+          reserve: Processing
+          settle: Charged
+      request-history:
+        title: Request history
+        description: See whether chat, group chat, and phone requests completed, along with their final charge or refund.
+        loading: Loading request history…
+        unavailable: Request history is not available on this server version. Point records are still available.
+        empty: No request records yet.
+        load-more: Load more
+        load-failed: Unable to load more request records. Try again later.
+        all-loaded: All records are shown
+        kinds:
+          reply: Reply
+          recommended-replies: Recommended replies
+          speech: Voice
+          service: Service request
+        surfaces:
+          voice-call: Phone call
+          group-chat: Group chat
+          quick-chat: Quick chat
+          chat: Chat
+          proactive: Proactive message
+          unknown: Other
+        statuses:
+          pending: Processing
+          review_pending: Display issue under review
+          succeeded: Completed
+          failed: Failed, not charged
+          cancelled: Cancelled, not charged
+          refunded: Refunded
+        points:
+          pending: Not settled yet
+          review-pending: Charged {points} points; the review result will appear in your ledger
+          charged: Charged {points} points
+          not-charged: Charged 0 points
+          refunded: Refunded {points} points; charged 0 points
+        failures:
+          not-needed: No narration was needed here. You were not charged.
+          no-content: No displayable reply was returned. You were not charged.
+          incomplete-response: The reply did not complete. You were not charged.
+          provider-unavailable: The service was temporarily unavailable. You were not charged.
+          request-too-large: The request was too large. You were not charged.
+          billing-finalization: Billing did not complete. You were not charged.
+          display-failure: The reply could not be shown. The issue was recorded for review; the current charge is unchanged.
+          cancelled: The request was cancelled. You were not charged.
+          unknown: The request did not complete. You were not charged.
+      usage-history:
+        title: Usage history
+        description: Each independent service appears once. Group chats are summarized by turn and can be expanded for verification.
+        loading: Loading usage history…
+        unavailable: Usage history is not supported by this server version. Balance activity is still available.
+        error: Usage history could not be loaded. Try again.
+        retry: Retry
+        empty: No usage yet. A completed chat or voice request will appear here.
+        load-more: Load more
+        load-failed: Unable to load more usage. Try again later.
+        all-loaded: All records are shown
+        statuses:
+          processing: Processing
+          not_charged: Not charged
+          charged: Charged
+          refunded: Refunded
+          review_pending: Under review
+          unknown: Status unavailable
+        request-statuses:
+          pending: Request processing
+          succeeded: Request completed
+          failed: Request failed
+          cancelled: Request cancelled
+          unknown: Request status unavailable
+        points:
+          processing: '{points} points temporarily held; not charged yet'
+          charged-processing: Charged {points} points; {held} more temporarily held
+          review-pending: Charged {points} points; under review
+          charged: Charged {points} points
+          not-charged: No final charge
+          refunded: Refunded {points} points
+        time:
+          started: Started {time}
+          completed: Completed {time}
+          processing: Processing
+          local: Local time {zone}
+        groups:
+          direct-title: 1v1 chat turn
+          title: Group chat turn · {count} services
+          items: '{count} services in this turn'
+          partial: Loaded subtotal
+        details:
+          reserved: Temporary hold
+          charged: Charged
+          refunded: Refunded
+          net: Net charge
+          reference: Reference
+          request-outcome: Request outcome
+        surfaces:
+          voice-call: Phone call
+          group-chat: Group chat
+          quick-chat: Quick chat
+          chat: Chat
+          proactive: Proactive message
+          unknown: Other
+        purposes:
+          main-reply: Main reply
+          tool-routing: Tool decision
+          tool-processing: Tool processing
+          response-enhancement: Reply refinement
+          inner-voice-note: Inner voice note
+          memory: Memory organization
+          recommended-replies: Recommended replies
+          group-narration: Group narration
+          group-narration-speech: Narration voice
+          speech: Voice processing
+          web-search: Web search
+          unknown: Other service
+        failures:
+          not-needed: No narration was needed here. You were not charged.
+          no-content: No displayable reply was returned. You were not charged.
+          incomplete-response: The reply did not complete. You were not charged.
+          provider-unavailable: The service was temporarily unavailable. You were not charged.
+          request-too-large: The request was too large. You were not charged.
+          billing-finalization: Billing did not complete. You were not charged.
+          display-failure: The reply could not be shown. Its current billing state is under review.
+          cancelled: The request was cancelled. You were not charged.
+          unknown: The request did not complete. You were not charged.
+    status:
+      check-in-claimed: Claimed {points} trial points.
+      check-in-failed: Failed to claim daily check-in points.
+      fetch-failed: Failed to refresh account state.
+      email-auth-failed: Email authentication failed.
+      verification-auth-failed: Verification code sign-in failed.
+      verification-code-sent: Verification code sent.
+      verification-code-rate-limited: Too many requests. Try again in {seconds} seconds.
+      profile-update-failed: Failed to update profile.
+      profile-updated: Profile updated.
+      password-changed: Password updated. Other devices were signed out.
+      password-change-failed: Failed to change password.
+      avatar-invalid-type: Choose a PNG, JPEG, or WebP image.
+      avatar-too-large: The source image must be no larger than 8 MB.
+      avatar-process-failed: The avatar could not be processed. Try another image.
+      redeem-failed: Failed to redeem activation code.
+      redeemed: Activation code redeemed.
+      signed-in: Signed in.
+      sign-in-failed: Failed to start sign in.
+      sign-out-failed: Failed to sign out.
+      signed-out: Signed out.
+      signed-up: Account created.
+      user-id-copied: User ID copied.
+      user-id-copy-failed: Failed to copy user ID.
+      binding-code-sent: Email verification code sent.
+      binding-code-failed: Failed to send the email verification code.
+      email-bound: Email verified and linked.
+      email-bind-failed: Failed to link the email.
+  card:
+    activate: Activate
+    active: Active
+    active_badge: Currently Active
+    cancel: Cancel action
+    save: Save changes
+    card_not_found: Card not found
+    character: Character
+    character_readonly: Character settings are shown here. Use Edit Card to change them.
+    close: Close
+    chat:
+      provider: Chat / Provider
+    consciousness:
+      model: Consciousness / Model
+    created_by: created by
+    creator_notes: Creator Notes
+    delete: Delete
+    delete_card: Delete Card
+    delete_confirmation: Are you sure you want to delete this card?
+    restore: Restore settings
+    restore_default: Restore default settings
+    restore_default_confirmation: This resets only the default resident card. Your chats, memories, settings, and other cards will stay unchanged.
+    description: Shape the current resident's persona, identity, and reply style.
+    description_label: Description
+    runtime_effect: Runtime effect
+    runtime_effect_description: The description, character settings, and persona package are compiled into the model context before the next reply; saved changes apply to new generations.
+    field_effects:
+      description: The main source for the character background, identity, relationship, and persona generation.
+      personality: Stable personality tendencies, tone, and reactions used by the model.
+      scenario: The world, relationship, and situation the model should assume for the conversation.
+      system_prompt: High-priority character instructions inserted into the system context.
+      post_history: A behavior reminder appended after conversation history to calibrate replies.
+      persona_package: Compiled identity, boundaries, writing preferences, and growth context injected by enabled sections.
+    drop_here: Drop to upload
+    create_card: Create a new Card
+    edit_card: Edit Card
+    creation:
+      identity: Identity
+      name: Name
+      nickname: Nickname
+      description: Description
+      behavior: Behavior
+      greetings: Greetings (one per line)
+      settings: Settings
+      version: Version
+      create: Create
+      optimize_description: Optimize description
+      optimizing_description: Optimizing...
+      optimize_description_with_web: Clarify proper nouns with web search
+      research_description_with_web: Deep web research for references
+      generate_character_settings: Generate settings draft from description
+      generating_character_settings: Generating settings...
+      character_generation_description: Use the current chat model to draft personality, scenario, system prompt, post-history instructions, and greetings. Nothing takes effect until you review and save it.
+      character_generation_ready: Character settings draft generated. Review it before saving.
+      character_generation_errors:
+        missing-description: Add a character description first.
+        missing-provider-model: Configure the current chat provider and model first.
+        parse-failed: The model did not return complete, valid character settings.
+        provider-unavailable: The selected provider cannot generate chat text.
+        request-failed: Failed to generate character settings with the current model.
+      defaults:
+        name: Name
+        description: A character with a clear identity, emotions, and communication habits. Add their background and relationship before generating a fuller persona.
+        personality: You are a regular human, curious about everything.
+        scenario: You recently woke up and forgot everything about your previous life.
+        systemprompt: You will receive messages, answer to them like a real human.
+        posthistoryinstructions: Remember to imitate an human.
+      modules_info: >-
+        Configure modules for this character card. If not set, default module
+        configuration will be used.
+      use_default: Use default
+      use_default_not_configured: Use default (not configured)
+      fields_info:
+        subtitle: >-
+          You can put here some details about the character you are creating,
+          explain his history and context, and how your interactions should be
+          answered.
+        name: Is the formal name of this character.
+        nickname: You can also give a nickname that will be used in priority.
+        description: Description of this character.
+        notes: If you want to add some personal notes.
+        personality: Describe stable traits, emotional reactions, values, and expression boundaries. The model uses this to shape tone and judgment.
+        scenario: Describe the world, relationship, and current situation. Keep per-turn commands out of this field.
+        greetings_field: Greetings
+        greetings: Optional first-message examples for a new conversation, never text required in every reply.
+        systemprompt: High-priority character behavior covering identity, autonomous judgment, and durable boundaries. Platform rules do not need repeating here.
+        posthistoryinstructions: Short calibration appended after conversation history. Avoid fixed endings, forced care language, and reply templates.
+        version: >-
+          Card version, you should increase this if you are making changes from
+          a previous card.
+        consciousness_model: Select the consciousness model (AI model) for this character.
+        speech_model: Select the speech synthesis model and voice for this character.
+      errors:
+        name: Name should be valid or non-empty.
+        version: 'Error: Invalid version number !'
+        description: 'Error: You must provide a description for this card.'
+        personality: 'Error: A personality must be provided for this character.'
+        scenario: 'Error: A scenario is required.'
+        systemprompt: 'Error: Please, provide a system prompt.'
+        posthistoryinstructions: 'Error: Post history prompt is required.'
+        card_not_found: 'Error: The character card could not be found.'
+    modules: Modules
+    name_asc: Name (A-Z)
+    name_desc: Name (Z-A)
+    no_cards: No cards yet. Click the button above to upload one!
+    no_results: No matching cards found
+    personality: Personality
+    posthistoryinstructions: Post-History Instructions
+    recent: Recently Added
+    scenario: Scenario
+    search: Search cards...
+    sort_by: Sort by
+    sort_placeholder: Select sort order
+    speech:
+      provider: Speech / Provider
+      model: Speech / Model
+      voice: Speech / Voice
+    display_model:
+      title: Character appearance
+      description: Choose the installed Live2D, picture character, or VRM shown on the stage and Butler Orb when this character is active in direct chat.
+      use_default: Use the default appearance
+      active: Applied to the active character
+      when_active: Used when this character is activated
+      missing: The bound model ({id}) is not installed on this device. The default appearance is shown for now.
+      local_reference: Persona exports include only this local model reference, never the Live2D, picture character, or VRM file itself.
+      import_live2d: Import Live2D
+      import_vrm: Import VRM
+      import_picture_oc: Import picture character
+      actions_title: Picture character actions
+      actions_description: Choose each state from images or GIFs already checked inside this character package. Character IDs stay unchanged.
+      actions_save: Save action mapping
+      actions_saved: Picture character action mapping saved.
+      actions_save_failed: Could not save the action mapping. Choose images from this package.
+      actions:
+        idle: Idle
+        speaking: Speaking
+        thinking: Thinking
+        listening: Listening
+        reminder: Reminder
+        happy: Happy
+        sad: Sad
+        angry: Angry
+        surprised: Surprised
+      invalid_file: Select a valid {extension} file.
+      import_success: '{name} was imported and bound to this character.'
+      import_failed: The model could not be imported. Check the file and try again.
+    systemprompt: System Prompt
+    title: Resident Profile
+    try_different_search: Try a different search term
+    upload: Upload
+    upload_desc: Click or drag file to upload
+    persona_package:
+      title: Persona Package
+      compile: Organize persona from character description
+      generate_with_model: Generate an editable draft with the model
+      generating: Generating...
+      generated_preview: Generated preview
+      apply_generated: Apply generated draft
+      applied_generated: Generated persona changes applied.
+      undo_applied: Undo
+      discard_generated: Discard
+      select_changed_generated: Select changed
+      clear_generated_selection: Clear selection
+      selected_generated_sections: '{selected} selected; {changed} changed'
+      regenerate_all: Rebuild all fields from current settings
+      sync_growth: Sync growth
+      export: Export package
+      save_draft: Save and use for future replies
+      edit_help: These fields enter the character context after saving and affect future replies. Put one rule on each line; an empty field adds no extra constraint.
+      section_enabled: Enabled
+      regenerate_section: Rebuild this field
+      include_growth_memories: Include solidified growth memories in this export
+      empty: No persona package draft yet
+      status: Updated {updatedAt}; {growthCount} solidified growth memories synced
+      never: Never
+      growth_candidates: Growth candidates
+      no_growth_candidates: No growth candidates waiting
+      solidify_candidate: Solidify
+      solidify_all_candidates: Solidify all
+      ignore_candidate: Ignore
+      ignore_all_candidates: Ignore all
+      import_title: Import Persona Package
+      import_description: Preview the package before creating or overwriting a card. Private memories, feedback sources, inner voice notes, chat history, and provider, chat model, or speech settings stay local. A safe appearance model reference may be imported, but model files never are.
+      import_changes: Import changes
+      import_package_meta: Package info
+      import_as_new: Import as new card
+      overwrite_active: Overwrite active card
+      cancel_import: Cancel
+      privacy_default: Provider, chat model, API, and voice settings are not imported. Appearance binding includes only a safe local model reference, never the model file.
+      privacy_includes_growth: This package declares growth memories; import still stores them only as persona package data.
+      privacy_excludes_growth: This package does not include private growth memories.
+      generation_error:
+        missing-card: Select a card before generating a persona package.
+        missing-description: Add and save a character description before generating a persona package.
+        missing-provider-model: Choose a consciousness provider and model before generating.
+        parse-failed: The model did not return valid persona-package JSON.
+        provider-unavailable: The selected provider cannot generate chat text.
+        request-failed: Failed to generate the persona package with the current model.
+      compiler:
+        risks: Risks
+        search_candidates: Search candidates
+        density:
+          minimal: Minimal source
+          balanced: Balanced source
+          detailed: Detailed source
+          overstuffed: Overstuffed source
+        mode:
+          expand-minimal: Expand carefully
+          split-balanced: Split into sections
+          preserve-detailed: Preserve and separate
+          compress-overstuffed: Compress first
+        risk:
+          message-example-copy-pool: Examples detected; keep them as style signals, not standard replies.
+          fixed-catchphrase-rule: Fixed suffixes or reply shapes detected; convert them into anti-template boundaries.
+          relationship-overclaim: Relationship overclaims detected; keep affection bounded by memory and context.
+          runtime-instruction-leakage: Runtime or hidden-prompt wording detected; keep it out of visible identity.
+          universal-task-rule-in-card: Universal task templates detected; task turns should stay answer-first.
+          overstuffed-source: Source is long; compress it into structured anchors before generation.
+      diff:
+        name: Name
+        version: Version
+        description: Description
+        personality: Personality
+        scenario: Scenario
+        system_prompt: System prompt
+        advanced_sections: Advanced sections
+        added: Will import
+        changed: Will overwrite
+        unchanged: No change
+      sections:
+        summary: Expanded summary
+        identity: Identity anchors
+        personality: Advanced personality anchors
+        scenario_boundaries: Advanced scene and relationship rules
+        response_boundaries: Response boundaries
+        writing_preferences: Writing preferences
+        feedback_calibration: Feedback calibration
+        growth_memories: Solidified growth memories
+        web_search_interests: Web-search interests
+        expression_notes: Expression notes
+      section_help:
+        summary: Summarize who the character is and how they relate in one or two sentences; the model uses this as the persona overview.
+        identity: Stable identity, self-understanding, and facts that should not change with the scene.
+        personality: Durable traits, emotional reactions, values, and autonomy.
+        scenario_boundaries: The world, relationship stage, and relationship facts the model must not assume.
+        response_boundaries: How the character may respond, care, disagree, or refuse, and which reply patterns to avoid.
+        writing_preferences: Word choice, rhythm, length, and tone preferences, not canned answers.
+        feedback_calibration: Stable expression adjustments confirmed from user feedback.
+        growth_memories: Confirmed shared experiences and changes that should shape the character long term.
+        web_search_interests: Topics to prioritize when browsing; these are not treated as lived experience.
+        expression_notes: How emotion appears in wording, expressions, and actions, rather than fixed catchphrases.
+  memory:
+    description: See what the current resident remembers and keep those memories tidy.
+    title: Memory
+    diary:
+      title: Character diary
+      description: Review diary drafts and confirmed summaries from your recent conversations.
+      drafts: Drafts awaiting review
+      history: Confirmed diary
+      empty: No confirmed diary entries yet.
+      untitled: Untitled diary
+      edit: Edit
+      save: Save draft
+      cancel: Cancel
+      discard: Discard
+      confirm: Confirm diary
+      important-events: Important events
+      generated-title: A new diary entry is ready
+      open: Open diary
+      collapse: Collapse
+      delete: Delete
+      delete-confirm: Confirm delete?
+    workspace:
+      title: Memory ledger
+      description: Review and manage {count} long-term memories in the active persona's private space.
+    scope:
+      current-persona: Active persona memory
+      default-persona: Current persona
+      isolated: Isolated
+      private-title: Persona-private memory
+      private-description: The active persona's memories are stored separately from every other persona.
+      room-title: Room history
+      room-description: Group chat messages keep their room and speaker identity in the conversation history.
+      group-auto-title: Automatic group memory paused
+      group-auto-description: Long-term extraction stays off in group chats until explicit room and persona scopes are available.
+      private-persona: Persona private
+      shared-user: Shared with user
+      system: System
+    tabs:
+      config: Configuration
+      keywords: Fallback rules ({count})
+      manage: Manage ({count})
+      merge: Merge
+      maintenance: Maintenance
+      stats: Statistics
+      logs: Logs ({count})
+    common:
+      cancel: Cancel
+      content: Content
+      delete: Delete
+      description: Description
+      disable: Disable
+      disabled: Disabled
+      edit: Edit
+      enable: Enable
+      importance: Importance
+      save: Save
+      tags: Tags
+      tags-help: Separate tags with commas.
+      type: Type
+    time:
+      today: Today
+      yesterday: Yesterday
+      days-ago: '{count} days ago'
+    importance:
+      low: Low
+      medium: Medium
+      high: High
+      normal: Normal
+    kind:
+      note: Note
+      focus: Focus
+      diary: Diary
+    config:
+      enabled-title: Enable memory
+      enabled-description: Let the active persona save, correct, reinforce, and forget long-term memories on request.
+      extract-title: Automatic extraction
+      extract-description: After each completed turn, let the active model decide what is worth remembering and distill the fact with its relevant context.
+      autonomy-title: The model decides what is genuinely worth remembering
+      autonomy-description: The model compares existing memories before creating, correcting, or reinforcing them. User statements retain their certainty instead of turning guesses into facts. Keyword rules are only a fallback when model extraction is unavailable or misses an explicit request.
+    keywords:
+      title: Fallback keywords
+      description: These rules do not replace model judgment. They preserve information only when model extraction fails or returns nothing for a high-priority explicit memory request.
+      add: Add keyword
+      edit: Edit keyword
+      pattern: Keyword pattern
+      pattern-placeholder: 'Example: my name is|call me|I am'
+      pattern-help: Separate alternative keywords with |.
+      tags-placeholder: 'Example: personal information, name'
+      description-placeholder: 'Example: User name'
+      enable-rule: Enable this rule
+    manage:
+      search-placeholder: Search facts, tags, or related context...
+      select-multiple: Select multiple
+      delete-selected: Delete ({count})
+      content-placeholder: Memory content
+      tags-placeholder: 'Comma-separated, for example: personal information, name'
+      no-results: No matching memories found.
+      empty: No memories yet.
+      context: Related context
+      source-time: Conversation time
+      recorded-time: Memory created
+      updated-time: Last updated
+      reinforced-count: Reinforced or corrected
+      reinforced-count-value: '{count} times'
+      last-referenced: Last referenced
+      original-time-expression: Time stated in conversation
+    memory-types:
+      identity: Identity fact
+      preference: Preference
+      relationship: Relationship
+      event: Important event
+      plan: Plan
+      boundary: Boundary
+      communication: Communication preference
+      other: Other
+    certainty:
+      stated: User stated
+      confirmed: Confirmed
+      inferred: Cautious inference
+    merge:
+      title: Merge memories
+      description: Find and merge similar memories while keeping their timeline.
+      threshold: 'Similarity threshold: {value}%'
+      threshold-help: A higher threshold merges only very similar memories.
+      scan: Scan for duplicates
+      scanning: Scanning...
+      group-summary: '{count} similar memories found ({similarity}% similar)'
+      none: No duplicate memories found.
+      estimate: 'At the current threshold, about {groups} groups can be merged, reducing roughly {count} memories.'
+      merge-all: Merge all filtered results
+      merging-all: Merging...
+      batch-summary: 'Batch merge finished: {success} groups succeeded, {failed} failed, {reduced} memories reduced.'
+      batch-failed: '{count} groups failed to merge. Retry later or merge them individually.'
+      stats-total: Total memories
+      stats-groups: Mergeable groups
+      stats-reducible: Reduced after merge
+      node-summary: '{count} events - {events}'
+      ai-prompt: |-
+        Merge the following similar memories into one concise memory of no more than 100 words:
+
+        {memories}
+
+        Requirements:
+        1. Remove repeated facts.
+        2. Keep every distinct fact.
+        3. Use natural, fluent language.
+        4. Do not add information absent from the originals.
+
+        Return only the merged memory.
+    maintenance:
+      title: Memory maintenance
+      description: Choose which cleanup actions run when you click Run now.
+      deduplication-title: Deduplication
+      deduplication-enable: Deduplicate during maintenance
+      deduplication-description: Merge similar memories when maintenance runs.
+      deduplication-threshold: 'Deduplication threshold: {value}%'
+      deduplication-help: A higher threshold is more conservative.
+      archive-title: Archiving
+      archive-enable: Archive during maintenance
+      archive-description: Mark old long-term memories as archived so automatic recall skips them. Diary entries are never created or changed by maintenance.
+      archive-days: Archive after days
+      archive-help: Archiving is reversible metadata and does not delete the original memory.
+      cleanup-title: Cleanup
+      cleanup-enable: Clean up during maintenance
+      cleanup-description: Remove only automatically extracted, non-focus, non-high-priority memories in the active persona scope.
+      max-memories: Maximum memories
+      max-memories-help: Old low-importance memories are removed above this limit.
+      low-importance-first: Remove low-importance memories first
+      manual-title: Run maintenance now
+      manual-description: Run the maintenance actions currently enabled below.
+      run: Run now
+      view-logs: View logs
+      report-title: 'Maintenance report:'
+      report-merged: '- Merged {count} duplicate groups'
+      report-merge-failed: '- {count} duplicate groups failed to merge and were skipped'
+      report-no-duplicates: '- No duplicate memories found'
+      report-archived: '- Archived {count} old memories'
+      report-no-archive: '- No memories needed archiving'
+      report-cleaned: '- Removed {count} memories'
+      report-protected: '- Kept {count} protected diary, focus, high-priority, or manual memories above the limit'
+      report-no-cleanup: '- No cleanup needed'
+      report-complete: 'Complete. Current memories: {count}'
+      report-failed: 'Maintenance failed: {error}'
+    stats:
+      total: Total memories
+      high: High importance
+      medium: Medium importance
+      focus: Focus memories
+      note: Note memories
+    logs:
+      title: Maintenance logs
+      description: Memory maintenance history.
+      clear: Clear logs
+      empty: No maintenance logs yet.
+      auto: Automatic
+      manual: Manual
+      affected: 'Affected memories: {count}'
+      error: 'Error: {error}'
+      actions:
+        deduplication: Deduplicate
+        merge: Merge
+        archive: Archive
+        cleanup: Cleanup
+      details:
+        deduplicated: 'Deduplication merged {count} groups (threshold: {threshold}).'
+        archived: 'Archived {count} memories older than {days} days.'
+        cleaned: 'Removed {count} memories (current: {current}, limit: {limit}).'
+        failed: Maintenance failed.
+    confirm:
+      title: Confirm memory action
+      confirm: Confirm
+      working: Working...
+      delete-entry: Delete this memory?
+      delete-selected: Delete the selected {count} memories?
+      delete-keyword: Delete this keyword rule?
+      run-maintenance: Run the selected maintenance actions now? This may take a while.
+      merge-group: Merge these {count} similar memories?
+      merge-all: Merge all {count} filtered similar-memory groups at once?
+  data:
+    title: Data management
+    description: Back up chats and character configurations, or reset specific local data.
+    sections:
+      chats:
+        title: Chat sessions
+        description: Export or import saved chat sessions.
+        export: Export chats
+        import: Import chats
+        delete: Delete all chat sessions
+      models:
+        title: Character & model configurations
+        description: Export or import a character configuration package, or remove imported Live2D, VRM, and Picture OC models.
+        export: Export character package
+        import: Import character package
+        delete: Delete all models
+      modules:
+        title: Module settings
+        description: Reset module preferences and module-specific credentials. This does not import or export models.
+        reset: Reset module settings
+      providers:
+        title: Providers
+        description: Reset all provider settings and credentials.
+        reset: Reset provider settings
+      danger:
+        title: Danger zone
+        description: Irreversible actions. Export what you need before continuing.
+      all:
+        title: Delete all data
+        description: Delete local chats, personas, memories, feedback, models, credentials, settings, caches, and desktop work data.
+        delete: Delete all data
+      desktop:
+        title: Reset desktop settings & states
+        description: Clear Wuwiii desktop settings and runtime state.
+        reset: Reset desktop data
+    confirmations:
+      tooltip: Are you sure?
+      'yes': 'Yes'
+    status:
+      exported: Chat sessions exported.
+      imported: Chat sessions imported.
+      models_exported: Character and model configurations exported.
+      models_imported: Character and model configurations imported.
+      import_error: Failed to import chat sessions. Please check the file format.
+      chats_deleted: Chat sessions deleted.
+      models_deleted: Models deleted.
+      modules_reset: Module settings reset.
+      providers_reset: Provider settings reset.
+      all_deleted: All local data deleted. Wuwiii will restart with a clean profile.
+      desktop_reset: Desktop data reset.
+  reply-feedback:
+    title: Reply Feedback
+    description: Review your reply ratings and help the current resident learn how you prefer replies.
+    learning:
+      title: Learning
+      description: Turn saved ratings into guidance that tunes the current resident's future replies.
+      toggle: Enable reply feedback learning
+      enabled: Learning is active
+      disabled: Learning is paused
+      state:
+        ready: Up to date
+        refreshing: Refreshing
+        stale: Refresh pending
+        empty: No summary yet
+      empty: No steady preference pattern yet. Keep leaving feedback so the current resident can adapt over time.
+      principles: Current calibration
+      samples: Samples
+      confidence: Confidence
+      last-generated: Last generated {date}
+      pending-since: Refresh queued {date}
+      preferred-styles: Preferred style
+      avoid-patterns: Avoid
+      answering-biases: Reply bias
+      emotional-cues: Emotional cue
+      priority-note: Applied as low-priority calibration beneath the active persona card.
+    scope:
+      title: Current scope
+      user: User
+      persona: Persona
+    stats:
+      total: Total
+      active: Active
+      disabled: Disabled
+      liked: Liked
+      disliked: Disliked
+    filters:
+      title: Filters
+      rating: Rating
+      status: Status
+      window: Window
+      surface: Surface
+      search-placeholder: Search previews or notes
+      options:
+        all: All
+        up: Up
+        down: Down
+        active: Active
+        disabled: Disabled
+        days-7: 7d
+        days-30: 30d
+        days-90: 90d
+        main-chat: Main
+        quick-chat-expanded: Expanded
+        quick-chat-collapsed-bubble: Bubble
+    results:
+      title: Records
+      summary: Showing {visible} of {total}
+      loading: Loading feedback...
+    record:
+      user-message: User message
+      assistant-reply: Assistant reply
+      note: Note
+      note-empty: This feedback does not have a note yet.
+      note-placeholder: Note what felt right or wrong so this feedback stays easy to understand.
+      created-at: Created
+      updated-at: Updated
+      disabled-at: Disabled
+      session: Session
+      status:
+        active: Active
+        disabled: Disabled
+      rating:
+        up: Liked
+        down: Disliked
+    actions:
+      edit: Edit note
+      save: Save note
+      cancel: Cancel
+      disable: Disable
+      enable: Re-enable
+      delete: Delete
+      confirm-delete: Confirm delete
+    empty:
+      title: No feedback found
+      no-feedback: Leave a little feedback in chat and its record will appear here.
+      no-results: Nothing matches yet. Try another filter or search term.
+  models:
+    description: Give the current resident a favorite Live2D, picture character, or VRM look.
+    title: Models
+    model-selector:
+      button: Select Model
+      apply: Apply to stage
+      applying: Applying...
+      applied: Character settings applied to the stage.
+      title: Model selector
+      options: Display model options
+      add: Add
+      loading: Loading display models...
+      remove: Remove
+      name_placeholder: Model name
+      preview_unavailable: Preview unavailable
+      pick: Use model
+      confirm: Confirm
+      picture_oc: Picture character (ZIP)
+      import_success: '{name} imported.'
+      picture_oc_import_success: 'Picture character {name} imported.'
+      picture_oc_import_failed: The picture character could not be imported. Check the ZIP contents.
+      callout:
+        title: 2D and 3D model support
+        import-description: Use the model selector to import Live2D ZIP, picture character ZIP, or VRM files.
+        format-description: Live2D drives rigged 2D avatars, picture characters use static or GIF actions, and VRM or MMD drives 3D avatars.
+    sections:
+      section:
+        live2d:
+          title: Live2D
+          description: Configure Live2D models and settings
+        vrm:
+          title: VRM
+          description: Configure 3D VRM models and settings
+        scene: Work Style
+    theme-color-from-model:
+      no-frame: No model frame is available yet. Wait for the model to finish loading and try again.
+      no-colors: No usable theme colors were found in the current model frame.
+      applied: Theme color applied from the model.
+      failed: Failed to extract a theme color from the model. Try again later.
+    preview:
+      zoom-out: Zoom out
+      reset-view: Reset preview view
+      zoom-in: Zoom in
+    vrm-controls:
+      model-position: Model position
+      directional-rotation-x: Directional light rotation - X
+      directional-rotation-y: Directional light rotation - Y
+      directional-color: Directional light color
+      directional-intensity: Directional light intensity
+      ambient-intensity: Ambient light intensity
+      ambient-color: Ambient light color
+      environment: Environment light
+      hemisphere: Hemisphere
+      skybox: Skybox
+      intensity: Intensity
+      hemisphere-intensity: Hemisphere light intensity
+      hemisphere-sky-color: Hemisphere sky color
+      hemisphere-ground-color: Hemisphere ground color
+      rotation-x: X rotation
+      rotation-y: Y rotation
+      tips: Adjust VRM position, lighting, and environment below. On narrow windows, scroll to see all settings.
+  modules:
+    beat_sync:
+      description: Vibe with beats from the audio source
+      title: Beat Sync
+      sections:
+        audio_source:
+          actions:
+            start_screen_capture: Start screen capture
+            stop: Stop
+          description: Select an audio source to detect beats from.
+          title: Audio source
+        beat_visualizer:
+          title: Beat visualizer
+        parameters:
+          advanced_parameters: Advanced Parameters
+          description: Tweak the beat detection parameters.
+          title: Parameters
+          parameters:
+            adaptive_threshold:
+              description: >-
+                Whether to apply adaptive thresholds based on signal variance
+                over time.
+              label: Adaptive threshold
+            buffer_duration:
+              description: Duration of the internal analysis buffer.
+              label: Buffer duration
+            envelope_filter_frequency:
+              description: >-
+                Frequency for the envelope filter applied to smooth energy
+                changes.
+              label: Envelope filter frequency
+            highpass_filter_frequency:
+              description: >-
+                Frequency for the highpass filter applied to reduce low
+                frequencies like sub-bass noises.
+              label: Highpass filter frequency
+            lowpass_filter_frequency:
+              description: >-
+                Frequency for the lowpass filter applied to reduce high
+                frequencies like vocals.
+              label: Lowpass filter frequency
+            min_beat_interval:
+              description: Maximum BPM or minimum interval between detected beats.
+              label: Max BPM / Min beat interval
+            sensitivity:
+              label: Sensitivity
+            spectral_flux:
+              description: Whether to enable spectral flux-based onset detection.
+              label: Spectral flux
+            warmup:
+              description: Whether to warm up before detecting beats for better accuracy.
+              label: Warmup
+    consciousness:
+      description: Choose the persona and model the current resident uses to think
+      sections:
+        section:
+          provider-model-selection:
+            collapse: Collapse
+            custom_model_placeholder: Enter custom model name...
+            description: Choose a language model provider for the current resident's replies.
+            error: Error loading models
+            health_check_failed: Health check failed
+            no_providers_configured_title: No Providers Configured
+            no_providers_configured_description: The current resident has no language model provider yet. Configure one first.
+            expand: Expand
+            loading: Loading available models...
+            manual_model_name: Model Name
+            manual_model_placeholder: Enter the model name to use with this provider
+            no_models: No models available
+            no_models_description: No models were found for this provider
+            no_search_results: No matching models
+            no_search_results_description: No models match '{query}'. Try a different search term.
+            not_supported: Model listing not supported
+            not_supported_description: This provider doesn't support model listing functionality
+            search_placeholder: Search models...
+            search_results: Found {count} of {total} models
+            show_less: Show less
+            show_more: Show more
+            subtitle: Select a default model from the provider
+            title: Model
+      title: Consciousness
+    description: Manage the current resident's thinking, vision, voice, memory, and game abilities
+    gaming-factorio:
+      description: Playing Factorio!
+      title: Factorio
+      enable: Enable Factorio Integration
+      enable-description: Allow the current resident to interact with Factorio
+      server-address: Server Address
+      server-address-description: The IP address or hostname of the Factorio server
+      server-address-placeholder: Enter server address (e.g., localhost or 192.168.1.100)
+      server-port: Server Port
+      server-port-description: The port number of the Factorio server (default 34197)
+      username: Username
+      username-description: Your username in the Factorio server
+      username-placeholder: Enter your Factorio username
+      configured: Factorio is properly configured!
+    gaming-minecraft:
+      description: Playing Minecraft!
+      title: Minecraft
+      enable: Enable Minecraft Integration
+      enable-description: Allow the current resident to interact with Minecraft
+      server-address: Server Address
+      server-address-description: The IP address or hostname of the Minecraft server
+      server-address-placeholder: Enter server address (e.g., localhost or play.example.com)
+      server-port: Server Port
+      server-port-description: The port number of the Minecraft server (default 25565)
+      username: Username
+      username-description: Your username in the Minecraft server
+      username-placeholder: Enter your Minecraft username
+      configured: Minecraft is properly configured!
+    hearing:
+      description: Help the current resident hear clearly and choose how transcribed words are sent
+      title: Hearing
+      audio-input:
+        label: Audio Input Device
+        description: Choose the microphone or audio device used by the current resident.
+        placeholder: Choose the resident's audio input device
+        input-device: Input device
+        input-device-description: Select the microphone you want to use.
+        input-device-placeholder: Select microphone
+        unknown-device: Unknown Device
+      auto-send:
+        title: Auto-send Settings
+        description: Decide whether transcribed words are sent to chat automatically.
+        enabled-label: Auto-send transcribed text
+        enabled-description: Automatically send transcribed text to chat after a delay. This may consume tokens, so disable it if you want to review and edit transcriptions before sending.
+        delay-label: Auto-send delay
+        delay-description: 'Delay in milliseconds before automatically sending transcribed text (0 = send immediately, recommended: 1000-3000ms).'
+        immediate: Immediate
+      dialog:
+        title: Hearing Input
+        microphone-enabled: Microphone enabled
+        microphone-disabled: Microphone disabled
+        permission-required: Microphone permission required
+        permission-description: The app does not have permission to access your microphone. Please grant microphone access in system settings to enable audio input.
+      monitoring:
+        title: Speech Input Monitoring
+        error-title: Error occurred
+        start: Start Monitoring
+        stop: Stop Monitoring
+        input-level: Input Level
+        probability: Probability of Speech
+        silence: Silence
+        speech: Speech
+        threshold: Detection threshold
+        sensitivity: Sensitivity
+        sensitivity-description: Adjust the threshold for speech detection.
+        speaking-detected: Speaking Detected
+        model-based: Model Based
+        volume-based: Volume Based
+        use-model-label: Model Based
+        use-model-description: Use AI models for more accurate speech detection.
+        loading: Loading...
+        inference-error: Inference error
+        activated: Activated
+        probability-value: 'Probability: {value}%'
+        voice-activity: Voice Activity
+        last-seconds: Last 2 seconds
+        voice-detected: Voice detected
+        speech-threshold: Speech threshold
+      provider-empty:
+        title: No Providers Configured
+        description: Choose a speech recognition provider before the current resident can understand your voice.
+      provider-model:
+        manual-description: Enter the transcription model to use (e.g., whisper-1, gpt-4o-transcribe).
+      pricing:
+        loading: Loading the current official cloud price…
+        official: 'Official cloud: {first} points for the first started minute, then {additional} points for each additional started minute.'
+        byok: Browser, local, and bring-your-own-key transcription do not consume Wuwiii points. Your provider may charge its own account.
+      test:
+        title: Speech-to-Text Test
+        description: Say a few words with the current audio device and check the transcription.
+        select-provider: Please select a transcription provider above to test
+        select-device: Please select an audio input device to test
+        start: Start Speech-to-Text Test
+        stop: Stop Test
+        transcribing: Transcribing...
+        error-title: Transcription Error
+        status-recording: Recording audio for transcription... (3 seconds)
+        status-processing: Processing transcription...
+        status-recording-transcribing: Transcribing recording...
+        status-starting-stream: Starting audio stream...
+        status-starting-streaming: Starting streaming transcription...
+        status-streaming: Transcribing... (streaming)
+        status-listening: Listening for speech... (streaming mode active)
+        status-waiting: Waiting for speech...
+        status-complete: Transcription complete!
+        status-failed: Transcription failed
+        status-stopped: Stopped
+        status-error-prefix: 'Error: {message}'
+        points-estimate-waiting: Points will be estimated from the completed recording before upload.
+        points-estimate-estimating: Reading the recorded audio duration...
+        points-estimate-ready: 'Estimated {points} points for {seconds}s of audio.'
+        points-estimate-unavailable: Point estimate unavailable because this recording has no server-supported PCM WAV duration.
+        points-estimate-rule: The first started minute costs {first} points; each additional started minute costs {additional}. Server measurement is authoritative.
+        no-result: No transcription result received
+        stream-start-failed: Failed to start audio stream. Please check microphone permissions.
+        stream-start-error: 'Error: Failed to start audio stream'
+        streaming-mode: 'Streaming mode: Transcription will appear in real time as you speak.'
+        result-label: Transcription Result
+        current-streaming: 'Current transcription (streaming):'
+        final: 'Final transcription:'
+        empty: Nothing transcribed yet. Start the speech-to-text test and speak for a moment.
+        provider: Provider
+        model: Model
+        mode: Mode
+        mode-streaming: Streaming (real-time)
+        mode-recording: Recording (file-based)
+      sections:
+        section:
+          provider-selection:
+            description: Choose a speech recognition provider that turns your voice into words for the current resident.
+    memory-long-term:
+      description: Organize the memories the current resident will keep for a long time
+      title: Long-Term Memory
+      stats:
+        total: Total memories
+        focus: ⭐ Important memories
+        note: 📌 Regular memories
+        growth-candidate: Growth candidates
+      filters:
+        search-placeholder: Search memory content or tags...
+        all: All
+        focus: ⭐ Important
+        note: 📌 Regular
+        growth-candidate: Growth candidates
+      list-title: Memory list ({count})
+      list-title-growth: Growth candidates ({count})
+      relative:
+        today: Today
+        yesterday: Yesterday
+        days-ago: '{count} days ago'
+        weeks-ago: '{count} weeks ago'
+      source-surface:
+        chat-area: Full chat
+        chat-area-auto-speech: Auto-sent hearing
+        chat-area-auto-speech-stop: Hearing stop resend
+        chat-orchestrator: Chat pipeline
+        page: Desktop chat
+        proactive-topic: Proactive topic
+        stage: Stage pipeline
+        widget: Quick Chat
+      reference-source:
+        context-injection: Auto injected
+        search-memory-tool: Memory tool
+      scope:
+        current-persona: Current persona
+        global-system: Global system
+        shared-by-user: Shared by user
+      growth-status:
+        solidified: Solidified
+        disabled: Ignored
+        candidate: Candidate
+      growth-source:
+        reply-feedback-summary: Reply feedback
+      trace:
+        source: 'Source: {trace}'
+        session: Session {id}
+        message: Message {id}
+        source-message-date: Source message {date}
+        recent-reference-date: Recently referenced {date}
+        reference-count: '{count} times'
+        scope-prefix: 'Scope: {scope}'
+        persona: Persona {id}
+        user: User {id}
+        growth-prefix: 'Persona growth: {status}'
+        confidence: Confidence {value}
+        source-label: 'Source: {source}'
+      actions:
+        save: 💾 Save
+        cancel: Cancel
+        open-source: Jump to source message
+        solidify-growth: Solidify as persona growth memory
+        ignore-growth: Ignore candidate
+        edit: Edit
+        delete: Delete
+      confirm:
+        delete: Delete this memory?
+        solidify-growth: Solidify this candidate as a persona growth memory? It will be included in normal long-term memory recall.
+        ignore-growth: Ignore this candidate? The same feedback summary will not generate it again automatically.
+      empty:
+        loading: Loading...
+        no-memory: No memories yet
+    memory-short-term:
+      description: Manage the memories the current resident uses in recent conversations
+      title: Short-Term Memory
+      auto-cleanup:
+        title: Auto Cleanup
+        enabled-label: Auto-clean short-term memory
+        enabled-description: When enabled, messages are cleared automatically once they reach the cleanup limit (same as manual clear).
+        limit-label: Cleanup limit
+        limit-description: 'Auto-clean triggers when the message count reaches or exceeds this value. Range: 1-400.'
+        unit: messages
+      session-selector:
+        label: Memory session
+        description: Choose which session's memories to view or clean (includes group chat sessions).
+    messaging-discord:
+      description: Chat & voice chat over Discord
+      title: Discord
+      enable: Enable Discord Integration
+      enable-description: Allow the current resident to interact through Discord
+      token: Bot Token
+      token-description: Your Discord bot token
+      token-placeholder: Enter your Discord bot token
+      configured: Discord is properly configured!
+    speech-playback:
+      title: Speech Playback
+      description: Configure playback buffering, TTS timeout, and speech interruption.
+      info:
+        title: Playback strategy directly affects first-audio latency
+        description: For low-latency Chinese replies, start with playback buffering disabled and keep a short TTS timeout so slow providers do not block later speech.
+      sections:
+        output:
+          title: Speech Output
+          description: Control whether chat replies automatically synthesize and play speech.
+        buffering:
+          title: Playback Buffering
+          description: Control whether speech segments play immediately or wait for more generated segments first.
+          how-it-works-title: How it works
+          how-it-works-description: When buffering is enabled, playback starts after at least {minSegments} speech segments are ready or after {bufferTimeout}ms. Disabling buffering gives faster first audio; enabling it makes long replies smoother.
+        interruption:
+          title: Speech Interruption
+          description: Control how user speech interrupts AI audio playback.
+          how-it-works-title: How it works
+          how-it-works-description: When smart interruption is enabled, Wuwiii watches the user speech state. AI speech is interrupted only after user speech is detected for {threshold}ms, reducing false triggers from short noise.
+      fields:
+        speech-output-enabled:
+          label: Enable AI reply speech
+          description: When disabled, chat replies will not send TTS requests, avoiding accidental speech quota usage. Test voice still works.
+        output-volume:
+          label: Playback volume
+          description: Adjust the current resident's speech playback volume without changing system volume.
+        emotion-mode:
+          label: Emotional speech
+          description: Choose whether the voice follows the current character and conversation. Speech models without tone controls keep their normal neutral delivery.
+        emotion-intensity:
+          label: Emotion intensity
+          description: Control how far the delivery moves from neutral. 0% keeps the original neutral voice.
+        display-sync-with-speech:
+          label: Sync bubbles with speech
+          description: When enabled, reply bubbles wait for speech synthesis or playback events, keeping the thinking bubble visible until speech is ready.
+        display-sync-trigger:
+          label: Bubble display trigger
+          description: Playback start aligns better with Live2D lip sync; TTS ready displays earlier, but can appear before audible speech.
+        display-sync-late-speech-policy:
+          label: Late speech handling
+          description: Choose whether Wuwiii keeps waiting for speech, or shows text first and drops late audio when the current turn misses the sync fallback.
+        display-sync-delay:
+          label: Bubble display delay trim
+          description: Add a small delay after the speech event before showing the bubble, useful for manually tuning lip-sync timing.
+        display-sync-fallback:
+          label: Sync fallback timeout
+          description: If speech synthesis fails or returns no audio, show text after this timeout so the reply does not stay in thinking state.
+        buffering-enabled:
+          label: Enable playback buffering
+          description: Wait for multiple speech segments before playback. This sounds smoother, but increases first-audio latency.
+        tts-request-timeout:
+          label: TTS request timeout
+          description: Skip a speech segment when the provider does not return in time, and lower that provider's recommendation priority. For low-latency Chinese, 3500-6000ms is a practical range.
+        tts-request-min-interval:
+          label: Minimum TTS request interval
+          description: Minimum wait time between speech synthesis requests. The default 0 does not actively throttle; raise it when a provider returns 429s.
+        tts-rate-limit-retry-delay:
+          label: Rate-limit retry cooldown
+          description: Wait this long before retrying after provider 429 or rate-limit errors. Cloned voices or strict models may need 6000-12000ms.
+        min-segments:
+          label: Minimum buffered segments
+          description: How many speech segments should be buffered before playback starts. Use 1-2 for low latency and 3-5 for smoother playback.
+        buffer-timeout:
+          label: Buffer timeout
+          description: Start playback after this wait time to avoid blocking too long. For low latency, 600-1200ms is recommended.
+        interruption-enabled:
+          label: Enable smart interruption
+          description: Interrupt AI speech only when continuous user speech is detected, avoiding false triggers from brief noise.
+        continuous-detection-threshold:
+          label: Continuous detection threshold
+          description: How long user speech must be detected before interruption. 300-1000ms is recommended.
+        speech-end-buffer:
+          label: Speech end buffer
+          description: How long to wait after the user stops speaking before treating speech as ended. 300-800ms is recommended.
+      units:
+        segments: '{count} segments'
+      options:
+        emotion-mode:
+          follow-character: Follow character
+          natural: Natural and restrained
+          off: Off
+        display-sync-trigger:
+          playback-start: Playback start
+          tts-result: TTS ready
+        display-sync-late-speech-policy:
+          text-first-drop-late: Text first, drop late speech
+          wait-for-speech: Speech first
+    speech:
+      description: Speech synthesis
+      pricing:
+        loading: Loading the current official cloud price…
+        official: 'Official cloud: {points} pts/min with a {minimum}-point minimum, plus {surcharge} pts/use for the selected voice.'
+        byok: Local and bring-your-own-key speech do not consume Wuwiii points. Your provider may charge its own account.
+      voice-configuration:
+        official-managed-description: The official model is managed by the service. Open the voice library to choose a chain, search, and preview voices.
+        title: Voice character
+        description: Adjust pitch, speech markup, and testing for the selected voice.
+        load-error: Could not load voices
+        pitch: Pitch
+        pitch-description: Adjust how high or low the voice sounds without changing voices.
+        ssml: Enable SSML
+        ssml-description: Use speech synthesis markup to control pauses and pronunciation.
+        model: Model
+        custom-ssml: Use custom SSML
+        custom-ssml-description: Enter SSML directly instead of plain text.
+        stop: Stop
+      provider-empty:
+        title: No speech providers configured
+        description: Open Providers and add a speech synthesis provider.
+      sections:
+        section:
+          playground:
+            buttons:
+              stop:
+                label: Stop
+            select-voice:
+              loading: Loading model...
+              required: Please select a voice
+          provider-voice-selection:
+            alibaba_custom_voice_note_title: Alibaba Model Studio cloned voices
+            alibaba_custom_voice_note_content: If your voice is a Qwen cloned voice from Model Studio, put the returned target_model into the custom model field and the returned voice into the custom voice ID field. The default voice list usually contains enumerable public voices and may not include your private cloned voices.
+            custom_model_label: Custom model
+            custom_model_description: Enter the model used for speech synthesis. For Alibaba cloned voices, prefer the target_model returned by the clone API.
+            custom_model_placeholder: Enter custom model name...
+            custom_voice_label: Custom voice ID
+            custom_voice_description: Enter the voice ID returned by the provider. For Alibaba Qwen cloned voices, use the voice field.
+            custom_voice_placeholder: Enter custom voice ID...
+            test_config_missing: Please select or enter both a speech model and voice ID before testing.
+            test_error_title: Speech test failed
+            test_provider_init_failed: Failed to initialize the speech provider. Check the API key and base URL.
+            test_unknown_error: Speech generation failed without a detailed error.
+            points_estimate_unavailable: 'Exact total unavailable until the generated audio duration is known. The selected voice adds {voicePoints} points.'
+            points_estimate_reserving: The server is reserving points before generating audio...
+            points_estimate_ready: 'Duration-based estimate: {points} points.'
+            points_estimate_rule: 'Base rate: {points} pts/min with a {minimum}-point minimum, plus {voicePoints} pts/use for this voice. The server settles using the generated audio duration.'
+            description: Select the suitable speech provider
+            language_all: All languages
+            language_description: Prefer voices in the selected language. If none match, all available voices stay visible.
+            language_label: Voice language
+            language_zh_priority: Chinese first
+            no_models: No models available
+            no_models_description: No models were found for this provider
+            no_voices: No voices available
+            no_voices_description: No voices were found for this provider
+            no_voices_hint: You can enter a custom voice name below.
+            pause: Pause
+            play_sample: Play Sample
+            search_models_placeholder: Search models...
+            search_models_results: Found {count} of {total} models
+            search_voices_placeholder: Search voices...
+            search_voices_results: Found {count} of {total} voices
+            unsupported_voice_warning_title: No supported voices
+            unsupported_voice_warning_content: >-
+              Try a different model or provider. For support, visit
+              https://www.wuwiii.cn/help/refund.
+            show_less: Show less
+            show_more: Show more
+            title: Provider
+          voice-settings:
+            input-ssml:
+              placeholder: Enter SSML text...
+            use-ssml:
+              description: Enable to input raw SSML instead of plain text
+              label: Use Custom SSML
+      title: Speech
+    title: Modules
+    web-search:
+      title: Web search
+      description: Configure web search providers and persona content filtering.
+      pricing:
+        loading: Loading the current official cloud price…
+        official: 'Official cloud: {points} points per search. Local and bring-your-own-key providers do not consume official points.'
+    vision:
+      description: Vision
+      title: Vision
+    x:
+      description: X / Twitter browsing and usage
+      title: X / Twitter
+      enable: Enable X / Twitter Integration
+      enable-description: Allow the current resident to interact with X / Twitter
+      api-key: API Key
+      api-key-description: Your X / Twitter API key
+      api-key-placeholder: Enter your X / Twitter API key
+      api-secret: API Secret
+      api-secret-description: Your X / Twitter API secret
+      api-secret-placeholder: Enter your X / Twitter API secret
+      access-token: Access Token
+      access-token-description: Your X / Twitter access token
+      access-token-placeholder: Enter your X / Twitter access token
+      access-token-secret: Access Token Secret
+      access-token-secret-description: Your X / Twitter access token secret
+      access-token-secret-placeholder: Enter your X / Twitter access token secret
+      configured: X / Twitter is properly configured!
+    mcp-server:
+      description: Connect and manage MCP server and tools
+      title: MCP Server
+      config-path: Config file path
+      runtime-title: Runtime status
+      actions:
+        open-config: Open mcp.json
+        apply-and-restart: Save and restart stdio MCP
+      messages:
+        opened: Config file opened at {path}
+        restarted: >-
+          MCP servers restarted. Started {started}, failed {failed}, skipped
+          {skipped}
+  providers:
+    categories:
+      navigation: Provider categories
+      chat:
+        title: Chat
+        description: Understands context and writes replies, including Wuwiii Cloud, DeepSeek, OpenAI, and local models.
+      speech:
+        title: Speech
+        description: Turns replies into audio, including Wuwiii Speech, Alibaba Cloud, and ElevenLabs.
+      transcription:
+        title: Transcription
+        description: Turns microphone audio into text, including Wuwiii Hearing, Alibaba NLS, and browser speech recognition.
+      web-search:
+        title: Web search
+        description: Fetches current public information for replies, including Tavily, Exa, and Brave Search.
+    explained:
+      chat: Text generation model providers. e.g. OpenRouter, OpenAI, Ollama.
+      Speech: Speech (text-to-speech) model providers. e.g. ElevenLabs, Azure Speech.
+      Transcription: >-
+        Transcription (speech-to-text) model providers. e.g. Whisper.cpp,
+        OpenAI, Azure Speech
+    helpinfo:
+      title: First time here?
+      description: >
+        The current resident requires at least one {chat} provider to think,
+        and behave properly. You could think of it as the brain of the
+        digital residents living in Wuwiii.
+    catalog:
+      edit:
+        config-id-not-found: Provider configuration not found.
+        definition-id-not-found: Provider definition not found.
+        actions:
+          more-options: More options
+          delete: Delete
+        validation:
+          failed:
+            title: Please check your provider settings, validation failed.
+            description: >-
+              You can still save the current configuration if you want to
+              proceed.
+            action: Save anyway
+        config:
+          common:
+            fields:
+              field:
+                api-key:
+                  label: API Key
+                  description: API Key used to authorize requests to this provider
+                  placeholder: sk-...
+                base-url:
+                  label: Base URL
+                  description: >-
+                    The base url used to connect to remote service. Often looks
+                    like http://localhost:11434/v1 or https://example.com/v1.
+                  placeholder: Base url...
+                headers:
+                  label: Custom HTTP Headers
+                  description: Add custom HTTP headers
+                  key:
+                    placeholder: Key
+                  value:
+                    placeholder: Value
+                thinking-mode:
+                  label: Thinking Mode
+                  description: >
+                    Controls Ollama thinking behavior. GPT-OSS only supports low/medium/high levels.
+                  options:
+                    auto: Auto (provider default)
+                    disable: Disable
+                    enable: Enable
+                    low: Low
+                    medium: Medium
+                    high: High
+        validators:
+          actions:
+            validate: Validate
+          empty: No validation steps available.
+          openai-compatible:
+            check-config:
+              title: Configuration
+            check-connectivity:
+              title: Connectivity
+            check-supports-model-listing:
+              title: List Models
+            check-supports-chat-completion:
+              title: Chat Completion
+          tavily:
+            check-config:
+              title: Configuration
+            check-search:
+              title: Search
+          web-search:
+            check-config:
+              title: Configuration
+            check-search:
+              title: Search
+          status:
+            validating: Validating...
+            valid: Passed
+            invalid: Errored
+          title: Checks
+        providers:
+          provider:
+            ollama:
+              troubleshooting:
+                validators:
+                  openai-compatible-check-connectivity:
+                    label: Extra configuration needed for Ollama
+                    content: >-
+                      Sorry to hear that Connectivity check failed for Ollama.
+                      Don't worry, for Ollama instances, extra configuration is
+                      needed for making it pass for Ollama. You need to set
+                      OLLAMA_HOST explicitly when starting the Ollama
+                      application or Ollama CLI server. For detailed
+                      information, check the Project AIRI upstream Ollama integration guide:
+                      https://airi.moeru.ai/docs/en/docs/manual/integrations/providers/chat/ollama
+    common:
+      continueAnyway: Continue Anyway
+      fields:
+        field:
+          api-key:
+            label: API Key Input
+      section:
+        advanced:
+          fields:
+            field:
+              headers:
+                description: Add custom HTTP headers
+                key:
+                  placeholder: Key
+                label: HTTP Headers
+                value:
+                  placeholder: Value
+          title: Advanced
+        basic:
+          description: Essential settings
+          title: Basic
+        voice:
+          title: Voice Settings
+    description: LLMs, speech providers, etc.
+    provider:
+      app-local-audio-transcription:
+        title: App (Local)
+        description: https://github.com/moeru-ai/xsai-transformers
+      app-local-audio-speech:
+        title: App (Local)
+        description: https://github.com/moeru-ai/xsai-transformers
+      browser-local-audio-transcription:
+        title: Browser (Local)
+        description: https://github.com/moeru-ai/xsai-transformers
+      browser-local-audio-speech:
+        title: Browser (Local)
+        description: https://github.com/moeru-ai/xsai-transformers
+      alibaba-cloud-model-studio:
+        description: bailian.console.aliyun.com
+        title: Alibaba Cloud Model Studio
+      anthropic:
+        description: anthropic.com
+        title: Anthropic | Claude
+        helpinfo:
+          title: Before you start
+          description:
+            part1: >-
+              While Anthropic recently did announce that they are having a beta
+              support for OpenAI SDK compatibility
+            part2: (you can read more here)
+            part3: but due to the implementation details comes with
+            part4: >-
+              restrictions which not aligned with the OpenAI SDK, it's currently
+              not possible to use this provider in the browser.
+            part5: >-
+              If you do need to use this provider, you will need a dedicated
+              proxy backend like a Serverless Function running on
+            part6: or some CORS bypassing services to bypass the CORS restrictions.
+      cloudflare-workers-ai:
+        description: cloudflare.com
+        fields:
+          field:
+            account-id:
+              description: Cloudflare Account ID
+              label: Account ID
+              placeholder: Your Cloudflare Account ID
+            api-key:
+              placeholder: Input Cloudflare API Key
+        title: Cloudflare Workers AI
+      common:
+        status:
+          validating: Validating
+          valid: Configuration seems to be valid.
+        fields:
+          field:
+            pitch:
+              description: Tune the pitch of synthesized speech (e.g., sharper or coarser)
+              label: Pitch
+            speed:
+              description: Adjust the speed of speech
+              label: Speed
+            volume:
+              description: Adjust the volume of speech
+              label: Volume
+      deepgram-tts:
+        description: deepgram.com
+        title: Deepgram
+      speech-noop:
+        title: None
+        description: No speech output.
+      deepseek:
+        description: deepseek.com
+        title: DeepSeek
+      elevenlabs:
+        description: elevenlabs.io
+        fields:
+          field:
+            simularity-boost:
+              description: Voice similarity adherence
+              label: Similarity Boost
+            speaker-boost:
+              description: Enhance speaker similarity
+              label: Speaker Boost
+            speed:
+              description: Speech generation speed
+              label: Speed
+            stability:
+              description: Voice stability and randomness
+              label: Stability
+            style:
+              description: Voice style exaggeration
+              label: Style
+        playground:
+          buttons:
+            button:
+              test-voice:
+                generating: Generating...
+                label: Test Voice
+          fields:
+            field:
+              input:
+                placeholder: Enter text to test the voice...
+              language:
+                description: Select voice language
+                label: Language
+              voice:
+                description: Select preferred voice
+                label: Voice
+          title: Voice Playground
+          validation:
+            error-missing-api-key: Please enter an API key to test the voice.
+        title: ElevenLabs
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: >-
+              Full precision model using WebGPU - Recommended for supported
+              devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
+      fireworks:
+        description: fireworks.ai
+        title: Fireworks.ai
+      microsoft-speech:
+        description: speech.microsoft.com
+        fields:
+          field:
+            region:
+              description: Speech Service region
+              label: Region
+        title: Microsoft / Azure Speech
+      index-tts-vllm:
+        description: https://index-tts.github.io/
+        title: Bilibili / IndexTTS
+        callout_indextts2_unavailable_title: Limited Support
+        callout_indextts2_unavailable: Support for IndexTTS2 is currently unavailable. Please use IndexTTS.
+      azure-ai-foundry:
+        description: Azure AI Foundry
+        title: Azure AI Foundry
+      minimax:
+        description: minimaxi.com
+        title: MiniMax
+      minimax-global:
+        description: minimax.io
+        title: MiniMax Global
+      mistral:
+        description: mistral.ai
+        title: Mistral
+      moonshot:
+        description: moonshot.ai
+        title: Moonshot AI
+      modelscope:
+        description: modelscope.cn
+        title: ModelScope
+      novita:
+        description: novita.ai
+        title: Novita
+      ollama:
+        description: ollama.ai
+        title: Ollama
+      official-cloud:
+        description: Wuwiii official cloud intelligence service
+        title: Official Cloud
+        models:
+          airi-default: Wuwiii Default
+          airi-fast: Wuwiii Fast
+          airi-balanced: Wuwiii Balanced
+          airi-smart: Wuwiii Smart
+          airi-reasoning: Wuwiii Reasoning
+          airi-long: Wuwiii Long Context
+          airi-codex: Official Codex / Workbench
+          airi-claude: Official Claude / Workbench
+      official-cloud-speech:
+        description: Official cloud text-to-speech service. Uses account points only after you select and enable it.
+        title: Official Cloud Speech
+        models:
+          airi-speech: Wuwiii Speech
+        voices:
+          airi-default: Wuwiii Default
+      official-cloud-transcription:
+        description: Official cloud speech recognition service.
+        title: Official Cloud Transcription
+        models:
+          airi-transcription: Wuwiii Transcription
+      official-cloud-embed:
+        description: Official cloud semantic memory retrieval service.
+        title: Official Cloud Embedding
+      official-cloud-web-search:
+        description: Official cloud search service for current web information.
+        title: Official Cloud Web Search
+      openai:
+        description: openai.com
+        title: OpenAI
+      openai-compatible:
+        description: OpenAI Compatible
+        title: OpenAI Compatible
+      tavily:
+        description: Web search provider for current information.
+        title: Tavily
+      exa:
+        description: Standalone neural and keyword web search API.
+        title: Exa
+      brave-search:
+        description: Standalone Brave Search API provider.
+        title: Brave Search
+      google-custom-search:
+        description: Google Programmable Search / Custom Search JSON API provider.
+        fields:
+          field:
+            search-engine-id:
+              description: The Search Engine ID (cx) from Google Programmable Search Engine.
+              label: Search Engine ID
+              placeholder: Programmable Search Engine ID
+        title: Google Custom Search
+      serpapi:
+        description: Standalone Google Search results through SerpAPI.
+        title: SerpAPI
+      serper:
+        description: Standalone Google Search API results through Serper.
+        title: Serper
+      n1n:
+        description: n1n.ai - High-performance AI API provider.
+        title: n1n
+      openrouter:
+        description: openrouter.ai
+        title: OpenRouter
+      perplexity:
+        description: perplexity.ai
+        title: Perplexity
+      player2:
+        description: player2.game
+        title: Player2
+      together:
+        description: together.ai
+        title: Together.ai
+      google-generative-ai:
+        description: gemini.google.com
+        title: Google Gemini
+      groq:
+        description: groq.com
+        title: Groq
+      featherless:
+        description: featherless.ai
+        title: Featherless AI
+      lm-studio:
+        description: lmstudio.ai
+        title: LM Studio
+      vllm:
+        description: vllm.ai
+        title: vLLM
+      volcengine:
+        description: volcengine.com
+        fields:
+          field:
+            appId:
+              description: App ID of the project where you can obtain in Console
+              label: App ID
+        title: Volcano Engine
+      xai:
+        description: x.ai
+        title: xAI
+      302-ai:
+        description: 302.AI
+        title: 302.AI
+      comet-api:
+        description: CometAPI.com
+        title: Comet API
+      cerebras:
+        description: cerebras.ai
+        title: Cerebras
+      aliyun-nls:
+        description: Aliyun NLS
+        title: Aliyun NLS
+        fields:
+          access-key-id: Access Key ID
+          access-key-secret: Access Key Secret
+          app-key: App Key
+          app-key-placeholder: Enter the NLS project App Key
+          region: Region
+          model: Recognition model
+        models:
+          realtime: NLS real-time speech recognition
+        nls-notice:
+          title: NLS and Model Studio use different credentials
+          description: The NLS recognition scene is bound to the selected App Key. Bailian/Qwen ASR models are not interchangeable with this NLS connection and should use a dedicated Model Studio transcription provider.
+        actions:
+          start: Start real-time transcription
+          streaming: Streaming...
+          stop: Stop
+          abort: Abort session
+        status:
+          recording: Recording
+          connected: Connected
+        transcripts:
+          title: Transcripts
+          partial: Partial
+          waiting: Waiting for audio...
+          awaiting-final: Awaiting final result...
+      browser-web-speech-api:
+        description: Browser-native STT (requires Chrome/Edge/Safari)
+        title: Web Speech API
+        common:
+          'yes': 'Yes'
+          'no': 'No'
+        availability:
+          title: Web Speech API is unavailable
+          description: Web Speech API requires Chrome, Edge, Safari, or another Chromium browser and cannot run in the current environment.
+        introduction:
+          title: Free browser-native transcription
+          description: Web Speech API uses the browser's built-in speech recognition and requires no API key or extra service.
+          no-api-key: No API key required. Speech recognition is provided by the browser.
+        fields:
+          language:
+            label: Recognition language
+            description: Choose the language used for speech recognition.
+          continuous:
+            label: Continuous recognition
+            description: Keep listening instead of stopping after each phrase.
+          interim-results:
+            label: Show interim results
+            description: Show unconfirmed partial results while you speak.
+        languages:
+          en-US: English (US)
+          en-GB: English (UK)
+          es-ES: Spanish
+          fr-FR: French
+          de-DE: German
+          it-IT: Italian
+          pt-BR: Portuguese (Brazil)
+          ja-JP: Japanese
+          ko-KR: Korean
+          zh-CN: Chinese (Simplified)
+          zh-TW: Chinese (Traditional)
+          ru-RU: Russian
+        test:
+          title: Speech-to-text test
+          description: Test Web Speech API with the selected audio device. This panel does not use the default hearing provider.
+          audio-device:
+            label: Audio input device
+            description: Choose the microphone or audio input used for this test.
+            placeholder: Select an audio input device
+          start: Start speech-to-text test
+          stop: Stop test
+          transcribing: Transcribing...
+          error-title: Transcription error
+          streaming-mode: Streaming mode shows Web Speech API results in real time while you speak.
+          result: Transcription result
+          current: 'Current transcription (streaming):'
+          final: 'Final transcription:'
+          empty: Nothing transcribed yet. Choose a device, start the test, and say a few words.
+          provider: Provider
+          language: Language
+          mode: Mode
+          mode-streaming: Streaming (real-time)
+          continuous: Continuous
+          interim-results: Interim results
+          errors:
+            select-device: Select an audio input device before testing.
+            stream-start: Failed to start the audio stream. Check microphone permissions.
+            stream-start-short: Failed to start audio stream
+            stream-unavailable: The audio stream is unavailable
+          status:
+            starting-stream: Starting audio stream...
+            starting-transcription: Starting Web Speech API transcription...
+            transcribing: Transcribing... (streaming)
+            complete: Transcription complete
+            waiting: Waiting for speech...
+            listening: Listening for speech... (Web Speech API streaming mode)
+            stopped: Stopped
+            error: 'Error: {message}'
+      transcriptions:
+        playground:
+          title: Transcription Playground
+      aihubmix:
+        title: AIHubMix
+        description: https://aihubmix.com (10% off)
+    title: Providers
+  connection:
+    description: Configure WebSocket server connection
+    title: Connection
+    websocket-url:
+      description: Full address of the WebSocket server (e.g., ws://localhost:6121/ws)
+      label: WebSocket Server Address
+      placeholder: ws://localhost:6121/ws
+  scene:
+    description: Configure how the current resident works and reports in Wuwiii Workbench
+    title: Work Style
+    workbench:
+      title: Workbench work style
+      description: Controls how the current resident speaks, reports progress, and handles detail in Workbench. These settings supplement the active resident profile without replacing it.
+      actions:
+        restore-default: Restore default
+      presets:
+        title: Presets
+        description: Choose a baseline behavior. You can still fine-tune the controls below.
+        balanced:
+          label: Balanced
+          description: Short work reports with a familiar teammate tone.
+        concise:
+          label: Concise
+          description: Direct results first, minimal filler, fast handoffs.
+        warmer-companion:
+          label: Warmer companion
+          description: A little closer and more human while staying task-focused.
+        professional-focus:
+          label: Professional focus
+          description: More structured detail and verification status, less companion color.
+      controls:
+        title: Everyday controls
+        description: Tune reporting density, detail folding, and companion warmth without editing prompt text.
+      advanced:
+        title: Advanced custom instruction
+        description: Override the preset wording only when the basic controls are not specific enough.
+      fields:
+        scene-description:
+          label: Custom work style instruction
+          description: Describe the teammate style the current resident should use in Workbench. Empty input falls back to the default preset.
+          placeholder: The current resident is working with the user inside Workbench...
+        concise-reports:
+          label: Concise reports
+          description: Prefer short progress reports and put the useful result first.
+        fold-internal-details:
+          label: Fold internal details
+          description: Keep raw planning, prompt mechanics, and command logs out of the main reply when Workbench can show them separately.
+        companion-warmth:
+          label: Companion warmth
+          description: Adjust how much familiar companion tone appears while staying work-first.
+      hard-rules:
+        title: Protected Workbench rules
+        description: These rules are always applied in Workbench and cannot be removed from this page.
+        rule-1: Use this work style only for Workbench tasks. It supplements the active character card.
+        rule-2: Put the useful result first and keep visible replies short unless the user asks for details.
+        rule-3: Let the active persona show through lightly, without roleplay or idle banter during work.
+        rule-4: Keep internal plans, prompt mechanics, safety wording, and command logs folded when possible.
+        rule-5: Use preview-first file editing; applying writes still requires an explicit UI action or clear apply/write language.
+        rule-6: Low-risk auxiliary checks may run when policy allows, while installs, deletes, elevated actions, unapproved external access, and cross-workspace actions stay guarded. Short confirmations are not consent to write, apply, or run.
+      prompt-preview:
+        title: Advanced prompt preview
+        description: Shows the Workbench work style section that future model calls will receive.
+  system:
+    color-scheme:
+      description: Give your chat space a color palette and background that feel like home.
+      title: Appearance & Background
+    developer:
+      description: Some developer options.
+      title: Developers
+    general:
+      description: Manage Windows startup, language, and everyday preferences.
+      title: General & startup
+    description: Let's dress Wuwiii's stage in a look that feels like yours.
+    sections:
+      section:
+        background:
+          title: Conversation Backgrounds
+          description: Your chosen image appears in chat and quick chat while settings keep a readable layer above it. Without a separate dark background, Wuwiii gently lowers brightness and saturation for nighttime comfort.
+          picker:
+            title: Background picker
+            add-custom: Add custom background
+            custom-background: Custom background
+            no-preview: No preview
+            remove: Remove background
+            preview: Preview
+            blur: Blur
+            select: Select a background
+            sampling: Sampling...
+            apply: Use this background
+            presets:
+              colorful-wave:
+                title: Colorful Wave
+                description: Animated wave on a cross grid
+              airi-companion-studio-light:
+                title: Wuwiii's Morning Studio
+                description: A bright cherry-blossom room for light mode
+              airi-companion-studio-dark:
+                title: Wuwiii's Night Studio
+                description: The matching quiet room for dark mode
+              airi-message-light:
+                title: Wuwiii Cherry Feather · Light
+                description: Cherry blossoms, feathers, and starlight for resident messages
+              airi-message-dark:
+                title: Wuwiii Cherry Feather · Dark
+                description: Nighttime cherry blossoms and feathers for Wuwiii's messages
+              user-message-light:
+                title: My Soda Message · Light
+                description: Paper planes, headphones, and clover for user messages
+              user-message-dark:
+                title: My Soda Message · Dark
+                description: The matching nighttime pattern for user messages
+          light:
+            title: Light mode
+          dark:
+            title: Dark mode
+            automatic: Automatic comfort filter
+          actions:
+            change: Change background
+            use-automatic: Use automatic dark filter
+          surface:
+            title: Settings surface
+            description: Choose whether settings feel airy and translucent or tucked into a calm, solid reading layer.
+            options:
+              clear: Clear
+              comfort: Comfort
+              solid: Clear reading
+          chat-surface:
+            title: Chat surface opacity
+            description: Let the background peek through the conversation and message box as much, or as little, as you like.
+        chat-appearance:
+          title: Message appearance
+          description: Style the current resident's messages and yours separately while keeping the conversation readable.
+          roles:
+            assistant: Current resident
+            user: My messages
+          modes:
+            light: Light preview
+            dark: Dark preview
+          preview:
+            assistant: Does this feel comfortable to read?
+            user: Yes, this one feels like me.
+          separate-dark:
+            title: Customize dark mode separately
+            description: Keep this off to reuse the light image and shape with a surface suited to nighttime.
+            automatic: The light resident bubble is adapted for dark mode.
+          background:
+            title: Bubble image
+            description: Pick something from the background gallery and give this bubble a tiny view of its own.
+            none: No image
+          image-strength: Image strength
+          image-fit:
+            title: How the image fills the bubble
+            contain: Fit whole image
+            cover: Crop to fill
+            stretch: Stretch to fill
+            original: Original size
+            repeat: Tile image
+            descriptions:
+              contain: Preserve the whole image and its proportions; empty space shows the bubble color.
+              cover: Preserve the proportions and fill the bubble, cropping anything beyond its edges.
+              stretch: Stretch the image to every edge without cropping; the artwork may look distorted.
+              original: Keep the image at its original size and align it within the bubble; overflow is hidden.
+              repeat: Repeat the image at its original size, best for textures and small patterns.
+          image-position:
+            title: Image alignment
+            top: Top
+            center: Center
+            bottom: Bottom
+          base-color: Base color
+          auto-text:
+            title: Automatic text color
+            description: The app chooses clear light or dark text from the bubble's base color.
+            contrast-warning: This color blends into the surface, so the app will use an easier-to-read text color instead.
+          text-color: Text color
+          radius:
+            title: Corners
+            compact: Compact
+            rounded: Rounded
+            soft: Soft
+          border:
+            title: Border
+            none: None
+            subtle: Subtle
+            strong: Strong
+          shadow:
+            title: Shadow
+            none: None
+            soft: Soft
+            lifted: Lifted
+          typography:
+            title: Message text
+            description: Adjust message size, weight, and line spacing for comfortable reading.
+            size: Size
+            weight: Weight
+            line-height: Line spacing
+          weight:
+            regular: Regular
+            medium: Medium
+            semibold: Semibold
+          reset: Restore message defaults
+        custom-color:
+          fields:
+            field:
+              primary-color:
+                label: Primary color
+                rgb-on:
+                  title: I Want It Dynamic!
+          title: Color Scheme
+        developer:
+          title: Developer
+          sections:
+            section:
+              performance-visualizer:
+                title: Performance Visualizer
+                description: Toggle FPS/long task/memory overlay
+              markdown-stress:
+                title: Markdown Stress
+                description: Stress markdown parsing and rendering with heavy chat payloads
+              use-magic-keys:
+                title: useMagicKeys Tool
+                description: Test shortcuts
+              audio-record:
+                title: Audio Record
+                description: Test Audio related composables
+              background-gradient-blending:
+                title: Background Theme color blending
+                description: Test blending & theme
+              background-removal:
+                title: Background removal (WebGPU required)
+                description: Utility for background removal
+              chat:
+                title: Chat
+                description: Chat
+              gesture-circle:
+                title: Gesture Circle (Desktop only)
+                description: Test gesture recognition
+              image:
+                title: Image
+                description: Image
+              polaroid:
+                title: Polaroid
+                description: Utility for taking shots of models
+              context-flow:
+                description: >-
+                  Inspect incoming context updates and outgoing chat stream
+                  events
+              websocket-inspector:
+                title: WebSocket Inspector
+                description: Inspect raw WebSocket traffic
+              vibrant:
+                title: Color extract
+                description: Test color extraction
+              providers-transcription-realtime-aliyun-nls:
+                title: Aliyun Real-time Transcriber
+                description: >-
+                  Stream microphone audio to Aliyun NLS and inspect live
+                  transcripts
+              performance-playground:
+                title: Performance Playground
+                description: 'Test performance runtime: VRM expressions + TTS lip sync'
+        theme-presets:
+          presets:
+            default:
+              colors:
+                color-1: Wuwiii Green
+              description: Wuwiii's familiar green theme, fresh with a little spark of energy.
+              title: Default Color
+            morandi:
+              colors:
+                color-1: Taupe
+                color-2: Beige
+                color-3: Ash Grey
+                color-4: Light Taupe
+                color-5: Ivory
+                color-6: Olive Grey
+                color-7: Sand
+                color-8: Warm Grey
+              description: Soft, muted Morandi tones for quiet days together.
+              title: Morandi Colors
+            monet:
+              colors:
+                color-1: Sky Blue
+                color-2: Mist
+                color-3: Sand
+                color-4: Moss Green
+                color-5: Water Lily
+                color-6: Wheat
+                color-7: Slate Blue
+                color-8: Sage
+              description: Mist, water lilies, and soft light gathered from Monet's palette.
+              title: Monet Colors
+            japanese:
+              colors:
+                color-1: Tan
+                color-2: Warm Taupe
+                color-3: Umber
+                color-4: Coffee
+                color-5: Bronze
+                color-6: Gold
+                color-7: Mustard
+                color-8: Amber
+              description: A warm traditional Japanese palette woven from taupe, umber, and gold.
+              title: Japanese Colors
+            nordic:
+              colors:
+                color-1: Nordic Blue
+                color-2: Ice
+                color-3: Fjord
+                color-4: Steel
+                color-5: Glacier
+                color-6: Slate
+                color-7: Cloud
+                color-8: Stone
+              description: A clean Nordic palette with the calm of glaciers, clouds, and stone.
+              title: Nordic Colors
+            chinese:
+              colors:
+                color-1: Rosy Dawn
+                color-2: Chinese Red
+                color-3: Smoky Brown
+                color-4: Bamboo Green
+                color-5: Dark Purple
+                color-6: Golden Yellow
+                color-7: Azure Blue
+                color-8: Ochre
+              description: >-
+                Traditional Chinese colors, derived from ancient textiles,
+                porcelain and paintings
+              title: Chinese Traditional Colors
+          title: Color Scheme Presets
+    title: System
+  page:
+    developers:
+      open-devtools:
+        title: Open Developer Tools
+        button: Open
+sections:
+  section:
+    general:
+      title: General
+theme:
+  title: Theme
+  description: |
+    Dress Wuwiii's stage in light or dark mode, whichever feels most comfortable to you.
+title: Settings
+voices: Voice
+vrm:
+  change-model:
+    from-file: Load from File
+    from-file-select: Select
+    from-url: Load from URL
+    from-url-confirm: Load
+    from-url-placeholder: Enter VRM model URL
+    title: Change Model
+  title: VRM Settings
+  scale-and-position:
+    model-info-title: Model Size Information
+    model-info-x: Width (X)
+    model-info-y: Height (Y)
+    model-info-z: Depth (Z)
+    tips: |
+      Edit the initial position the VRM model.
+      Coordinate axes are visualised.
+    scale: Scale
+    x: X Offset
+    'y': Y Offset
+    z: Z Offset
+    fov: FOV (degree)
+    rotation-y: Rotation (Y-axis)
+    camera-distance: Camera distance
+    eye-tracking-mode:
+      title: Looking at
+      options:
+        option:
+          camera: Camera
+          mouse: Mouse
+          disabled: Disabled
+  switch-to-vrm:
+    title: Switch to Live2D Avatar?
+    change-to-vrm: Click here to switch to the Live2D avatar setting
+  skybox:
+    skybox-intensity: SkyBox Intensity
+    skybox-specular-mix: Specular Mix
+websocket-secure-enabled:
+  title: Enable Secure WebSocket (WSS)
+  description: >-
+    Enable WSS (WebSocket Secure) to allow HTTPS connections for mobile (pocket)
+    in development mode. This will automatically generate a self-signed
+    certificate.
+analytics:
+  title: Share optional product analytics
+  description: >-
+    Off by default. When enabled, Wuwiii sends limited product events such as
+    app version, provider selection, and time to first message. Automatic
+    interaction capture, page views, session recording, and chat content are
+    not collected. You can turn this off at any time.
+wip:
+  title: Work in Progress
+  description: >-
+    This feature is currently under development and not yet publicly available.
+    Check back in future updates for this functionality.

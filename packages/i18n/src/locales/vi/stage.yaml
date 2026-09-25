@@ -1,0 +1,33 @@
+chat:
+  message:
+    character-name:
+      airi: Wuwu
+      core-system: Hệ thống lõi
+      you: Bạn
+  reasoning: Reasoning
+message: Nói gì đó...
+operations:
+  load-models: Tải mô hình
+  load-models-status:
+    loading: Đang tải
+    ready: Sẵn sàng
+select-a-audio-input: Chọn thiết bị âm thanh đầu vào
+select-a-model: Chọn mô hình
+select-a-voice: Chọn giọng nói
+viewers:
+  debug-menu:
+    emotions: Cảm xúc
+    emotions-btn:
+      angry: '😠 Giận dữ'
+      awkward: '😳 Ngại ngùng'
+      happy: '😄 Vui vẻ'
+      neutral: '🙂 Bình thường'
+      question: '🤔 Thắc mắc'
+      sad: '😫 Buồn bã'
+      surprised: '🤯 Ngạc nhiên'
+      think: '🤨 Suy nghĩ'
+    vrm:
+      camera: Máy quay
+      model:
+        title: Mô hình
+waiting: Đang chờ

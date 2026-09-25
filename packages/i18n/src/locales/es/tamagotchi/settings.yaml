@@ -1,0 +1,75 @@
+allow-visible-on-all-workspaces:
+  title: Visibilidad Entre Espacios
+  description: Permitir que la ventana sea visible en todos los espacios de trabajo, solo macOS.
+pages:
+  notifications:
+    title: Centro de notificaciones
+    description: Consulta los anuncios de producto recibidos. Los anuncios son avisos unidireccionales; las respuestas de soporte se atienden en el grupo de QQ.
+    open-center: Abrir el centro de notificaciones
+    refresh: Actualizar anuncios
+    refresh-behavior: En la pantalla principal, los anuncios se actualizan al iniciar, al cambiar el idioma y cada 15 minutos. Al abrir esta página también se actualizan. Los anuncios recibidos se guardan en este dispositivo y siguen disponibles sin conexión.
+    refresh-error: No se pudieron actualizar los anuncios. Los elementos recibidos anteriormente siguen disponibles abajo.
+    empty: Todavía no hay anuncios.
+    level:
+      critical: Crítico
+      warning: Advertencia
+      info: Información
+    status:
+      cached: Guardado sin conexión
+    support:
+      title: Soporte de Beta de pago
+      description: Para preguntas o comentarios sobre la Beta de pago, únete al grupo de QQ. Los anuncios son solo avisos; las respuestas se dan en el grupo.
+      group-label: Grupo de QQ
+      copy: Copiar número del grupo
+      copied: Número del grupo de QQ copiado.
+      copy-error: No se pudo copiar el número del grupo de QQ.
+  modules:
+    mcp-server:
+      description: Conectar y gestionar servidor MCP y herramientas
+      title: Servidor MCP
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: Atajos de Teclado
+    window-shortcuts:
+      description: Modificar los atajos de ventana.
+      title: Atajos de Ventana
+      toggle-move:
+        label: Alternar Mover
+      toggle-resize:
+        label: Alternar Redimensionar
+      toggle-ignore-mouse-event:
+        label: Alternar Ignorar Evento del Ratón
+      press-keys: Presionar Teclas...
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: useWindowMouse Tool
+            description: Evalúa la posición del cursor de la ventana de Electron
+devtools:
+  title: Desarrollador
+  pages:
+    context-flow:
+      title: Flujo de contexto
+    lag-visualizer:
+      title: Visualizador de retraso
+    performance-visualizer:
+      title: Visualizador de rendimiento
+      description: Cambiar FPS/tareas largas/superposición de memoria
+    markdown-stress:
+      title: Estrés por Markdown
+      description: Análisis y renderizado de Markdown bajo estrés con cargas de chat pesadas
+    widgets-calling:
+      title: Llamada de Widget
+screen-capture:
+  permissions-prompt:
+    title: Captura de pantalla
+    description: Para capturar las pantallas o ventanas, se requieren permisos de grabación de pantalla y audio del sistema.
+    open-preferences: Abrir Preferencias del Sistema
+    dismiss: Descartar
+    instructions:
+      step-1: Abre "Preferencias del sistema", selecciona "Privacidad y Seguridad" en la barra lateral.
+      step-2: En la sección "Grabación de audio de pantalla y sistema" y "Solo grabación de audio del sistema", encienda los interruptores para Wuwiii.
+      step-2-note: Si Wuwiii no aparece en la lista, añádelo manualmente haciendo clic en el botón "+" y seleccionando Wuwiii de la carpeta Aplicaciones.

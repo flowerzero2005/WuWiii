@@ -1,0 +1,925 @@
+allow-visible-on-all-workspaces:
+  title: Cross-Space Visibility
+  description: Allow the window to be visible on all workspaces, macOS only.
+pages:
+  notifications:
+    title: Notification Center
+    description: Review product announcements you have received. Announcements are outbound notices; support replies are handled in the QQ group.
+    open-center: Open notification center
+    refresh: Refresh announcements
+    refresh-behavior: On the main screen, announcements refresh at startup, after the display language changes, and every 15 minutes. Opening this page also refreshes them. Received items are stored on this device and remain available offline.
+    refresh-error: Announcements could not be refreshed. Previously received items remain available below.
+    empty: No announcements yet.
+    popups:
+      title: Show announcement popups
+      description: When off, announcements remain in the notification center without appearing over the main screen. Re-enabling does not replay older announcements received while off.
+    level:
+      critical: Critical
+      warning: Warning
+      info: Information
+    status:
+      cached: Saved offline
+    support:
+      title: Paid Beta support
+      description: For paid Beta questions and feedback, join the QQ group. Announcements are for outbound notices; replies happen in the group.
+      group-label: QQ group
+      copy: Copy group number
+      copied: QQ group number copied.
+      copy-error: Could not copy the QQ group number.
+  official-voices:
+    title: Official Voices
+    description: Browse, search, and favorite Wuwiii official voices. A selection takes effect only after the server catalog confirms it.
+    views:
+      recommended: Recommended
+      all: All
+      favorites: Favorites
+      recent: Recent
+    channels:
+      primary: Primary voices
+      secondary: Secondary voices
+    statuses:
+      idle: Idle
+      busy: Busy
+      congested: Congested
+      maintenance: Maintenance
+      error: Unavailable
+      recovering: Recovering
+    search: Search names, descriptions, or voice IDs
+    all-languages: All languages
+    current: Current voice
+    billing-rule: 'Base {points} pts/min, {minimum} pt minimum; voice add-on {surcharge} pts/use'
+    per-minute: Base speech
+    minimum-base: Minimum base charge
+    per-use-surcharge: Voice add-on
+    points-short: pts
+    points-value: '{points} pts'
+    points-per-minute: '{points} pts/min'
+    points-per-use: '{points} pts/use'
+    rate-with-surcharge: '{points} pts/min + {surcharge} pts/use'
+    price-follows-server: Final charge uses actual audio duration
+    loading: Loading official voices…
+    load-error: The official voice catalog is unavailable. Your current voice has not changed; try again later.
+    empty: No voices match these filters.
+    favorite: Favorite voice
+    points: points/request
+    use: Use this voice
+    in-use: In use
+    unavailable: This voice is archived or unavailable on the current plan. Your previous voice is unchanged.
+    selected: Voice changed.
+    preview: Preview voice
+    preview-error: The preview could not be played.
+    load-more: Load more
+  modules:
+    mcp-server:
+      description: Connect and manage MCP server and tools
+      title: MCP Server
+  speech:
+    title: Speech Settings
+    description: Help the current resident find a fitting voice, from providers and playback to quick first words.
+    info:
+      title: Centralized Speech Controls
+      description: 'Everything the current resident needs to listen and speak lives here: synthesis, recognition, provider setup, playback, and latency checks.'
+    providers:
+      title: Speech Providers
+      description: Configure the TTS and STT providers used by the current resident, including Alibaba, Volcengine, and OpenAI-compatible APIs.
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: Keyboard Shortcuts
+    window-shortcuts:
+      description: Modify the window shortcuts.
+      title: Window Shortcuts
+      toggle-move:
+        label: Toggle Move
+      toggle-resize:
+        label: Toggle Resize
+      toggle-ignore-mouse-event:
+        label: Toggle Ignore Mouse Event
+      press-keys: Press Keys...
+    speech-output:
+      title: Speech Output
+      description: Shape how the current resident turns a reply into speech, from the first sound to the final pause.
+      mode:
+        label: Output mode
+        fast: Low latency
+        balanced: Balanced
+        smooth: Smooth
+        custom: Custom
+      mode-description:
+        fast: Generate the first speech segment sooner for real-time Chinese replies.
+        balanced: Balance response speed with natural pauses.
+        smooth: Wait for fuller sentence groups for smoother speech with higher latency.
+        custom: Manually tune chunking and first-segment boost.
+      custom-settings:
+        title: Custom chunking
+        boost:
+          label: First-segment boost
+          description: Let the current resident begin speaking as soon as the opening segment reaches the minimum unit count.
+        min-words:
+          label: Minimum speech units
+          description: Wait for a segment to reach this size before the current resident speaks when possible.
+        max-words:
+          label: Maximum speech units
+          description: Start speaking at this size even when the sentence has not found its punctuation yet.
+        merge-short-sentences:
+          label: Merge short sentences
+          description: Gather short sentences until the minimum speech unit count is reached for a smoother rhythm with fewer TTS requests.
+    speech-playback:
+      title: Speech Playback
+      description: Keep the current resident's voice natural with playback buffering, TTS timeouts, and interruption controls.
+    speech-latency:
+      title: Speech Latency
+      description: See where the current resident's voice spends time across recent synthesis, decoding, and failures.
+    quick-chat:
+      title: Quick Chat
+      description: Style your desktop chat corner and the current resident's floating replies.
+      info:
+        title: Desktop quick chat surface
+        description: These choices shape the floating input window and reply bubbles beside the current resident during quick chat.
+      sections:
+        behavior: Window
+        bubbles: Reply Bubbles
+      window-controls:
+        close-settings: Close quick chat settings
+        drag: Drag to move quick chat
+        drag-voice-call: Drag to move voice call
+        expand: Expand quick chat
+        resize: Use the upper handle to move; drag either edge to resize
+        settings: Open quick chat settings
+        collapse: Collapse quick chat
+        hide: Hide quick chat
+        hide-confirm-title: Hide Quick Chat?
+        hide-confirm-description: You can reopen it from the Butler orb or tray menu. Your chat history will be kept.
+        hide-confirm-cancel: Cancel
+        hide-confirm-action: Hide
+        you: You
+      custom-position:
+        title: Custom position saved
+        description: Your chat corner is resting at X {x}, Y {y}.
+        clear: Clear custom position
+      fields:
+        recommended-replies:
+          description: Disabled by default. When enabled, each completed assistant reply makes one additional request to your selected third-party provider and may incur provider charges. Official cloud stays disabled until separate pricing consent is available.
+          label: Generate reply suggestions (uses an additional model request)
+        floating-replies-enabled:
+          label: Show floating desktop replies
+          description: Show user, thinking, and reply bubbles near the resident only for collapsed quick chat or voice calls.
+        follow-chat-appearance:
+          label: Follow chat bubble appearance
+          description: Let desktop replies match your usual chat typography, colors, images, and shape. Turn this off to style your bubbles and the resident's separately.
+        auto-open:
+          label: Open quick chat on startup
+          description: Have quick chat pop in to greet you whenever the desktop stage opens.
+        always-on-top:
+          label: Keep above other windows
+          description: Keep quick chat perched above your other desktop windows.
+        visible-on-all-workspaces:
+          label: Show on all workspaces
+          description: Let quick chat stay by your side as you switch between virtual desktops.
+        click-through-when-blurred:
+          label: Click-through when blurred
+          description: After quick chat loses focus, mouse clicks pass through its window. Reopen quick chat when you want to interact again.
+        dock:
+          label: Dock position
+          description: Choose where compact quick chat settles, or pick Custom to place it yourself.
+        collapsed-width:
+          label: Collapsed width
+          description: Give the compact input bar just the right amount of room.
+        expanded-width:
+          label: Expanded width
+          description: Choose how wide the expanded chat panel can stretch.
+        expanded-height:
+          label: Expanded height
+          description: Choose how tall the expanded chat panel can grow.
+        separate-dark-background:
+          label: Use a separate dark background
+          description: Give dark mode its own background image instead of sharing the light one.
+        floating-user-background-light:
+          label: My desktop bubble background
+          description: Place an image behind the messages you send on the desktop.
+        floating-user-background-dark:
+          label: My dark desktop bubble background
+          description: Place a separate image behind your desktop messages in dark mode.
+        floating-assistant-background-light:
+          label: Resident desktop bubble background
+          description: Add an image behind the current resident's desktop replies.
+        floating-assistant-background-dark:
+          label: Resident dark desktop bubble background
+          description: Add a dark-mode image behind the current resident's desktop replies.
+        floating-background-strength:
+          label: Desktop bubble image strength
+          description: Balance the background image with the message text so every word stays easy to read.
+        reply-anchor:
+          label: Reply bubble position
+          description: Choose where the current resident's reply bubbles appear.
+        thinking-bubble-offset-x:
+          label: Thinking bubble X offset
+          description: Nudge the thinking bubble from the resident's reference point. Negative moves left; positive moves right.
+        thinking-bubble-offset-y:
+          label: Thinking bubble Y offset
+          description: Nudge the thinking bubble from the resident's reference point. Negative moves up; positive moves down.
+        reply-bubble-offset-x:
+          label: Reply bubble X offset
+          description: Nudge reply bubbles from the resident's reference point. Negative moves left; positive moves right.
+        reply-bubble-offset-y:
+          label: Reply bubble Y offset
+          description: Nudge reply bubbles from the resident's reference point. Negative moves up; positive moves down.
+        sent-preview-duration:
+          label: Sent preview duration
+          description: Choose how long your sent-message preview lingers on screen.
+        reply-bubble-dwell:
+          label: Reply dwell duration
+          description: Choose how long the resident's reply stays after the typing animation ends.
+        bubble-enter-duration:
+          label: Bubble appear duration
+          description: Set how gently each bubble appears.
+        bubble-exit-duration:
+          label: Bubble disappear duration
+          description: Set how gently each bubble slips away.
+      options:
+        background:
+          none: No image
+        dock:
+          top-left: Top left
+          top-right: Top right
+          bottom-left: Bottom left
+          bottom-right: Bottom right
+          custom: Custom / dragged
+        reply-anchor:
+          near-character: Near character
+          top-center: Top center
+          bottom-center: Bottom center
+      actions:
+        reset-behavior: Reset window
+        reset-bubbles: Reset bubbles
+        reset: Reset all quick chat settings
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: useWindowMouse Tool
+            description: Test the Electron window cursor position
+    memory-advanced:
+      title: Memory Advanced Settings
+      description: Fine-tune how the current resident remembers and connects ideas.
+      info:
+        title: Advanced Memory Features
+        description: These optional features are off by default. Enable those that help the current resident remember more naturally; existing memories remain compatible.
+      scope-overview:
+        title: How memory is separated
+        description: Conversation history and long-term memory use different boundaries so one persona cannot inherit another persona's private understanding.
+        persona:
+          title: Persona memory
+          status: Isolated
+          description: Stored by user and persona for direct conversations.
+        room:
+          title: Room history
+          status: Recorded
+          description: Public messages retain their room and speaker identity.
+        group:
+          title: Group long-term memory
+          status: Paused
+          description: Automatic extraction stays off until room and persona scopes can be passed explicitly.
+      isolation:
+        title: Memory Isolation
+        multi-user:
+          label: Enable Multi-User Recognition
+          description: Recognize different users by device and keep a separate memory space for each person.
+          warning: First-time activation will automatically migrate existing data to the new user, original data will not be lost
+      semantic:
+        title: Semantic Understanding
+        search:
+          label: Enable Semantic Search
+          description: Help the current resident follow connections between ideas by expanding keywords through the knowledge graph.
+        official-cloud-embedding:
+          label: Use Official Cloud Embeddings
+          description: When enabled, the current query and eligible memory text are sent to Wuwiii's official embedding service and consume account points. Local keyword recall remains the fallback. Disabled by default.
+          pricing:
+            loading: Loading the current official cloud price…
+            official: 'Official cloud: {points} points per embedding request. Local keyword recall does not consume official points.'
+          status:
+            checking: Checking the official semantic memory service…
+            available: The official semantic memory service is available. Text is sent and points are charged at the current server price only after you enable it.
+            unavailable: The official semantic memory service is unavailable. Local keyword recall remains active and no memory text is sent.
+        value-judgment:
+          label: Smart Value Judgment
+          description: Let the current resident reconsider each memory's value and filter out temporary details.
+      natural:
+        title: Natural Conversation
+        conversation-init:
+          label: Conversation Initialization
+          description: Let the current resident greet you with remembered details when appropriate.
+        inner-voice-prewarm:
+          label: Prewarm Inner Voice Notes
+          description: Generate inner voice notes in the background after replies, including spoken proactive-topic replies. This uses an extra model call. When disabled, the heart button can still generate notes for visible messages.
+        output:
+          label: Natural Output Rhythm
+          description: Add small pauses between sentences for a more natural rhythm.
+        output-delay:
+          label: Pause Duration
+          description: Choose the pause between resident sentences (milliseconds).
+        semantic-segmentation:
+          label: Enable Semantic Segmentation
+          description: Group replies by meaning instead of cutting them at every sentence break.
+          badge: Recommended
+        bubble-delay:
+          label: Bubble Delay
+          description: Choose the pause between consecutive bubbles (milliseconds).
+        adaptive-bubble-delay:
+          label: Adaptive Bubble Delay
+          description: Adjust each pause to the length of the next bubble. This replaces the fixed delay while enabled.
+        typing-speed:
+          label: Typewriter Speed
+          description: Choose how quickly each character appears inside a bubble (milliseconds per character).
+      message:
+        title: Message Processing
+        merging:
+          label: Enable Message Merging
+          description: Gather consecutive messages before the current resident reads and responds.
+          badge: Recommended
+        merge-delay:
+          label: Merge Wait Time
+          description: Choose how long the current resident waits for another message before merging them (milliseconds).
+      proactive:
+        title: Proactive Topics
+        experimental: Experimental
+        enable:
+          label: Enable Proactive Topics
+          description: Let the current resident start a conversation at appropriate times to remind you about tasks or check in. Proactive topics use a hidden trigger message, and the reply is saved as an AI message in the current session. Inner voice notes require automatic prewarm or manual generation on the visible message.
+        random-interval:
+          label: Enable Random Interval
+          description: Vary when the current resident speaks so check-ins feel less mechanical.
+          badge: Recommended
+        interval:
+          label: Check Interval
+          description: Choose how often the current resident checks for a topic waiting to be mentioned (minutes).
+        min-interval:
+          label: Minimum Interval
+          description: Set the shortest possible wait when random intervals are enabled (minutes).
+        max-interval:
+          label: Maximum Interval
+          description: Set the longest possible wait when random intervals are enabled (minutes).
+        time-range:
+          label: Allowed Time Range
+          description: Choose when the current resident may start a conversation (24-hour format).
+          unit: hour
+      reset: Reset to Defaults
+devtools:
+  title: Developer
+  pages:
+    command-execution:
+      title: Command Execution
+      description: Inspect workspace search/read/write transactions and command execution state.
+      intro: Inspect desktop workspace tools, transaction status, and the latest renderer-side calls.
+      actions:
+        refresh-status: Refresh status
+        refresh-journal: Refresh journal
+        refresh-checkpoints: Refresh checkpoints
+        refreshing: Refreshing…
+        loading: Loading…
+        run-git-status: Run Git status
+        run-git-diff: Run Git diff
+        run-typecheck: Run typecheck
+        run-lint: Run lint
+        preview-edit: Preview edit
+        apply-edit: Apply edit
+        search-candidates: Search candidates
+        use-selected-path: Use selected path
+        rollback-transaction: Rollback transaction
+        restore-checkpoint: Restore checkpoint
+        create-checkpoint: Create checkpoint
+        load-more-transactions: Load more transactions
+        load-more-checkpoints: Load more checkpoints
+        cancel: Cancel
+      labels:
+        search: 'Search:'
+        read: 'Read:'
+        write: 'Write:'
+        git-status: 'Git status:'
+        git-diff: 'Git diff:'
+        typecheck: 'Typecheck:'
+        lint: 'Lint:'
+        requested-bundles: Requested bundles
+        available-bundles: Available bundles
+        blocked-bundles: Blocked bundles
+        detected-intent: Detected intent
+        last-tool-route-diagnostic: Last LLM tool route diagnostic
+        persona-runtime-signals: Runtime signals
+        persona-runtime-overhang: Emotional overhang
+        persona-runtime-last-failure-kind: Last failure kind
+        persona-runtime-repeated-openings: Repeated openings
+        persona-runtime-repeated-endings: Repeated endings
+        persona-runtime-repeated-self-references: Repeated self-references
+        risk: risk
+        rollback: rollback
+        target-session: Target session
+        last-created: Last created
+        last-restored: Last restored
+        last-rollback: Last rollback
+        persona-metrics:
+          closeness: Closeness
+          seriousness: Seriousness
+          hurt: Hurt
+          affection: Affection
+          need-for-attention: Need for attention
+          arousal: Arousal
+          inhibition: Inhibition
+      descriptions:
+        restricted-git-commands: Manually run the currently allowed readonly Git commands and inspect the latest result alongside the journal record.
+        git-status: 'Run `git status --short --branch` through the fixed restricted adapter and journal the output as a command transaction.'
+        git-diff: 'Run the restricted `git diff` adapter with optional path, staged mode, context lines, and output cap.'
+        restricted-typecheck: Manually run the current whitelist-only typecheck command and inspect its latest output alongside the journal record.
+        typecheck: Run the restricted package-scoped typecheck adapter for one allowed Wuwiii workspace target.
+        restricted-lint: Manually run the current whitelist-only lint command and inspect its latest output alongside the journal record.
+        lint: Run the restricted package-scoped lint adapter for one allowed Wuwiii workspace target.
+        guarded-text-edit-preview: Dry-run the same preview -> proposal -> apply guarded edit flow used by the builtin tools, inspect the change summary + unified diff preview, then decide whether to apply the returned proposalId as a journaled write.
+        journal-transactions: Disk-backed manifests sorted by latest update time.
+        checkpoints: Create manual checkpoints for the currently selected or latest session.
+      fields:
+        search-query:
+          label: Search query
+          description: Path fragment or nearby text used to locate candidate files.
+        scope:
+          label: Scope
+          description: Optional workspace-relative directory to narrow the search.
+        search-mode:
+          label: Search mode
+          description: Auto tries both path and text; path and text are stricter filters.
+        search-limit:
+          label: Search limit
+          description: Maximum search matches to inspect before producing candidate file paths.
+        candidate-file:
+          label: Candidate file
+          description: Choose the exact file when the search returns multiple candidate paths.
+        workspace-path:
+          label: Workspace path
+          description: Workspace-relative file path to preview or edit.
+        edit-mode:
+          label: Edit mode
+          description: Use the same write-text strategy modes exposed to builtin tools.
+        allow-create-if-missing:
+          label: Allow create-if-missing
+          description: Permit preview/apply to treat a missing path as a new file.
+        content:
+          label: Content
+          description: Replacement, appended, or inserted text payload for the selected edit mode.
+          placeholder: Text payload for this edit
+        target-marker:
+          label: Target marker
+          description: Required for marker/match-based edit modes.
+          placeholder: Exact marker or match text
+        occurrence:
+          label: Occurrence
+          description: 1-based match occurrence used only by replace-nth-match.
+        range-start:
+          label: Range start
+          description: Inclusive character offset used by replace-range.
+        range-end:
+          label: Range end
+          description: Exclusive character offset used by replace-range.
+        preview-chars:
+          label: Preview chars
+          description: Character cap for before/after/diff preview payloads.
+        max-read-bytes:
+          label: Max read bytes
+          description: Optional read cap. Leave blank to use the service default.
+        git-diff-path:
+          label: Diff path
+          description: Optional workspace-relative path. Leave blank to diff the entire workspace.
+        git-diff-staged:
+          label: Diff staged changes
+          description: 'Use `--cached` to inspect the staged diff instead of the working tree.'
+        git-diff-context-lines:
+          label: Context lines
+          description: '`git diff --unified=<n>` context lines. Allowed range: 0-20.'
+        git-diff-max-bytes:
+          label: Output byte cap
+          description: Optional output cap. Leave blank to use the service default.
+        typecheck-target:
+          label: Typecheck target
+          description: Allowed Wuwiii workspace target to run through the restricted typecheck adapter.
+        typecheck-max-bytes:
+          label: Output byte cap
+          description: Optional output cap. Leave blank to use the service default.
+        lint-target:
+          label: Lint target
+          description: Allowed Wuwiii workspace target to run through the restricted lint adapter.
+        lint-max-bytes:
+          label: Output byte cap
+          description: Optional output cap. Leave blank to use the service default.
+        checkpoint-summary:
+          placeholder: Optional checkpoint summary
+      sections:
+        runtime-status: Runtime status
+        tool-capability: Tool capability
+        proposal-store: Proposal cache
+        raw-runtime-status: Raw status JSON
+        latest-activity: Latest activity
+        restricted-git-commands: Restricted Git commands
+        restricted-typecheck: Restricted typecheck
+        restricted-lint: Restricted lint
+        git-status: Git status
+        git-diff: Git diff
+        typecheck: Typecheck
+        lint: Lint
+        diagnostic-files: Diagnostic files
+        diagnostic-entries: Diagnostic entries
+        git-status-entries: Git status entries
+        git-diff-files: Git diff files
+        command-output: Command output
+        persona-runtime: Persona runtime
+        scene-mode: Scene mode
+        persona-state: Persona state
+        anti-template-guard: Anti-template guard
+        chat-tool-routing: Chat tool routing
+        guarded-text-edit-preview: Guarded text edit preview
+        search-assisted-target-picker: Search-assisted target picker
+        preview-summary: Preview summary
+        before-preview: Before preview
+        after-preview: After preview
+        change-summary: Change summary
+        removed-preview: Removed preview
+        added-preview: Added preview
+        target-preview: Target preview
+        unified-diff-preview: Unified diff preview
+        recent-transactions: Recent transactions
+        journal-transactions: Journal transactions
+        manifest-detail: Manifest detail
+        before-state-blobs: Before-state blobs
+        after-state-blobs: After-state blobs
+        checkpoints: Checkpoints
+        checkpoint-detail: Checkpoint detail
+        restore-impact-preview: Restore impact preview
+        transactions-to-roll-back: Transactions to roll back
+        files-likely-affected: Files likely affected
+        blocking-conflicts: Blocking conflicts
+        snapshot-previews: Snapshot previews
+      write-modes:
+        replace: Replace file
+        append: Append
+        replace-range: Replace range
+        replace-first-match: Replace first match
+        replace-all-matches: Replace all matches
+        replace-nth-match: Replace nth match
+        insert-before-marker: Insert before marker
+        insert-after-marker: Insert after marker
+      search-modes:
+        auto: Auto
+        path: Path
+        text: Text
+      tool-bundles:
+        workspace-readonly: Workspace readonly
+        workspace-edit-preview: Workspace edit preview
+        workspace-edit-apply: Workspace edit apply
+        web-search: Web search
+        memory: Memory
+        widgets: Widgets
+        mcp-discovery: MCP discovery
+        mcp-explicit-action: MCP explicit action
+        mcp-proactive-topic: MCP proactive topic
+      intent-tags:
+        workspace-read: workspace read
+        workspace-edit: workspace edit
+        workspace-apply: workspace apply
+        web-search: web search
+        memory: memory
+        widgets: widgets
+        mcp-discovery: MCP discovery
+        mcp-explicit-action: MCP explicit action
+        proactive-topic: proactive topic
+      reason-tags:
+        tools-disabled: tools not released this turn
+        bundle-known-unsupported: known unstable bundle record
+      source-tags:
+        direct-single-bundle-success: 'source: direct single-bundle success'
+        multi-bundle-success: 'source: multi-bundle success'
+        direct-single-bundle-failure: 'source: direct single-bundle failure'
+        fallback-inference: 'source: fallback inference'
+      tool-route-phases:
+        tool-bundle: tool bundle
+        direct-tools: direct tools
+        fallback-without-tools: fallback without tools
+        plain-stream: plain stream
+      tool-route-statuses:
+        attempt: attempt
+        success: success
+        failure: failure
+        fallback: fallback
+        skipped: skipped
+      tool-route-reasons:
+        unsupported: unsupported tool mode
+        transient: transient upstream failure
+        provider-connection: provider connection failure
+        compatibility-cache: compatibility cache
+        no-tool-bundle-attempts: no tool bundle attempts
+        tool-mode-failure: tool mode failure
+        unknown: unknown failure
+      scene-modes:
+        casual-chat: casual chat
+        light-bickering: light bickering
+        praise-receiving: praise receiving
+        gentle-support: gentle support
+        heavy-topic-companion-silence: heavy-topic companion silence
+        awkward-topic-avoidance: awkward-topic avoidance
+        critical-short-answer: critical short answer
+        identity-clarification: identity clarification
+        value-judgement: value judgement
+        repair-after-failure: repair after failure
+      confidence:
+        high: high
+        medium: medium
+        low: low
+      persona-overhangs:
+        steady: steady
+        warm: warm
+        playful: playful
+        concerned: concerned
+        heavy: heavy
+        guarded: guarded
+        repairing: repairing
+      failure-kinds:
+        too-hard: too hard
+        too-robotic: too robotic
+        missed-emotion: missed emotion
+      operation-actions:
+        status: Status
+        create-checkpoint: Create checkpoint
+        list-checkpoints: List checkpoints
+        get-checkpoint-detail: Inspect checkpoint
+        preview-restore-checkpoint: Preview restore checkpoint
+        rollback-transaction: Rollback transaction
+        restore-checkpoint: Restore checkpoint
+        list-transactions: List transactions
+        get-transaction-detail: Inspect transaction
+        search: Search
+        read: Read
+        git-status: Git status
+        git-diff: Git diff
+        typecheck: Typecheck
+        lint: Lint
+        write-text: Write text
+      result-modes:
+        appended: appended
+        range-replaced: range replaced
+        first-match-replaced: first match replaced
+        all-matches-replaced: all matches replaced
+        nth-match-replaced: nth match replaced
+        inserted-before-marker: inserted before marker
+        inserted-after-marker: inserted after marker
+        updated: updated
+        created: created
+      states:
+        yes: yes
+        no: no
+        not-available: n/a
+        changes-detected: changes detected
+        no-op: no-op
+        existing-file: existing file
+        new-file-preview: new file preview
+        truncated: truncated
+        clean: clean
+        detached-head: detached HEAD
+        entire-workspace: entire workspace
+        staged: staged
+        unstaged: unstaged
+        untracked: untracked
+        renamed: renamed
+        added: added
+        deleted: deleted
+        modified: modified
+        passed: passed
+        failed: failed
+        no-diagnostics: no diagnostics
+        preview-truncated: preview truncated
+        full-preview: full preview
+        available: available
+        blocked: blocked
+        unknown: unknown
+        tools-disabled: tools disabled
+        memory-first: memory-first
+        best-effort-cache: best-effort disk cache
+        ready: ready
+        expired: expired
+        expiring-soon: expiring soon
+        none: none
+      counts:
+        files: '{count} file(s)'
+        touched-files: '{count} file(s)'
+        unique-files: '{count} unique file(s)'
+        transactions: '{count} transaction(s)'
+        rollback-capable-transactions: '{count} rollback-capable transaction(s)'
+        checkpoints: '{count} checkpoint(s)'
+        conflicts: '{count} conflict(s)'
+        matches: '{count} match(es)'
+        issues: '{count} issue(s)'
+        errors: '{count} error(s)'
+        warnings: '{count} warning(s)'
+      meta:
+        chars: '{count} chars'
+        chars-truncated: '{count} chars · truncated'
+        bytes: '{count} bytes'
+        bytes-truncated: '{count} bytes · truncated'
+      summaries:
+        git-session-unavailable: No active or inspectable session is available for restricted Git commands yet. Open a chat session or select a transaction first.
+        git-session-active: 'Using session {sessionId} for restricted Git commands.'
+        typecheck-session-unavailable: No active or inspectable session is available for restricted typecheck commands yet. Open a chat session or select a transaction first.
+        typecheck-session-active: 'Using session {sessionId} for restricted typecheck commands.'
+        lint-session-unavailable: No active or inspectable session is available for restricted lint commands yet. Open a chat session or select a transaction first.
+        lint-session-active: 'Using session {sessionId} for restricted lint commands.'
+        session-unavailable: No active or inspectable session is available yet. Open a chat session or select a journal transaction first.
+        session-active: 'Using session {sessionId} for guarded preview/apply requests.'
+        search-guidance: Search for a target file here when you only know a path fragment or some nearby text.
+        search-complete-no-candidates: 'Search completed via {transactionId} but no candidate file paths were found.'
+        search-found-candidates: 'Search found {count} candidate file path(s). Choose one to populate the workspace path field.'
+        preview-guidance: Run a dry-run preview to inspect before/after snapshots, line-based change summary, and unified diff output. Apply only becomes available after preview returns a proposalId.
+        preview-before-apply: No preview proposal is currently available to apply. Run preview first to enable apply.
+        preview-proposal-ready: 'Apply will use the proposalId returned by this preview: {proposalId}. It expires at {expiresAt}, and any form edit invalidates it.'
+        preview-result: '{path} · {writeMode} · {changeState} · {fileState}'
+        tool-capability-missing-model: The active provider/model pair is not ready yet, so bundle compatibility is still unknown.
+        tool-capability-tools-disabled: This provider/model pair does not have a stable tool-calling record yet, so workspace tools should stay conservative.
+        tool-capability-apply-enabled: This provider/model pair has stable readonly, preview, and apply bundle records, so the full preview -> proposalId -> apply flow is available.
+        tool-capability-preview-only: This provider/model pair can read and preview edits, but apply should remain more conservative until explicitly confirmed.
+        tool-capability-edit-blocked: This provider/model pair has known unstable edit bundle records, so readonly analysis should stay available while edit bundles remain blocked.
+        tool-capability-low-risk-open: Only low-risk tool support is currently known. Unknown bundles are not pre-blocked, but high-risk edits should not be assumed safe.
+        proposal-store-unavailable: Proposal cache status has not been loaded yet. Refresh runtime status first.
+        proposal-store-empty: There are no pending text edit proposals in the cache right now.
+        proposal-store-active: '{pendingCount} proposal(s) are cached right now. Recovered from disk: {recoveredCount}. Expiring soon: {expiringSoonCount}.'
+        persona-runtime-session-unavailable: No active or inspectable session is available for persona runtime yet.
+        persona-runtime-recorded: The latest persona runtime snapshot is available for this session.
+        persona-runtime-ready: 'The latest persona runtime snapshot is available. Scene mode: {sceneMode} ({confidence}).'
+        chat-tool-routing-no-request: The latest message did not request any tool bundles.
+        chat-tool-routing-tools-disabled: 'The latest message requested {requestedCount} bundle(s), but tools were not released for this provider/model pair in this turn.'
+        chat-tool-routing-all-available: 'The latest message requested {requestedCount} bundle(s), and all of them were released.'
+        chat-tool-routing-partially-blocked: 'The latest message requested {requestedCount} bundle(s): {availableCount} released, {blockedCount} blocked.'
+        tool-route-diagnostic-ok: The latest LLM tool route did not report a failure.
+        tool-route-diagnostic-provider-connection: The latest LLM request failed at the provider connection layer, not at the workspace command service.
+        tool-route-diagnostic-compatibility-cache: The latest tool route was skipped by the provider/model compatibility cache.
+        tool-route-diagnostic-fallback: The latest turn downgraded from provider tool-calling to a no-tools retry.
+        tool-route-diagnostic-failure: The latest LLM tool route failed before a successful tool response.
+        journal-transactions-loaded: 'Showing {shownCount} of {totalCount} disk-backed transaction(s).'
+        checkpoints-loaded: 'Showing {shownCount} of {totalCount} checkpoint(s) for the current journal view.'
+        restore-preview-source: Preview is computed from the current workspace state and all rollback-capable applied transactions after this checkpoint.
+        restore-select-checkpoint: Select a checkpoint to inspect restore impact.
+        restore-blocked: 'Restore is currently blocked by {conflictCount} conflict(s) across {transactionCount} transaction(s) touching {fileCount} file(s). Review the conflicts below before retrying.'
+        restore-will-run: 'Restore will attempt to roll back {transactionCount} applied transaction(s) touching {fileCount} file(s) in this session.'
+        preview-first-transactions: Showing the first 5 matching transactions in this preview.
+        preview-first-files: Showing the first 10 unique file paths in this preview.
+        preview-first-conflicts: Showing the first 5 blocking conflicts in this preview.
+      confirm:
+        rollback: Confirm rollback
+        rollback-files: 'Confirm rollback · {count} file(s)'
+        restore: Confirm restore
+        restore-blocked: 'Restore blocked · {count} conflict(s)'
+        restore-transactions: 'Confirm restore · {transactionCount} tx · {fileCount} file(s)'
+        restore-checkpoint-files: 'Confirm restore · {count} checkpoint file(s)'
+      empty:
+        no-git-status-request: No `git status` request has been run yet.
+        no-git-status-entries: No changed entries are currently reported.
+        no-git-diff-request: No `git diff` request has been run yet.
+        no-git-diff-output: The latest diff produced no output.
+        no-git-diff-files: No changed files were parsed from the latest diff.
+        no-typecheck-request: No typecheck request has been run yet.
+        no-typecheck-output: The latest typecheck produced no output.
+        no-lint-request: No lint request has been run yet.
+        no-lint-output: The latest lint produced no output.
+        no-search-request: No search request yet.
+        no-read-request: No read request yet.
+        no-write-request: No write request yet.
+        no-change-summary: This edit is a no-op for the current file state, so no change summary block was produced.
+        no-renderer-operations: No renderer-side command execution calls have been made yet.
+        no-journal-transactions-loaded: No journal transactions loaded yet.
+        no-journal-transactions-found: No journal transactions found yet.
+        no-transaction-selected: Select a transaction to inspect its manifest and blob previews.
+        no-blobs: No blobs recorded.
+        blob-content-missing: Blob content is missing on disk.
+        no-checkpoints-loaded: No checkpoints loaded yet.
+        no-session-available: No session available yet
+        no-checkpoints-found: No checkpoints found yet.
+        no-checkpoint-selected: Select a checkpoint to inspect its metadata and snapshot previews.
+        no-rollback-transactions-after-checkpoint: No rollback-capable applied transactions are currently visible after this checkpoint for the selected session.
+        no-snapshot-blobs: No snapshot blobs recorded.
+        no-persona-runtime: No persona runtime snapshot has been recorded yet for this session.
+        no-chat-tool-routing: No chat tool routing result has been recorded yet.
+        no-tool-route-diagnostic: No LLM tool route diagnostic has been recorded yet.
+      facts:
+        git-branch: 'Branch: {value}'
+        git-upstream: 'Upstream: {value}'
+        git-ahead-behind: 'ahead {ahead} · behind {behind}'
+        git-detached: 'Detached: {value}'
+        git-output: 'Output: {value}'
+        git-diff-scope: 'Diff scope: {value}'
+        git-diff-mode: 'Diff mode: {value}'
+        git-context-lines: 'Context lines: {count}'
+        git-diff-files: 'Changed files: {count}'
+        typecheck-target: 'Typecheck target: {value}'
+        typecheck-package: 'Package: {value}'
+        typecheck-command: 'Command: {value}'
+        typecheck-exit-code: 'Exit code: {count}'
+        lint-target: 'Lint target: {value}'
+        lint-package: 'Package: {value}'
+        lint-command: 'Command: {value}'
+        lint-exit-code: 'Exit code: {count}'
+        diagnostic-total: 'Issues: {count}'
+        diagnostic-files: 'Diagnostic files: {count}'
+        diagnostic-errors: 'Errors: {count}'
+        diagnostic-warnings: 'Warnings: {count}'
+        path: 'Path: {path}'
+        preview-proposal-id: 'Preview proposalId: {proposalId}'
+        session: 'Session: {sessionId}'
+        write-mode: 'Write mode: {writeMode}'
+        preview-expires-at: 'Preview expires at: {value}'
+        preview-cache-state: 'Proposal cache state: {value}'
+        provider-model: 'Provider / model: {provider} / {model}'
+        proposal-store-root: 'Proposal cache dir: {path}'
+        proposal-store-source-of-truth: 'Source of truth: {value}'
+        proposal-store-disk-cache: 'Disk persistence: {value}'
+        proposal-store-pending-count: 'Pending proposals: {count}'
+        proposal-store-recovered-count: 'Recovered from disk: {count}'
+        proposal-store-expiring-soon-count: 'Expiring soon: {count}'
+        proposal-store-next-expires-at: 'Next expiry: {value}'
+        proposal-store-hydrated-at: 'Hydrated at: {value}'
+        persona-runtime-evaluated-at: 'Last evaluated at: {value}'
+        persona-runtime-message: 'Message preview: {value}'
+        persona-runtime-scene-updated-at: 'Scene mode updated at: {value}'
+        persona-runtime-state-updated-at: 'Persona state updated at: {value}'
+        persona-runtime-guard-updated-at: 'Anti-template guard updated at: {value}'
+        chat-tool-routing-evaluated-at: 'Last routed at: {value}'
+        chat-tool-routing-tools-compatibility: 'Tool compatibility: {value}'
+        chat-tool-routing-message: 'Message preview: {value}'
+        tool-route-diagnostic-at: 'Tool route recorded at: {value}'
+        tool-route-diagnostic-model: 'Model: {value}'
+        tool-route-diagnostic-phase: 'Phase: {value}'
+        tool-route-diagnostic-status: 'Status: {value}'
+        tool-route-diagnostic-reason: 'Reason: {value}'
+        tool-route-diagnostic-provider-base-url: 'Provider base URL: {value}'
+        tool-route-diagnostic-bundles: 'Bundles: {value}'
+        tool-route-diagnostic-tools: 'Tools: {value}'
+        tool-route-diagnostic-failure-kind: 'Failure kind: {value}'
+        tool-route-diagnostic-cache-updated: 'Compatibility cache updated: {value}'
+        tool-route-diagnostic-fallback-context-messages: 'Local fallback context messages: {count}'
+        tool-route-diagnostic-persistent-unsupported: 'Persistent unsupported recorded: {value}'
+        tool-route-diagnostic-message: 'Diagnostic message: {value}'
+        workspace-root: 'Workspace root: {workspaceRoot}'
+        existing-file: 'Existing file: {value}'
+        would-change-file: 'Would change file: {value}'
+        optimistic-sha256: 'Optimistic SHA-256: {sha256}'
+        first-changed-index: 'First changed index: {value}'
+        before-lines: 'Before lines: L{line} × {count}'
+        after-lines: 'After lines: L{line} × {count}'
+        chars-removed-added-delta: 'Chars removed/added/delta: -{removed} / +{added} / Δ{delta}'
+        matched-occurrences: 'Matched occurrences: {count}'
+        selected-occurrence: 'Selected occurrence: {count}'
+        insertion-index: 'Insertion index: {value}'
+        range: 'Range: {start}..{end}'
+      feedback:
+        no-file-paths-matched: 'No file paths matched {query}.'
+        single-candidate-resolved: 'Resolved a single candidate path: {path}.'
+        multiple-candidates-found: 'Search matched {count} candidate file paths. Pick the exact file below.'
+        applied-edit: 'Applied {writeMode} to {path}.'
+      errors:
+        integer-min: '{label} must be an integer >= {minimum}.'
+        no-session-git-command: No session is available for restricted Git commands.
+        no-session-typecheck: No session is available for restricted typecheck commands.
+        no-session-lint: No session is available for restricted lint commands.
+        no-session-preview: No session is available for command execution preview.
+        preview-before-apply-required: Apply can only use the proposalId returned by the current preview. Run preview first.
+        workspace-path-required: Workspace-relative file path is required.
+        target-required: '{mode} requires a non-empty target marker.'
+        occurrence-required: replace-nth-match requires occurrence >= 1.
+        range-required: replace-range requires both range start and range end.
+        no-session-search: No session is available for command execution search.
+        search-query-required: Search query is required.
+        select-candidate-first: Select a candidate path before applying it to the preview form.
+      hints:
+        title: Troubleshooting hints
+        file-diverged: The target file changed after the original transaction was applied, so rollback is blocked until the workspace state is reviewed.
+        file-missing: The workspace file no longer exists at the path recorded in the rollback plan.
+        file-already-exists: Restore expected the path to stay absent, but a file already exists there now.
+        only-applied: Only transactions still in the applied state can be rolled back.
+        no-rollback-plan: This transaction does not have reversible file changes recorded in its rollback plan.
+        no-later-rollback-transactions: There are no later applied transactions with rollback metadata for this checkpoint right now.
+        refresh-records: Refresh the transaction/checkpoint lists before retrying; the selected record may no longer be available in the current journal view.
+    context-flow:
+      title: Context Flow
+    lag-visualizer:
+      title: Lag Visualizer
+    performance-visualizer:
+      title: Performance Visualizer
+      description: Toggle FPS/long task/memory overlay
+    markdown-stress:
+      title: Markdown Stress
+      description: Stress markdown parsing and rendering with heavy chat payloads
+    widgets-calling:
+      title: Widget Calling
+
+screen-capture:
+  permissions-prompt:
+    title: Screen Capture
+    description: To capture screens or windows, screen and system audio recording permissions are required.
+    open-preferences: Open System Preferences
+    dismiss: Dismiss
+    instructions:
+      step-1: Open "System Preferences", select "Privacy & Security" from the sidebar.
+      step-2: In the "Screen & System Audio Recording" and "System Audio Recording Only" sections, turn on the switches for Wuwiii.
+      step-2-note: If Wuwiii is not listed, please add it manually by clicking the "+" button and selecting Wuwiii from the Applications folder.

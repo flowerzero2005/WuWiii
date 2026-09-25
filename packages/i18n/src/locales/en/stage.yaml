@@ -1,0 +1,170 @@
+chat:
+  actions:
+    clear-messages: Clear current conversation
+    close-personas: Close character list
+    collapse-personas: Collapse character list
+    disable-inner-voice: Turn off automatic inner notes
+    disable-semantic-memory: Turn off long-term memory search for this chat
+    disable-web-search: Turn off web search
+    enable-inner-voice: Automatically create private inner notes after replies
+    enable-semantic-memory: Allow searching long-term memory when needed (local lookup, no extra points)
+    enable-web-search: Let the current chat search the web when needed
+    hide-additional-capabilities: Hide additional chat capabilities
+    open-personas: Choose chat character
+    show-additional-capabilities: Show additional chat capabilities
+  capability-consent:
+    action: Enable
+    approval-required: Enable and confirm this official capability from the chat controls first.
+    cancel: Not now
+    changed-description: The price for this official capability has increased or its billing method has changed. Review the current price before enabling it again.
+    description: This is an official paid capability. Once confirmed, it stays enabled until the price increases or its billing method changes.
+    login-required: Sign in before enabling official paid capabilities.
+    price-unavailable: Current pricing is unavailable. Try again after the service reconnects.
+    prices:
+      embedding: '{points} points per semantic lookup'
+      inner-voice: 'Uses the official inner-note model; at least {points} points per generation'
+      speech: '{points} points per minute, with a minimum charge of {minimum} points'
+      transcription: '{first} points for the first minute, then {additional} points for each additional started minute'
+      web-search: '{points} points per search'
+    title: Enable {capability}?
+  capabilities:
+    inner-voice: Inner notes
+    semantic-memory: Semantic memory
+    speech: Speech output
+    transcription: Voice input
+    web-search: Web search
+  group:
+    minimum-members: A group chat must keep at least two characters.
+    remove-member-context: Right-click to remove this character from the group
+    name-label: Group name
+    name-placeholder: Enter a group name (optional)
+    member-already-in-room: Already in this group
+    add-member: 'Add {name} to group'
+    member-added: '{name} joined the group.'
+    member-removed: '{name} was removed from the group.'
+    member-change-failed: Could not update group members. Try again.
+    calls: '{count} independent model call | {count} independent model calls'
+    cancel-create: Cancel room
+    create: Create room
+    create-title: New group chat
+    delete-cancel: Keep room
+    delete-confirm: Delete room
+    delete-description: 'Delete "{name}" and all of its messages? This cannot be undone.'
+    delete-failed: Could not delete the group chat. Try again.
+    delete-room: 'Delete {name}'
+    delete-success: Group chat deleted.
+    delete-title: Delete group chat?
+    deleting: Deleting...
+    member-limit: Choose 1–4 characters
+    mention-hint: Mentioned members are the focus; this does not change who replies
+    mention-members: Mention group members
+    mention-confirm: Insert mentions
+    narration-label: Narration
+    narration-on: Narration on
+    narration-off: Narration off
+    narration-configure: Apply a room script in Group scripts before enabling narration.
+    narration-save-failed: Could not save narration settings. Try again later.
+    narration-speech-failed: Narration voice playback failed. Text narration will continue.
+    narration-speech-not-configured: Neither the narration voice nor the stage default voice is available. Configure either voice first.
+    script-settings: Open group script settings
+    expand-settings: Expand group settings
+    collapse-settings: Collapse group settings
+    new-room: New group
+    no-responder: Choose at least one character to reply
+    persona-unavailable: '{name} is unavailable and was skipped.'
+    personas: Personas
+    responder-login-required: '{name} uses official cloud. Sign in before asking this character to reply.'
+    responder-not-configured: '{name} does not have a chat model configured.'
+    responders: Replying this turn
+    empty-response: '{name} did not speak this turn.'
+    remove-member: 'Remove {name} from group'
+    rooms: Group chats
+    text-only: Group chat currently supports text messages only.
+  error:
+    actions:
+      open-account: Account & Points
+    official-cloud:
+      connection-failed: Unable to connect to the official cloud service. Check the service address or try again later.
+      insufficient-points: Not enough points. Open Account & Points to add more.
+      login-required: Sign in to use the official cloud model.
+      not-configured: The official cloud model is not configured. Contact the service operator.
+      unavailable: The selected official cloud model is temporarily unavailable. Try again later or switch models.
+  official-cloud-login-required: Sign in to use official cloud
+  official-cloud-send-disabled: You are signed out, so official cloud messages cannot be sent.
+  recommended-replies:
+    failed: Failed to generate recommended replies. Please try again later.
+    fill-input: Fill the message box
+    title: You might reply
+  message:
+    character-name:
+      airi: Wuwu
+      core-system: Core System
+      you: You
+  reasoning: Reasoning
+actions:
+  cancel: Cancel
+  interrupt: Interrupt
+  send: Send
+  voice-input-start: Voice input
+  voice-input-stop: Stop voice input
+voice-call:
+  accept: Accept
+  decline: Decline
+  incoming-title: '{name} is calling'
+  incoming-description: Wants to talk with you
+  already-active: A voice call is already active
+  collapse: Collapse voice call
+  configure-chat: Configure a chat model first
+  configure-hearing: Configure real-time hearing first
+  configure-speech: Configure speech output first
+  end: End voice call
+  ended: Voice call ended
+  expand: Expand voice call
+  microphone-error: 'Could not start the microphone: {message}'
+  transcription-error: 'Could not connect to real-time transcription: {message}'
+  transcription-rate-limited: 'Voice recognition was started too frequently. Try again in {seconds} seconds.'
+  transcription-concurrency: The previous voice call is still closing. Try again shortly.
+  transcription-busy: Real-time voice recognition is busy. Try again shortly.
+  sign-in: Sign in to the current chat service first
+  start: Start voice call
+  started: Voice call started
+  starting: Connecting
+  listening: Listening
+  responding: '{name} is replying'
+  source-chat: Chat
+  source-hearing: Hearing
+  source-speech: Speech
+  source-unavailable: Not configured
+chat-cleanup:
+  title: Clear conversation
+  description: Choose what should be removed from this conversation.
+  messages-only: Clear chat messages
+  messages-only-description: Keep short-term context and persona state.
+  messages-and-memory: Clear messages and short-term memory
+  messages-and-memory-description: Reset this conversation's short-term context and state.
+message: Chat, write a document, or create a file...
+operations:
+  load-models: Load Models
+  load-models-status:
+    loading: Loading
+    ready: Ready
+select-a-audio-input: Select a Audio Input
+select-a-model: Select a model
+select-a-voice: Choose a voice
+viewers:
+  debug-menu:
+    emotions: Emotions
+    emotions-btn:
+      angry: 😠 Angry
+      awkward: 😳 Awkward
+      happy: 😄 Happy
+      neutral: 🙂 Neutral
+      question: 🤔 Question
+      sad: 😫 Sad
+      surprised: 🤯 Surprised
+      think: 🤨 Think
+    vrm:
+      camera: Camera
+      model:
+        title: Model
+waiting: Waiting

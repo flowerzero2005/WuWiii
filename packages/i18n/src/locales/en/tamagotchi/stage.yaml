@@ -1,0 +1,897 @@
+operations:
+  load-models: Load Models
+  load-models-status:
+    loading: Loading
+    ready: Ready
+bootstrap:
+  starting: Starting Wuwiii
+  interface: Preparing the interface
+  services: Connecting local services
+  model: Loading the character
+  character: Restoring character state
+  conversation: Preparing conversation memory
+  provider: Preparing the conversation model
+  windows: Preparing desktop windows
+  ready: Ready
+  failed: Wuwiii could not finish starting
+  failed-detail: Wuwiii could not finish starting. Retry, export diagnostics, or quit the app.
+  retry: Try again
+  quit: Quit app
+  open-diagnostics: Open diagnostics
+  export-diagnostics: Export diagnostics
+  diagnostics-exported: Diagnostics exported
+  waiting: Please wait while the character and chat windows finish preparing
+resource-status:
+  loading: Resources loading...
+  ready: Ready!
+  modules-pending: Some modules are not ready yet...
+  modules-ready: All modules are ready!
+  preparing: Preparing resources...
+speech-control:
+  title: Voice source
+  enable: Turn voice on
+  disable: Turn voice off
+  provider: Voice provider
+  model: Speech model
+  voice: Voice
+  voice-unavailable: This voice is unavailable. Your previous voice is unchanged.
+  official-cloud-description: Official voices are managed by the server catalog. Open the voice panel to search, favorite, and switch primary or secondary voices.
+  language: Speaking language
+  configure: Voice settings
+  configure-first: Configure a voice first
+  not-configured: No voice configured
+  languages:
+    zh-CN: Chinese
+    en-US: English
+    ja-JP: Japanese
+    ko-KR: Korean
+update:
+  available: Wuwiii {version} is available
+  required: Wuwiii {version} is required
+  required-description: This version contains a required update. Install it before continuing to use Wuwiii.
+  download: Download
+  downloaded: Wuwiii {version} is ready
+  restart: Restart and update
+  about:
+    project: Project
+    desktop-version: Desktop version
+    current-version: Current version
+    download: Download update
+    downloading: Downloading update...
+    ready: 'Update ready to install (v{version}).'
+    restart: Restart to update
+    confirm-restart: Confirm restart
+    cancel: Cancel
+    error: 'Update check failed: {message}'
+    unknown-error: Unknown error
+    checking: Checking...
+    latest: Latest version
+    disabled: Updates unavailable
+    retry: Retry check
+    check: Check for updates
+    links: Links
+    home: Home
+    documentation: Documentation
+    available-title: Update available
+    available-description: 'A new version (v{version}) is available.'
+    no-release-notes: No release notes provided.
+    confirm-download: Confirm download
+model-control:
+  title: Conversation model
+  switch: Switch provider or model
+  provider: Provider
+  model: Model
+  model-name: Model name
+  no-model: No model
+  refresh: Refresh model list
+  points-short: '{points} pts/{tokens}'
+  points-detail: '{points} points / {tokens} tokens'
+  context-limit: 'Context {tokens}'
+  output-limit: 'Output {tokens}'
+  workbench-price: 'Workbench reference: {points} points / {tokens} tokens'
+docs:
+  theme:
+    navbar:
+      appearance:
+        title: Appearance
+'drag-to-move-window': Drag to move window
+'controls-island':
+  'fade-on-hover':
+    enable: Auto hide
+    disable: Always show
+  'mouse-mode':
+    title: Mouse interaction
+    interactive:
+      title: Interactive
+      description: Interact with the character and controls
+    smart:
+      title: Smart pass through
+      description: Pass clicks through transparent areas only
+  'open-settings': Settings
+  'open-chat': Full Chat
+  'open-workbench': Open Workbench
+  'open-quick-chat': Chat Bubble
+  'open-butler-tasks': House Butler
+  'open-turtle-soup': Open Turtle Soup
+  'refresh': Refresh
+  'open-hearing-controls': Open hearing Controls
+  'drag-to-move-window': Drag to move window
+  'switch-to-light-mode': Switch to light mode
+  'switch-to-dark-mode': Switch to dark mode
+  'close': Close
+  'expand': Expand
+  'collapse': Collapse
+
+butler:
+  title: House Butler is here
+  orb:
+    open: Open House Butler
+  status:
+    idle: Ready when you need me
+    pending: '{count} reminder(s) waiting'
+    due: '{count} reminder(s) due now'
+  tabs:
+    today: Today
+    tasks: Tasks
+    tools: Tools
+  actions:
+    chat: Chat
+    voice: Voice
+    voice-unavailable: This voice is unavailable. Your previous voice is unchanged.
+    reminder: Reminder
+    alarm: Alarm
+    timer: Timer
+    tasks: Tasks
+    more: More
+    settings: Settings
+    workbench: Workbench
+    quick-chat: Chat bubble
+    turtle-soup: Turtle Soup
+    light: Light
+    dark: Dark
+    refresh: Refresh
+    collapse: Collapse
+    orb-settings: Orb view settings
+    mute-reminders: Mute reminders
+    unmute-reminders: Unmute reminders
+    enable-do-not-disturb: Turn on DND
+    disable-do-not-disturb: Turn off DND
+    lock-position: Lock position
+    unlock-position: Unlock position
+  settings:
+    default-model: Current character
+    orb-title: Character portrait
+    orb-description: Adjust this character's framing in the Butler orb, chat contacts, messages, and calls. Each model is saved separately.
+    crop-x: Left/right
+    crop-y: Up/down
+    crop-scale: Zoom
+    lens: Convex lens
+    reset-orb: Reset portrait framing
+    notifications-title: Notifications
+    notification-status:
+      enabled: On
+      muted: Muted
+      do-not-disturb: DND
+      quiet-hours: Quiet
+    mute-reminders: Mute reminders
+    reminder-sound: Reminder sound
+    reminder-sound-volume: Volume
+    test-reminder-sound: Test sound
+    sound:
+      off: Off
+      focus-tap: Focus tap
+      soft-chime: Soft chime
+      warm-bell: Warm bell
+    do-not-disturb: Do not disturb
+    quiet-hours: Quiet hours
+    quiet-start: Start
+    quiet-end: End
+    desktop-title: Desktop controls
+    mouse-interaction-title: Mouse interaction
+    mouse-interaction-description: Choose how the character window responds to mouse clicks.
+    always-on-top: Always on top
+    visible-all-workspaces: Show on all desktops
+    lock-position: Lock position
+    opacity: Opacity
+    window-size: Size
+    hide-butler: Hide
+    quit-airi: Quit
+    quit-confirm-title: Quit Wuwiii?
+    quit-confirm-description: The desktop character, Quick Chat, and Butler reminders will stop running.
+    quit-confirm-cancel: Cancel
+    quit-confirm-action: Quit
+  overview:
+    idle-title: Today is quiet
+    idle-description: Nothing urgent. I can chat, remember a reminder, or help organize the next thing.
+    due-title: This is due now
+    next-preview: 'Next: {time} {title}'
+    quiet-preview: No reminders yet today
+    due-summary: '{count} due now'
+    tasks-summary: '{count} waiting today'
+    no-tasks-summary: No tasks yet
+    task-page-hint: Reminders, alarms, timers, and future todos stay here.
+    talk: Talk to current resident
+    add-reminder: Add reminder
+    open-tasks: See tasks
+    schedule:
+      now: Now
+      missed: Missed
+      today: Today
+      upcoming: Later
+      timer: Timer
+      empty: No reminders, alarms, or timers scheduled.
+      today-short: Today
+      day-count: '{count}'
+  tools:
+    tasks: Tasks
+    notifications: Notifications
+    communication: Communication
+    desktop: Desktop
+    advanced: Advanced
+  tasks:
+    placeholder: Add a reminder
+    placeholders:
+      reminder: What should the current resident remind you about?
+      alarm: Alarm label (optional)
+      timer: Timer label (optional)
+    note-placeholder: Note, context, or thing to open (optional)
+    add: Add reminder
+    submit:
+      reminder: Add
+      alarm: Set
+      timer: Start
+    save: Save
+    saving: Saving
+    cancel-edit: Cancel
+    modes:
+      reminder: Reminder
+      alarm: Alarm
+      timer: Timer
+    repeat:
+      none: Once
+      daily: Daily
+      weekly: Weekly
+    repeat-days: Repeat days (none means one-off)
+    weekdays:
+      0: Sun
+      1: Mon
+      2: Tue
+      3: Wed
+      4: Thu
+      5: Fri
+      6: Sat
+    defaults:
+      reminder: Reminder
+      alarm: Alarm
+      timer: '{time} timer'
+    errors:
+      save-failed: The task could not be saved. Your input is still here; please try again.
+    alarm-time: Time
+    alarm-date-time: Ring time
+    date: Date
+    time: Time
+    timer-hours: Hr
+    timer-minutes: Min
+    timer-seconds: Sec
+    custom-time: Exact time
+    timer-preset: '{count}m'
+    timer-remaining: '{time} left'
+    notification-title: House Butler reminder
+    delivery:
+      blocked: Notification muted or blocked
+      failed: System notification unavailable
+    edit: Edit
+    done: Done
+    pause: Pause
+    resume: Resume
+    reset: Reset
+    snooze: Snooze 10m
+    snooze-minutes: '{count}m later'
+    cancel: Cancel
+    snooze-short: Later
+    snooze-short-minutes: '{count}m'
+    overdue: '{count}m overdue'
+    due-in-minutes: 'in {count}m'
+    due-at: 'at {time}'
+    timer-paused: 'paused, {time} left'
+    presets:
+      10m: 10m
+      30m: 30m
+      1h: 1h
+      today: Today
+      tomorrow: Tomorrow
+      custom: Custom
+  empty:
+    overview: No urgent reminders. Use the shortcuts when you need the current resident.
+    tasks: No reminders yet.
+
+workbench:
+  title: Command Workbench
+  session:
+    idle: Idle
+    inspecting: Inspecting
+    planning: Planning
+    running: Running
+    waiting-approval: Waiting for confirmation
+    compacting: Compacting
+    paused: Paused
+    stopped-action: Stopped
+    completed: Completed
+    failed: Failed
+  workspace:
+    none: No workspace
+    default-session: default session
+  workspace-guard:
+    title: Wrong workspace
+    unknown-workspace: another workspace
+    current-missing: no selected workspace
+    blocked-summary: '{action} was blocked. This item belongs to {recordedWorkspace}, but the current workspace is {currentWorkspace}. {reason}'
+    next-step: Switch back to {recordedWorkspace}, or regenerate this item in the current workspace before retrying.
+    action:
+      apply-proposal: applying this change
+      project-preview: starting project preview
+      run-recipe: running this command
+    reason:
+      current-workspace-missing: No workspace is selected.
+      workspace-id-mismatch: The recorded workspace ID is different from the selected workspace.
+      workspace-root-mismatch: The recorded workspace path is different from the selected workspace.
+  memory:
+    all: All
+    goals: Goals
+    plans: Plans
+    tools: Tools
+    commands: Commands
+    files: Files
+    diffs: Diffs
+    compact: Compact
+    note-title: '{kind} note'
+  task:
+    auto-title: Goal to clarify
+    untitled: Untitled task
+    auto-run-title: Run {recipe}
+    auto-run-summary: Run the {recipe} auxiliary check and record the result on this task.
+    delete-file-title: Delete {path}
+  tabs:
+    run: Work
+    files: Files
+    changes: Changes
+    preview: Preview
+    details: Details
+  input-mode:
+    new-task: New task
+    continue-task: Continue
+    ask: Ask
+  work-mode:
+    confirm-major: Confirm changes
+    autopilot: Open run
+  work-mode-description:
+    confirm-major: The current resident can inspect and prepare work, but major edits and risky actions still need confirmation.
+    autopilot: The current resident can keep running approved auxiliary checks and routine workspace work, while hard safety boundaries still apply.
+  model-selection:
+    mode:
+      label: Model selection
+      auto: Auto
+      manual: Manual
+    reason:
+      manual-selection: 'Manual: {model}'
+      official-codex-for-code: 'Auto: {model} for code/game'
+      official-claude-for-long-context: 'Auto: {model} for complex long-context work'
+      official-long-context: 'Auto: {model} for long context'
+      official-balanced-default: 'Auto: {model}'
+      configured-provider-fallback: 'Auto: {model} from configured provider'
+      chat-model-fallback: 'Auto: {model} from chat'
+  kind:
+    user-goal: Goal
+    plan: Plan
+    tool-result: Tool
+    command-output: Command
+    file-summary: File
+    diff-state: Diff
+    approval: Approval
+    checkpoint: Checkpoint
+    compact-summary: Compact
+    note: Note
+    error: Error
+  quick:
+    plan: Plan
+    observe: Observe
+    command: Command
+    diff: Diff
+  trust:
+    unknown: Unknown
+    trusted: Trusted
+    restricted: Restricted
+  permission:
+    observe: Observe
+    edit-preview: Preview
+    edit-apply: Apply
+    execute: Execute
+    elevated: Elevated
+  permission-description:
+    observe: Read and inspect only. The current resident can view workspace context but cannot prepare edits or run commands from this level.
+    edit-preview: The current resident can prepare proposed edits and diffs for review, but cannot apply them to files.
+    edit-apply: The current resident can apply reviewed file edits inside the workspace, while command execution still stays separate.
+    execute: The current resident can run approved auxiliary checks such as typecheck, lint, test, and build.
+    elevated: Reserved for high-risk or privileged work. This level should always require explicit approval.
+  retention:
+    summarize: Summarize
+    artifact-ref: Artifact ref
+    pin: Pin
+  retention-description:
+    summarize: Keep this item as a compact summary that can be compressed later.
+    artifact-ref: Keep a short note and link it to a command, diff, file, or other artifact instead of carrying the full content.
+    pin: Keep this item in the active work context during compact, useful for goals, current plans, and key decisions.
+  labels:
+    commands: Commands
+    console: Console
+    workspace: Workspace
+    context: Context
+    cwd: CWD
+    goal: Goal
+    permission: Permission
+    protection: Protection
+    protected-paths: Paths
+    protected-rules: Rules
+    profile: Profile
+    memory: Memory
+    execution-log: Execution log
+    details: Details
+    terminal: Terminal
+    search: Search
+    audit: Audit
+    selected: Selected
+    summary: Summary
+    body: Body
+    artifacts: Artifacts
+    total-items: Total items
+    context-units: Context units
+    active-run: Active run
+    running: Running
+    latest-result: Latest
+    work-context: Work context
+    tasks: Tasks
+    ai-process: Current resident
+    execution-stream: Execution stream
+    work-flow: Progress
+    current-task: Current task
+    continuing-task: Continuing
+    airi-plan: Resident plan
+    task-process: Task process
+    task-steps: '{count} steps'
+    task-steps-window: '{visible} / {total} steps'
+    terminal-entries: '{count} outputs'
+    latest-step: Latest
+    run-project: Run project
+    project-preview: Project preview
+    static-preview: Static preview
+    checks: Auxiliary checks
+    session-details: Session details
+    run-config: Check item
+    workspace-files: Files
+    workspace-notes: Workspace notes
+    provider: Provider
+    model: Model
+    belongs-to-task: Task
+  command:
+    labels:
+      command: Command
+      duration: Duration
+      exit-code: Exit code
+      stdout: Stdout
+      stderr: Stderr
+      output: Output
+      raw-output: Raw output
+      error: Error
+      risk: Risk
+    status:
+      running: Running
+      success: Success
+      failed: Failed
+      cancelled: Cancelled
+    terminal:
+      empty: Terminal only shows command, auxiliary check, or project preview output. Writing tasks without commands leave it empty.
+      no-raw-output: Raw output has not been captured for this run yet.
+    risk:
+      low: Low
+      normal: Normal
+      high: High
+      blocked: Blocked
+    risk-reason:
+      empty-command: No command was provided.
+      high-risk-command: The command matches a high-risk category.
+      low-local-diagnostic: Local git status and diff commands are low-risk diagnostics.
+      low-local-recipe: This is an allowlisted low-risk local check.
+      normal-local-command: This is a local check, build, test, or preview command.
+      normal-project-preview: This dev recipe is a normal-risk local preview.
+      cwd-outside-workspace: The recipe working directory is outside the selected workspace.
+      recipe-disabled: This workspace recipe is disabled.
+      recipe-high-risk: This recipe is configured as high risk.
+      recipe-run-risk-not-low: Local check recipes must be configured as low risk.
+      unknown-command: This command is not recognized as an ordinary local diagnostic or project recipe.
+      unsupported-project-preview-kind: Only dev recipes can start a project preview.
+      unsupported-recipe-command: This recipe is not an allowlisted package-manager script.
+      unsupported-recipe-kind: This recipe kind is not runnable as a local check in MVP-1.
+    policy-blocked-title: Command policy blocked {recipe}
+    policy-blocked-summary: '{recipe} was not started. {reason}'
+    values:
+      pending: pending
+      no-exit-code: no exit code
+      truncated: Output truncated
+  web-search:
+    empty: Search shows only web search requests and source state. This task has not recorded a search step.
+    labels:
+      query: Query
+      sources: Sources
+      provider: Provider
+    provider-status:
+      completed: completed
+      failed: failed
+      not-run: not run
+      unconfigured: unconfigured
+  audit:
+    count: '{count} entries'
+    count-window: '{visible} / {total} entries'
+    developer-details: Developer details
+    empty: No audit entries yet.
+    open-related: Open related detail
+    kind:
+      planner-decision: Planner decision
+      file-read: File read
+      file-proposal: File proposal
+      file-apply: File apply
+      command: Command
+      web-search: Web search
+      confirmation: Confirmation
+      error: Error
+      recovery: Recovery
+    source:
+      memory: Memory
+      runtime: Runtime
+      command: Command
+    detail:
+      event-id: Event
+      event-kind: Event kind
+      source: Source
+      status: Status
+      detail-tab: Detail tab
+      workspace-id: Workspace
+      workspace-root: Workspace root
+      file-path: File
+      command-run-id: Command run
+      proposal-id: Proposal
+      risk: Risk
+      risk-reason: Risk reason
+      risk-reason-code: Risk code
+      search-query: Search query
+      search-source-count: Search sources
+      search-provider-status: Search provider
+  performance:
+    folded-audit-entries: '{count} earlier audit entries are folded for performance.'
+    folded-process-events: '{count} earlier process events are folded for performance.'
+  card:
+    needs-confirmation: Needs confirmation
+    completed: Completed
+    updated: Updated
+  process:
+    current: Current
+    mode: Work mode
+    model: Workbench model
+    confirmation: Confirmation
+    no-confirmation: No confirmation needed
+  process-stage:
+    waiting-confirmation: Waiting for your confirmation
+    previewing-project: Previewing {recipe}
+    running-command: Running {recipe}
+    agent-loop: Current resident is working
+    choose-workspace: Choose a workspace
+    choose-workspace-description: The current resident needs a workspace before browsing files or running safe project commands.
+    tell-task: Tell the current resident what to work on
+    tell-task-description: Use the input box below to describe the task, paste an error, or ask for the next step.
+    reviewing-card: Current task
+    idle: Ready for the next step
+    idle-description: No command is running right now.
+  agent-loop:
+    run-label: Resident task loop
+    inspection-title: Inspect workspace
+    plan-title: Next plan
+    edit-plan-title: Prepare {task}
+    error-title: Resident task stopped
+    deferred-title: Queued note
+    continue-title: Task updated
+    run-check-title: Run {recipe}
+    preview-title: Preview {recipe}
+    edit-preview-skipped-title: No file change prepared yet
+    inspect-only-complete-title: Current state organized
+    none: none
+    no-files: no files found
+    deferred-active: The instruction was recorded. The current resident will not start another loop while a command or preview is already running.
+    continue-body: Recorded on the current task. The current resident will infer the next step from task context.
+    choose-workspace-first: Choose a workspace first so the current resident can inspect files and decide the next safe step.
+    next-inspecting: Inspect the selected workspace.
+    next-inspect-only: Current task state has been organized.
+    next-edit-preview: Prepare a file edit preview without writing until review.
+    next-run-check: Run the {recipe} auxiliary check and inspect the result.
+    next-preview-project: Start the {recipe} project preview.
+    next-web-search: Record the web search request and source state.
+    inspect-workspace: 'Workspace: {workspace}'
+    inspect-files: 'Top-level files: {files}'
+    inspect-checks: 'Auxiliary checks: {recipes}'
+    inspect-project-runs: 'Project run entries: {recipes}'
+    inspect-directory-failed: 'Could not inspect files: {error}'
+    plan-received: 'Task: {task}'
+    plan-run-check: 'Run the controlled auxiliary check: {recipe}.'
+    plan-preview-project: 'Start the controlled project preview: {recipe}.'
+    plan-web-search: 'Search current external information for: {query}.'
+    plan-web-search-boundary: Search details stay in the Search process view; raw results should not flood chat.
+    plan-edit-preview: Prepare file changes as a reviewable preview before anything is written.
+    plan-inspect-only: Organize the current task state; if the goal is clear enough, the next step will move into edits or running.
+    plan-observe-result: Observe the result in this task card before deciding the next step.
+    plan-boundary: File writes go through the Changes review; installs, deletes, network commands, and elevated actions still use a dedicated confirmation path.
+    run-check-start: 'Starting controlled auxiliary check: {recipe}.'
+    preview-start: 'Starting controlled project preview: {recipe}.'
+    web-search-plan-title: Prepare web search
+    web-search-query-title: Web search requested
+    web-search-result-title: Web search source state
+    web-search-query-body: 'Query: {query}'
+    web-search-start: 'Preparing web search: {query}'
+    web-search-deferred: 'Query recorded: {query}. Sources available now: {sourceCount}. Provider execution is not connected in this MVP-1 baseline yet.'
+    web-search-deferred-next-step: 'Search request recorded for: {query}.'
+    edit-preview-skipped: A pending change already needs review, or the workspace is not ready yet. The current resident paused new file-change generation.
+    inspect-only-complete: This step did not trigger file edits or command runs. The current resident recorded the current state on this task.
+    public-kind: Resident summary
+    public-inspection-title: Workspace checked
+    public-plan-title: The current resident organized the next step
+    public-run-check-title: Preparing to run {recipe}
+    public-preview-title: Preparing to preview {recipe}
+    public-web-search-query-title: Web search requested
+    public-web-search-result-title: Search source state recorded
+    public-deferred-title: Instruction recorded
+    public-note-title: Resident note
+    public-inspection-summary: Found {fileCount} top-level files, {checkCount} check entries, and {runCount} project run entries.
+    public-inspection-error-summary: Workspace inspection did not finish. Details are folded below.
+    public-inspection-generic: Workspace context was checked. Details are folded below.
+    public-plan-run-check: Wuwiii will run the {recipe} auxiliary check first, then use the result to decide the next step.
+    public-plan-preview-project: Wuwiii will start the {recipe} project preview first and check whether it runs.
+    public-plan-edit-preview: The current resident is preparing reviewable file changes.
+    public-plan-web-search: Wuwiii will use current external information and keep source details in Search.
+    public-plan-inspect-only: The current resident organized the current task state.
+    public-deferred-summary: Another action is already running, so this input was kept on the current task.
+    public-run-check-summary: Starting the {recipe} auxiliary check.
+    public-preview-summary: Starting {recipe}.
+    public-web-search-query-summary: 'Search query: {query}.'
+    public-web-search-result-summary: 'Sources available now: {sourceCount}. Provider status is recorded in Search.'
+    public-error-summary: The current resident hit a problem while handling this step. Details are folded below.
+    internal-details: Process details
+  start:
+    eyebrow: Wuwiii Workbench
+    title: The current resident is ready to take the task
+    description: Confirm the project first, then hand the current resident the work. The process stays on the right and interrupts you only when confirmation is needed.
+    workspace: 1. Workspace
+    workspace-empty: Pick a project folder
+    task: 2. Task
+    task-empty: Describe what the current resident should do
+    task-ready: Task cards are recording this work
+    process: 3. Process
+    focus-input: Hand to current resident
+  compact:
+    manual-title: Manual compact
+    auto-title: Auto compact
+  mini:
+    title: Advanced workbench tucked away
+    description: Continue from a Butler task when you need files, commands, or detailed work.
+    resume: Continue advanced work
+  actions:
+    pause: Pause session
+    resume: Resume session
+    stop: Stop current action
+    collapse: Collapse to mini menu
+    expand: Expand workbench
+    select-workspace: Select workspace
+    save-goal: Save Goal
+    save: Save
+    compact: Compact now
+    add-plan: Add plan
+    add-selected: Add {kind}
+    send: Send
+    send-to-airi: Send to current resident
+    delete-item: Delete record
+    delete-task-card: Delete task card
+    resume-from-card: Resume from this card
+    continue-task-card: Continue task card
+    collapse-sidebar: Collapse side bar
+    expand-sidebar: Expand side bar
+    close: Close workbench
+    minimize-window: Minimize
+    maximize-window: Maximize
+    restore-window: Restore
+    zoom-in-file: Increase file text size
+    zoom-out-file: Decrease file text size
+    clear-errors: Clear errors and refresh status
+    close-file-preview: Close file preview
+    save-file: Save file
+    reload-file: Reload from disk
+    revert-file: Revert unsaved edits
+    run: Run
+    run-file: Run this file
+    refresh-files: Refresh files
+    delete-file: Delete file
+    remove-workspace: Remove workspace from recent list
+    preview-project: Preview project
+    stop-preview: Stop preview
+    refresh-preview: Refresh preview
+    open-preview-external: Open preview externally
+    run-recipe: Run auxiliary check
+    rerun-recipe: Rerun check
+    cancel-continuation: Start a separate new task next
+    voice-input-start: Voice input
+    voice-input-stop: Stop voice input
+  file-editor:
+    labels:
+      editor: Editor
+      preview: Preview
+      unsaved: Unsaved
+      readonly: Read-only
+      saving: Saving
+      running: Running
+    readonly:
+      no-file: No file selected.
+      truncated: This file preview is truncated, so editing is disabled.
+      large-file: This file is too large for the embedded editor.
+      unsupported-file-type: This file type is treated as read-only.
+    errors:
+      missing-base-hash: The original file hash is missing. Reload the file before saving.
+      dirty-close-blocked: Save or revert unsaved edits before closing this file.
+      dirty-reload-blocked: Save or revert unsaved edits before reloading this file.
+      dirty-delete-blocked: Save or revert unsaved edits before preparing deletion for this file.
+  project-run:
+    choose-workspace: Choose a workspace before previewing a project.
+    detected: 'Found project run entry: {recipe}. Preview project starts a controlled run session in this workspace.'
+    policy-blocked: 'Project preview is blocked by command policy: {reason}'
+    running: Running {recipe}; waiting for a preview URL from the project output.
+    running-url: 'Project is running: {url}'
+    previewing: Project preview
+    empty: No project run entry yet. Continue the task and the current resident can create or identify one later.
+    status:
+      pending: Pending
+      starting: Starting
+      running: Running
+      stopping: Stopping
+      stopped: Stopped
+      failed: Failed
+  static-preview:
+    empty-title: No preview yet
+    empty-description: Apply an HTML proposal with preview, or start a project preview to show it here.
+    load-failed-title: This file cannot be previewed
+    load-failed-description: This format cannot be viewed or played in Workbench. Open it with another app on your system.
+  checks:
+    description: Optional self-checks, not the main run entry. Use them after changes or when investigating an error.
+  transient:
+    greeting-title: Current resident is here
+    greeting-body: Tell me what to work on and I will handle it from the current workspace.
+    no-task-title: No active task
+    no-task-body: Describe the task first. Once a task card exists, the current resident will infer the next step from its context.
+  confirmation:
+    pending-title: Waiting for confirmation
+  changes:
+    review-title: File changes
+    review-summary: '{count} change record(s) are ready; inspect details in the Changes panel.'
+    open-panel: View changes
+    review-and-confirm: Review and confirm changes
+    proposal-title: Prepare {path}
+    proposal-summary: 'Prepared {path}: +{added} chars, -{removed} chars. Nothing is written until you apply it.'
+    delete-proposal-title: Prepare deletion of {path}
+    delete-proposal-summary: 'Prepared deletion of {path}: removes {removed} chars of content. Nothing is deleted until you apply it.'
+    generated-invalid: The current resident did not generate a usable file change.
+    diff-preview: Diff preview
+    content-preview: Content preview
+    file-meta: Waiting for review
+    file-meta-with-mode: '{mode} · waiting for review'
+    file-meta-delete: Delete file · waiting for review
+    unchanged: No content change
+    status-pending: Pending
+    status-applied: Applied
+    status-discarded: Discarded
+    status-conflict: Conflict
+    status-stale: Stale
+    fact-proposal-id: 'proposal {proposalId}'
+    fact-base-hash: 'base {baseHash}'
+    fact-base-hash-missing: base new file
+    fact-workspace: 'workspace {workspaceId}'
+    fact-expires-at: 'expires {time}'
+    waiting-apply: Waiting to apply {path} from the Changes panel
+    waiting-apply-multiple: Waiting to apply {count} file changes from the Changes panel
+    apply: Apply
+    apply-and-preview: Apply and Preview
+    apply-all: Apply all
+    applying: Applying
+    discard: Discard
+    discard-all: Discard all
+    discarding: Discarding
+    applied-title: Applied {path}
+    applied-summary: Applied the file change for {path}.
+    deleted-title: Deleted {path}
+    deleted-summary: Deleted {path}.
+    applied-next-step: Applied {path}; open the file or run the project to check it.
+    applied-next-step-preview: Applied {path}; next, preview the project with {recipe}.
+    deleted-next-step: Deleted {path}; open the workspace or run the project to check it.
+    preview-failed-title: Preview failed
+    preview-failed-summary: 'Applied the file change, but the static preview did not start: {message}'
+    applied-final-summary: Applied {path}; the file is now written in the workspace.
+    applied-final-summary-preview: Applied {path}; the file is written, and you can preview it with {recipe}.
+    deleted-final-summary: Deleted {path}; the workspace now has that deletion applied.
+    applied-final-summary-multiple: Applied {count} file changes; the workspace is up to date with those changes.
+    apply-failed-title: Could not apply change
+    conflict-title: Conflict in {path}
+    conflict-summary: '{path} changed after this proposal was created. Regenerate the change before applying it.'
+    conflict-next-step: '{path} has a conflict. Save or revert your manual edits, then regenerate this file proposal.'
+    manual-edit-conflict-summary: '{path} has unsaved manual edits in the editor. Save or revert them before applying the resident proposal.'
+    apply-conflict-summary: '{path} changed on disk after the resident proposal was created. The proposal was not applied.'
+    stale-summary: '{path} proposal has expired. Regenerate it before applying.'
+    discard-failed-title: Could not discard change
+    discarded-title: Discarded {path}
+    discarded-summary: Discarded the pending change for {path}; no file was written.
+    discarded-next-step: Discarded {path}; continue with adjusted requirements or regenerate the change.
+  risk-notice:
+    title: Review before using Workbench
+    description: Workbench can access a local workspace and project processes. Confirm the workspace and planned work before continuing.
+    read-only: Browsing and reading files are lower-risk actions, but their contents may still include private or sensitive information.
+    file-changes: File changes appear as proposals first; nothing is written until you explicitly apply it in Changes.
+    guarded-actions: Commands, installs, deletions, elevated actions, external access, and cross-workspace actions remain separately guarded or confirmed. This notice never bypasses those checks.
+    cancel: Not now
+    confirm: I understand, open Workbench
+  input:
+    goal-placeholder: Task objective
+    workspace-notes: Workspace notes
+    placeholder-mini: Tell the current resident what to do next
+    placeholder-full: Describe a task, write a document/create a file, paste an error, or ask the current resident what to do next
+    placeholder-continue: Add the next instruction to the current task
+    voice-listening: Listening. Transcription will be inserted here before sending.
+    voice-recording: Recording. Stop to transcribe into the input.
+    voice-active-elsewhere: Voice input is already active in another chat surface.
+  empty:
+    title: No activity yet
+    description: Session memory is empty.
+    no-selection: No selection.
+    no-selection-title: Select a task to review the process
+    no-selection-description: Work cards on the left show what the current resident has organized. Select a task to see steps, results, and confirmation details on the right.
+    no-recipes: No runnable check items for this workspace.
+    no-checks: No auxiliary checks found for this workspace.
+    awaiting-task: Waiting for a task
+    no-files: No files loaded yet.
+    no-workspace-files: Choose a workspace to browse files.
+    no-provider: No provider
+    current-provider: Current provider
+    no-model: No model
+    run-title: No work cards yet
+    run-description: Tell the current resident what to do, then commands and results will appear here.
+    files-title: No file context yet
+    files-description: File summaries will appear here when the current resident reads or records workspace files.
+    changes-title: No changes yet
+    changes-description: Diff and change summaries will appear here after the current resident prepares or reviews edits.
+    preview-title: No preview yet
+    preview-description: Browser previews for generated HTML or project runs will appear here.
+    details-title: No details yet
+    details-description: Terminal output, process records, and audit details will be shown here.
+  details:
+    counts: '{pinned} pinned / {compact} compact'
+  values:
+    yes: yes
+    no: no
+    loading: Loading
+    lines: lines
+
+notice:
+  'fade-on-hover':
+    title: Fade on Hover
+    intro: Automatically fades the character when your cursor roams nearby. It helps reduce distractions while keeping your character visible.
+    opacity: After turning on, the opacity drops to {value} for both {targets} when your cursor is nearby.
+    toggle: You can toggle it off by hovering at {controls}, then clicking the {icon} again.
+    controls-label: Controls Island
+    icon-label: eye-slash icon
+    value: '0'
+    targets: Character and UI
+    confirm: Got it
+    dont-show-again: Don’t show again
+    preparing: Preparing…
+    read-more: Read more
+    preview-title: What is it?

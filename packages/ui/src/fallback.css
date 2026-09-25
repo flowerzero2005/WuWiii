@@ -1,0 +1,103 @@
+:root {
+  --chromatic-hue: 220.44;
+  --chromatic-chroma: calc(0.18 + (cos(var(--chromatic-hue) * 3.14159265 / 180) * 0.04));
+  --chromatic-chroma-50: calc(var(--chromatic-chroma) * 0.3);
+  --chromatic-chroma-100: calc(var(--chromatic-chroma) * 0.5);
+  --chromatic-chroma-200: calc(var(--chromatic-chroma) * 0.6);
+  --chromatic-chroma-300: calc(var(--chromatic-chroma) * 0.75);
+  --chromatic-chroma-400: calc(var(--chromatic-chroma) * 0.85);
+  --chromatic-chroma-500: var(--chromatic-chroma);
+  --chromatic-chroma-600: calc(var(--chromatic-chroma) * 1.15);
+  --chromatic-chroma-700: calc(var(--chromatic-chroma) * 1.1);
+  --chromatic-chroma-800: calc(var(--chromatic-chroma) * 0.85);
+  --chromatic-chroma-900: calc(var(--chromatic-chroma) * 0.7);
+  --chromatic-chroma-950: calc(var(--chromatic-chroma) * 0.5);
+
+  --airi-surface-page-base: rgb(245 246 248);
+  --airi-surface-panel-base: rgb(255 255 255);
+  --airi-surface-card-base: rgb(255 255 255);
+  --airi-surface-glass-base: rgb(255 255 255);
+  --airi-surface-overlay-base: rgb(251 252 253);
+  --airi-surface-control-base: rgb(239 241 244);
+  --airi-surface-control-muted-base: rgb(241 243 246);
+  --airi-surface-control-hover-base: color-mix(in srgb, var(--airi-accent-soft) 16%, rgb(235 238 242));
+  --airi-surface-field-base: rgb(252 252 253);
+  --airi-surface-field-focus-base: rgb(255 255 255);
+  --airi-surface-callout-base: color-mix(in srgb, var(--airi-surface-panel-base) 92%, white 8%);
+  --airi-surface-page: var(--airi-surface-page-base);
+  --airi-surface-panel: color-mix(in srgb, var(--airi-surface-panel-base) 97%, transparent);
+  --airi-surface-card: color-mix(in srgb, var(--airi-surface-card-base) 94%, transparent);
+  --airi-surface-glass: color-mix(in srgb, var(--airi-surface-glass-base) 88%, transparent);
+  --airi-surface-overlay: color-mix(in srgb, var(--airi-surface-overlay-base) 92%, transparent);
+  --airi-surface-control: color-mix(in srgb, var(--airi-surface-control-base) 94%, transparent);
+  --airi-surface-control-muted: color-mix(in srgb, var(--airi-surface-control-muted-base) 88%, transparent);
+  --airi-surface-control-hover: var(--airi-surface-control-hover-base);
+  --airi-surface-field: color-mix(in srgb, var(--airi-surface-field-base) 98%, transparent);
+  --airi-surface-field-focus: var(--airi-surface-field-focus-base);
+  --airi-surface-callout: var(--airi-surface-callout-base);
+  --airi-border-subtle: rgb(205 210 218 / 0.72);
+  --airi-border-control: rgb(190 197 207 / 0.8);
+  --airi-border-strong: rgb(139 149 163 / 0.78);
+  --airi-border-accent: oklch(70% var(--chromatic-chroma-300) var(--chromatic-hue) / 0.34);
+  --airi-border-callout: color-mix(in srgb, var(--airi-border-accent) 34%, var(--airi-border-subtle));
+  --airi-decorative-soft: rgb(92 101 115 / 0.1);
+  --airi-swatch-ring: rgb(96 106 120 / 0.3);
+  --airi-text: rgb(31 35 42);
+  --airi-text-muted: rgb(82 91 104);
+  --airi-text-soft: rgb(102 112 128);
+  --airi-accent-soft: oklch(89% var(--chromatic-chroma-100) var(--chromatic-hue) / 0.62);
+  --airi-accent-muted: oklch(84% var(--chromatic-chroma-200) var(--chromatic-hue) / 0.34);
+  --airi-accent-surface: oklch(82% var(--chromatic-chroma-200) var(--chromatic-hue) / 0.2);
+  --airi-accent-strong: oklch(52% var(--chromatic-chroma-600) var(--chromatic-hue));
+  --airi-accent-text: oklch(38.5% var(--chromatic-chroma-700) var(--chromatic-hue));
+  --airi-accent-focus: oklch(68% var(--chromatic-chroma-400) var(--chromatic-hue) / 0.28);
+}
+
+.dark {
+  --airi-surface-page-base: rgb(19 21 25);
+  --airi-surface-panel-base: rgb(29 32 38);
+  --airi-surface-card-base: rgb(31 34 40);
+  --airi-surface-glass-base: rgb(29 32 38);
+  --airi-surface-overlay-base: rgb(24 27 32);
+  --airi-surface-control-base: rgb(39 43 50);
+  --airi-surface-control-muted-base: rgb(38 42 49);
+  --airi-surface-control-hover-base: color-mix(in srgb, var(--airi-accent-surface) 20%, rgb(48 52 60));
+  --airi-surface-field-base: rgb(23 26 31);
+  --airi-surface-field-focus-base: rgb(29 33 39);
+  --airi-surface-callout-base: color-mix(in srgb, var(--airi-surface-panel-base) 94%, var(--airi-text-soft) 6%);
+  --airi-surface-page: var(--airi-surface-page-base);
+  --airi-surface-panel: color-mix(in srgb, var(--airi-surface-panel-base) 96%, transparent);
+  --airi-surface-card: color-mix(in srgb, var(--airi-surface-card-base) 94%, transparent);
+  --airi-surface-glass: color-mix(in srgb, var(--airi-surface-glass-base) 88%, transparent);
+  --airi-surface-overlay: color-mix(in srgb, var(--airi-surface-overlay-base) 90%, transparent);
+  --airi-surface-control: color-mix(in srgb, var(--airi-surface-control-base) 90%, transparent);
+  --airi-surface-control-muted: color-mix(in srgb, var(--airi-surface-control-muted-base) 82%, transparent);
+  --airi-surface-control-hover: color-mix(in srgb, var(--airi-surface-control-hover-base) 92%, transparent);
+  --airi-surface-field: color-mix(in srgb, var(--airi-surface-field-base) 94%, transparent);
+  --airi-surface-field-focus: color-mix(in srgb, var(--airi-surface-field-focus-base) 96%, transparent);
+  --airi-surface-callout: var(--airi-surface-callout-base);
+  --airi-border-subtle: rgb(72 78 89 / 0.68);
+  --airi-border-control: rgb(86 94 107 / 0.68);
+  --airi-border-strong: rgb(119 129 145 / 0.7);
+  --airi-border-accent: oklch(65% var(--chromatic-chroma-300) var(--chromatic-hue) / 0.34);
+  --airi-border-callout: color-mix(in srgb, var(--airi-border-accent) 34%, var(--airi-border-subtle));
+  --airi-decorative-soft: rgb(170 181 198 / 0.1);
+  --airi-swatch-ring: rgb(196 206 222 / 0.24);
+  --airi-text: rgb(244 246 248);
+  --airi-text-muted: rgb(181 188 199);
+  --airi-text-soft: rgb(145 155 170);
+  --airi-accent-soft: oklch(30% var(--chromatic-chroma-400) var(--chromatic-hue) / 0.7);
+  --airi-accent-muted: oklch(37% var(--chromatic-chroma-400) var(--chromatic-hue) / 0.38);
+  --airi-accent-surface: oklch(40% var(--chromatic-chroma-500) var(--chromatic-hue) / 0.24);
+  --airi-accent-strong: oklch(78% var(--chromatic-chroma-400) var(--chromatic-hue));
+  --airi-accent-text: oklch(83% var(--chromatic-chroma-300) var(--chromatic-hue));
+  --airi-accent-focus: oklch(68% var(--chromatic-chroma-400) var(--chromatic-hue) / 0.3);
+}
+
+body {
+  color: var(--airi-text);
+}
+
+.is-interacting {
+  transition-property: none !important;
+}

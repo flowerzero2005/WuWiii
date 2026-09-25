@@ -1,0 +1,75 @@
+allow-visible-on-all-workspaces:
+  title: Visibilité sur tous les bureaux
+  description: Permet à la fenêtre d’être visible sur tous les bureaux, macOS uniquement.
+pages:
+  notifications:
+    title: Centre de notifications
+    description: Consultez les annonces produit reçues. Les annonces sont à sens unique ; les réponses du support sont traitées dans le groupe QQ.
+    open-center: Ouvrir le centre de notifications
+    refresh: Actualiser les annonces
+    refresh-behavior: Sur l’écran principal, les annonces sont actualisées au démarrage, après un changement de langue et toutes les 15 minutes. Elles le sont aussi à l’ouverture de cette page. Les annonces reçues restent disponibles hors ligne sur cet appareil.
+    refresh-error: Impossible d’actualiser les annonces. Les éléments déjà reçus restent disponibles ci-dessous.
+    empty: Aucune annonce pour le moment.
+    level:
+      critical: Critique
+      warning: Avertissement
+      info: Information
+    status:
+      cached: Enregistré hors ligne
+    support:
+      title: Support de la Beta payante
+      description: Pour toute question ou remarque sur la Beta payante, rejoignez le groupe QQ. Les annonces servent uniquement aux avis ; les réponses sont données dans le groupe.
+      group-label: Groupe QQ
+      copy: Copier le numéro du groupe
+      copied: Numéro du groupe QQ copié.
+      copy-error: Impossible de copier le numéro du groupe QQ.
+  modules:
+    mcp-server:
+      description: Connecter et gérer le serveur MCP et ses outils
+      title: Serveur MCP
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: Raccourcis clavier
+    window-shortcuts:
+      description: Modifier les raccourcis de la fenêtre.
+      title: Raccourcis de la fenêtre
+      toggle-move:
+        label: (Dés)Activer - Déplacement
+      toggle-resize:
+        label: (Dés)Activer - Redimensionnement
+      toggle-ignore-mouse-event:
+        label: (Dés)Activer - Ignorer les événements de la souris
+      press-keys: Appuyer sur les touches...
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: Outil useWindowsMouse
+            description: Tester la position du curseur dans la fenêtre Electron
+devtools:
+  title: Développeur
+  pages:
+    context-flow:
+      title: Flux contextuel
+    lag-visualizer:
+      title: Visualiseur de latence
+    performance-visualizer:
+      title: Visualiseur de performance
+      description: Afficher l'overlay FPS / tâches longues / mémoire
+    markdown-stress:
+      title: Test de charge Markdown
+      description: Tester l'analyse et le rendu Markdown avec des charges de chat lourdes
+    widgets-calling:
+      title: Appel de widgets
+screen-capture:
+  permissions-prompt:
+    title: Capture d'écran
+    description: Pour capturer des écrans ou des fenêtres, les autorisations d’enregistrement de l'écran et de l'audio du système sont requises.
+    open-preferences: Ouvrir les Préférences Système
+    dismiss: Ignorer
+    instructions:
+      step-1: Ouvrir les "Préférences Système", sélectionnez "Confidentialité et Sécurité" dans la barre latérale.
+      step-2: Dans les sections "Enregistrement de l'écran et de l'audio du système" et "Enregistrement de l'audio du système uniquement", activez les interrupteurs pour Wuwiii.
+      step-2-note: Si Wuwiii n'est pas listé, veuillez l'ajouter manuellement en cliquant sur le bouton "+" et en sélectionnant Wuwiii dans le dossier Applications.

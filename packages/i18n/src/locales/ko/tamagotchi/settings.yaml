@@ -1,0 +1,75 @@
+allow-visible-on-all-workspaces:
+  title: 교차 공간 가시성
+  description: 모든 작업 공간에 창을 볼 수 있도록 합니다. macOS 전용 기능입니다.
+pages:
+  notifications:
+    title: 알림 센터
+    description: 받은 제품 공지를 확인합니다. 공지는 일방향 안내용이며 고객 지원 답변은 QQ 그룹에서 진행됩니다.
+    open-center: 알림 센터 열기
+    refresh: 공지 새로고침
+    refresh-behavior: 메인 화면에서는 시작 시, 표시 언어 변경 후, 15분마다 공지를 새로고침합니다. 이 페이지를 열 때도 새로고침합니다. 받은 공지는 이 기기에 저장되어 오프라인에서도 볼 수 있습니다.
+    refresh-error: 공지를 새로고침할 수 없습니다. 이전에 받은 항목은 아래에 계속 표시됩니다.
+    empty: 아직 공지가 없습니다.
+    level:
+      critical: 중요
+      warning: 주의
+      info: 안내
+    status:
+      cached: 오프라인 저장됨
+    support:
+      title: 유료 Beta 고객 지원
+      description: 유료 Beta 관련 질문이나 피드백은 QQ 그룹에 참여해 주세요. 공지는 안내 전용이며 답변은 그룹에서 진행됩니다.
+      group-label: QQ 그룹
+      copy: 그룹 번호 복사
+      copied: QQ 그룹 번호를 복사했습니다.
+      copy-error: QQ 그룹 번호를 복사할 수 없습니다.
+  modules:
+    mcp-server:
+      description: MCP 서버 및 도구 연결 및 관리
+      title: MCP 서버
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: 키보드 단축키
+    window-shortcuts:
+      description: 창 바로 가기를 수정합니다.
+      title: 창 바로 가기
+      toggle-move:
+        label: 이동 켜기/끄기
+      toggle-resize:
+        label: 크기 조정 켜기/끄기
+      toggle-ignore-mouse-event:
+        label: 마우스 이벤트 무시 켜기/끄기
+      press-keys: 키를 누르세요...
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: useWindowMouse Tool
+            description: Electron 창 커서 위치 테스트
+devtools:
+  title: 개발자 옵션
+  pages:
+    context-flow:
+      title: 컨텍스트 흐름
+    lag-visualizer:
+      title: 로그 비주얼라이저
+    performance-visualizer:
+      title: 성능 비주얼라이저
+      description: FPS/긴 작업/메모리 오버레이 전환
+    markdown-stress:
+      title: 마크다운 스트레스
+      description: 스트레스 마크다운 구문 분석 및 대량 채팅 페이로드 렌더링
+    widgets-calling:
+      title: 위젯 호출
+screen-capture:
+  permissions-prompt:
+    title: 화면 캡쳐
+    description: 화면이나 창을 캡쳐하기 위해선 화면 및 시스템 오디오 녹음 권한이 필요합니다.
+    open-preferences: 시스템 환경설정 열기
+    dismiss: 무시
+    instructions:
+      step-1: '"시스템 환경설정"을 열고 사이드 바에서 "프라이버시 및 보안"을 선택합니다.'
+      step-2: '"화면 및 시스템 오디오 녹음" 및 "시스템 오디오 녹음 전용" 섹션에서 Wuwiii에 대한 스위치를 켭니다.'
+      step-2-note: Wuwiii가 목록에 없는 경우, "+" 버튼을 클릭하고 애플리케이션 폴더에서 Wuwiii를 선택하여 수동으로 추가해 주세요.

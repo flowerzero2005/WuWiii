@@ -1,0 +1,72 @@
+@import './transitions.css';
+
+html,
+body,
+#app {
+  background-color: transparent !important;
+  background-image: none !important;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+}
+
+html.widget-window-surface,
+html.widget-window-surface body,
+html.widget-window-surface #app,
+html.quick-chat-window-surface,
+html.quick-chat-window-surface body,
+html.quick-chat-window-surface #app,
+html.butler-window-surface,
+html.butler-window-surface body,
+html.butler-window-surface #app {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html.hide-vue-devtools-floating :is(
+  #__vue-devtools-container__ > .vue-devtools__anchor,
+  #vue-devtools-container > .vue-devtools__anchor,
+  vue-devtools-anchor
+) {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+html {
+  transition: color 0.3s ease-in-out;
+}
+
+html {
+  --bg-color-light: var(--airi-surface-page);
+  --bg-color-dark: var(--airi-surface-page);
+  --progress-bar-color: var(--airi-accent-strong);
+  --bg-color: var(--airi-surface-page);
+}
+
+html.dark {
+  --bg-color-light: var(--airi-surface-page);
+  --bg-color-dark: var(--airi-surface-page);
+  --progress-bar-color: var(--airi-accent-strong);
+  --bg-color: var(--airi-surface-page);
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  background: var(--progress-bar-color);
+  opacity: 0.75;
+  position: fixed;
+  z-index: 1031;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+}

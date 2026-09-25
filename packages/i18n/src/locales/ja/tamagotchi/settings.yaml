@@ -1,0 +1,607 @@
+allow-visible-on-all-workspaces:
+  title: すべてのワークスペースで表示
+  description: ウィンドウをすべてのワークスペースで表示可能にします。macOSのみ。
+pages:
+  notifications:
+    title: 通知センター
+    description: 受信した製品のお知らせを確認できます。お知らせは一方向の通知用で、サポートの返信は QQ グループで行います。
+    open-center: 通知センターを開く
+    refresh: お知らせを更新
+    refresh-behavior: メイン画面では、起動時、表示言語の変更後、15 分ごとにお知らせを更新します。このページを開いたときにも更新します。受信済みのお知らせは端末に保存され、オフラインでも確認できます。
+    refresh-error: お知らせを更新できませんでした。以前受信した内容は引き続き下に表示されます。
+    empty: お知らせはまだありません。
+    level:
+      critical: 重要
+      warning: 注意
+      info: お知らせ
+    status:
+      cached: オフライン保存済み
+    support:
+      title: 有料 Beta サポート
+      description: 有料 Beta に関する質問やフィードバックは QQ グループに参加してください。お知らせは通知専用で、返信はグループ内で行います。
+      group-label: QQ グループ
+      copy: グループ番号をコピー
+      copied: QQ グループ番号をコピーしました。
+      copy-error: QQ グループ番号をコピーできませんでした。
+  modules:
+    mcp-server:
+      description: MCPサーバーとツールの接続と管理
+      title: MCPサーバー
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: キーボードショートカット
+    window-shortcuts:
+      description: ウィンドウ用ショートカットを変更します。
+      title: ウィンドウショートカット
+      toggle-move:
+        label: 移動の切り替え
+      toggle-resize:
+        label: サイズ変更の切り替え
+      toggle-ignore-mouse-event:
+        label: マウスイベント無視の切り替え
+      press-keys: 何かキーを押してください…
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: useWindowMouse Tool
+            description: Electronウィンドウのカーソル位置をテストします
+devtools:
+  title: 開発者
+  pages:
+    command-execution:
+      title: コマンド実行
+      description: ワークスペースの search/read/write トランザクションとコマンド実行状態を確認します。
+      intro: デスクトップのワークスペースツール、トランザクション状態、そして最新の renderer 側呼び出しを確認します。
+      actions:
+        refresh-status: 状態を更新
+        refresh-journal: ジャーナルを更新
+        refresh-checkpoints: チェックポイントを更新
+        refreshing: 更新中…
+        loading: 読み込み中…
+        run-git-status: Git status を実行
+        run-git-diff: Git diff を実行
+        run-typecheck: Typecheck を実行
+        run-lint: Lint を実行
+        preview-edit: 編集をプレビュー
+        apply-edit: 編集を適用
+        search-candidates: 候補を検索
+        use-selected-path: 選択したパスを使う
+        rollback-transaction: トランザクションをロールバック
+        restore-checkpoint: チェックポイントを復元
+        create-checkpoint: チェックポイントを作成
+        load-more-transactions: さらにトランザクションを読み込む
+        load-more-checkpoints: さらにチェックポイントを読み込む
+        cancel: キャンセル
+      labels:
+        persona-runtime-signals: ランタイムシグナル
+        persona-runtime-overhang: 感情の余韻
+        persona-runtime-last-failure-kind: 直近の失敗種別
+        persona-runtime-repeated-openings: 繰り返しの冒頭
+        persona-runtime-repeated-endings: 繰り返しの結び
+        persona-runtime-repeated-self-references: 繰り返しの自己言及
+        persona-metrics:
+          closeness: 親密さ
+          seriousness: 真剣度
+          hurt: 傷つき
+          affection: 愛着
+          need-for-attention: 注目されたい度
+          arousal: 活性度
+          inhibition: 抑制度
+        search: '検索：'
+        read: '読み取り：'
+        write: '書き込み：'
+        git-status: 'Git status:'
+        git-diff: 'Git diff:'
+        typecheck: 'Typecheck:'
+        lint: 'Lint:'
+        requested-bundles: リクエストした bundles
+        available-bundles: 許可された bundles
+        blocked-bundles: ブロックされた bundles
+        detected-intent: 検出された意図
+        last-tool-route-diagnostic: 直近の LLM ツールルート診断
+        risk: リスク
+        rollback: ロールバック可
+        target-session: 対象セッション
+        last-created: 最後に作成
+        last-restored: 最後に復元
+        last-rollback: 最後にロールバック
+      descriptions:
+        restricted-git-commands: 現在許可している読み取り専用の Git 制限コマンドを手動実行し、最新結果と journal 記録をその場で確認します。
+        git-status: '固定パラメータテンプレートで `git status --short --branch` を実行し、出力を command transaction として記録します。'
+        git-diff: 'パス、staged モード、文脈行数、出力上限を指定して制限付き `git diff` を実行します。'
+        restricted-typecheck: 現在許可している whitelist 付き typecheck コマンドを手動実行し、最新出力と journal 記録をその場で確認します。
+        typecheck: 許可済み Wuwiii ワークスペース target の 1 つに対して、制限付き package-scoped typecheck adapter を実行します。
+        restricted-lint: 現在許可している whitelist 付き lint コマンドを手動実行し、最新出力と journal 記録をその場で確認します。
+        lint: 許可済み Wuwiii ワークスペース target の 1 つに対して、制限付き package-scoped lint adapter を実行します。
+        guarded-text-edit-preview: builtin tools と同じ preview -> proposal -> apply の guarded edit フローを dry-run し、変更サマリーと unified diff を確認してから、この preview が返した proposalId を必要に応じて journal 付き書き込みとして適用します。
+        journal-transactions: 更新日時が新しい順に並んだ disk-backed manifest です。
+        checkpoints: 現在選択中、または最新セッション用の手動チェックポイントを作成します。
+      fields:
+        search-query:
+          label: 検索クエリ
+          description: 候補ファイルを探すためのパス断片または周辺テキストです。
+        scope:
+          label: 範囲
+          description: 検索範囲を絞るための任意のワークスペース相対ディレクトリです。
+        search-mode:
+          label: 検索モード
+          description: Auto は path と text の両方を試します。path / text はより厳格なフィルタです。
+        search-limit:
+          label: 検索上限
+          description: 候補ファイルパスを出す前に調べる検索ヒット数の上限です。
+        candidate-file:
+          label: 候補ファイル
+          description: 複数候補が返った場合に正確なファイルを選びます。
+        workspace-path:
+          label: ワークスペースパス
+          description: プレビューまたは編集するワークスペース相対ファイルパスです。
+        edit-mode:
+          label: 編集モード
+          description: builtin tools が使う write-text strategy と同じモードを使用します。
+        allow-create-if-missing:
+          label: 存在しない場合は作成を許可
+          description: preview/apply が存在しないパスを新規ファイルとして扱えるようにします。
+        content:
+          label: 内容
+          description: 選択した編集モードで置換・追記・挿入されるテキストです。
+          placeholder: この編集で使うテキスト
+        target-marker:
+          label: ターゲットマーカー
+          description: marker/match ベースの編集モードで必須です。
+          placeholder: 正確なマーカーまたは一致テキスト
+        occurrence:
+          label: 出現番号
+          description: replace-nth-match でのみ使う 1 始まりの一致番号です。
+        range-start:
+          label: 範囲開始
+          description: replace-range で使う開始文字オフセット（含む）です。
+        range-end:
+          label: 範囲終了
+          description: replace-range で使う終了文字オフセット（含まない）です。
+        preview-chars:
+          label: プレビュー文字数
+          description: before/after/diff プレビューの文字数上限です。
+        max-read-bytes:
+          label: 最大読み取りバイト数
+          description: 任意の読み取り上限です。空欄の場合はサービス既定値を使います。
+        git-diff-path:
+          label: Diff パス
+          description: 任意のワークスペース相対パスです。空欄ならワークスペース全体を diff します。
+        git-diff-staged:
+          label: staged 差分を見る
+          description: '有効にすると `--cached` を使い、working tree ではなく staged diff を確認します。'
+        git-diff-context-lines:
+          label: 文脈行数
+          description: '`git diff --unified=<n>` の文脈行数です。範囲は 0-20 です。'
+        git-diff-max-bytes:
+          label: 出力バイト上限
+          description: 任意の出力上限です。空欄ならサービス既定値を使います。
+        typecheck-target:
+          label: Typecheck target
+          description: 制限付き typecheck adapter を実行する許可済み Wuwiii ワークスペース target です。
+        typecheck-max-bytes:
+          label: 出力バイト上限
+          description: 任意の出力上限です。空欄ならサービス既定値を使います。
+        lint-target:
+          label: Lint target
+          description: 制限付き lint adapter を実行する許可済み Wuwiii ワークスペース target です。
+        lint-max-bytes:
+          label: 出力バイト上限
+          description: 任意の出力上限です。空欄ならサービス既定値を使います。
+        checkpoint-summary:
+          placeholder: 任意のチェックポイント要約
+      sections:
+        persona-runtime: ペルソナランタイム
+        scene-mode: シーンモード
+        persona-state: ペルソナ状態
+        anti-template-guard: 脱テンプレ警告
+        runtime-status: ランタイム状態
+        tool-capability: ツール能力
+        proposal-store: Proposal キャッシュ
+        raw-runtime-status: 生の状態 JSON
+        latest-activity: 最新アクティビティ
+        restricted-git-commands: 制限付き Git コマンド
+        restricted-typecheck: 制限付き Typecheck
+        restricted-lint: 制限付き Lint
+        git-status: Git status
+        git-diff: Git diff
+        typecheck: Typecheck
+        lint: Lint
+        diagnostic-files: 診断ファイル
+        diagnostic-entries: 診断項目
+        git-status-entries: Git status エントリ
+        git-diff-files: Git diff ファイル
+        command-output: コマンド出力
+        chat-tool-routing: チャットツールルーティング
+        guarded-text-edit-preview: ガード付きテキスト編集プレビュー
+        search-assisted-target-picker: 検索補助ターゲットピッカー
+        preview-summary: プレビュー要約
+        before-preview: 変更前プレビュー
+        after-preview: 変更後プレビュー
+        change-summary: 変更サマリー
+        removed-preview: 削除プレビュー
+        added-preview: 追加プレビュー
+        target-preview: ターゲットプレビュー
+        unified-diff-preview: Unified Diff プレビュー
+        recent-transactions: 最近のトランザクション
+        journal-transactions: ジャーナルトランザクション
+        manifest-detail: Manifest 詳細
+        before-state-blobs: 変更前 Blob
+        after-state-blobs: 変更後 Blob
+        checkpoints: チェックポイント
+        checkpoint-detail: チェックポイント詳細
+        restore-impact-preview: 復元影響プレビュー
+        transactions-to-roll-back: ロールバック対象トランザクション
+        files-likely-affected: 影響を受ける可能性のあるファイル
+        blocking-conflicts: ブロッキング競合
+        snapshot-previews: スナップショットプレビュー
+      write-modes:
+        replace: ファイル全体を置換
+        append: 追記
+        replace-range: 範囲を置換
+        replace-first-match: 最初の一致を置換
+        replace-all-matches: すべての一致を置換
+        replace-nth-match: N 番目の一致を置換
+        insert-before-marker: マーカーの前に挿入
+        insert-after-marker: マーカーの後に挿入
+      search-modes:
+        auto: 自動
+        path: パス
+        text: テキスト
+      tool-bundles:
+        workspace-readonly: ワークスペース読み取り専用
+        workspace-edit-preview: ワークスペース編集プレビュー
+        workspace-edit-apply: ワークスペース編集適用
+        web-search: Web 検索
+        memory: 記憶
+        widgets: ウィジェット
+        mcp-discovery: MCP 発見
+        mcp-explicit-action: MCP 明示呼び出し
+        mcp-proactive-topic: MCP 主動話題
+      intent-tags:
+        workspace-read: ワークスペース読み取り
+        workspace-edit: ワークスペース編集
+        workspace-apply: ワークスペース適用
+        web-search: Web 検索
+        memory: 記憶
+        widgets: ウィジェット
+        mcp-discovery: MCP 発見
+        mcp-explicit-action: MCP 明示呼び出し
+        proactive-topic: 主動話題
+      reason-tags:
+        tools-disabled: このターンではツール未許可
+        bundle-known-unsupported: 既知の不安定 bundle 記録あり
+      source-tags:
+        direct-single-bundle-success: '由来：単一 bundle の直接成功'
+        multi-bundle-success: '由来：複数 bundle の成功記録'
+        direct-single-bundle-failure: '由来：単一 bundle の直接失敗'
+        fallback-inference: '由来：fallback 推論'
+      tool-route-phases:
+        tool-bundle: ツール bundle
+        direct-tools: 直接ツール
+        fallback-without-tools: ツールなし fallback
+        plain-stream: 通常ストリーム
+      tool-route-statuses:
+        attempt: 試行
+        success: 成功
+        failure: 失敗
+        fallback: fallback
+        skipped: スキップ
+      tool-route-reasons:
+        unsupported: ツールモード未対応
+        transient: 一時的な上流失敗
+        provider-connection: provider 接続失敗
+        compatibility-cache: 互換性キャッシュ
+        no-tool-bundle-attempts: 試行可能な tool bundle なし
+        tool-mode-failure: ツールモード失敗
+        unknown: 不明な失敗
+      scene-modes:
+        casual-chat: 雑談
+        light-bickering: 軽いじゃれ合い
+        praise-receiving: 褒められ受け
+        gentle-support: やさしい支え
+        heavy-topic-companion-silence: 重い話題での寄り添い静音
+        awkward-topic-avoidance: 気まずい話題の回避
+        critical-short-answer: 重要場面の短答
+        identity-clarification: 身元の明確化
+        value-judgement: 価値判断
+        repair-after-failure: 失敗後の修復
+      confidence:
+        high: 高
+        medium: 中
+        low: 低
+      persona-overhangs:
+        steady: 安定
+        warm: あたたかい
+        playful: じゃれ気味
+        concerned: 気がかり
+        heavy: 重い
+        guarded: 慎重
+        repairing: 修復中
+      failure-kinds:
+        too-hard: 硬すぎた
+        too-robotic: 機械的すぎた
+        missed-emotion: 感情を取りこぼした
+      operation-actions:
+        status: 状態取得
+        create-checkpoint: チェックポイント作成
+        list-checkpoints: チェックポイント一覧
+        get-checkpoint-detail: チェックポイント詳細
+        preview-restore-checkpoint: 復元プレビュー
+        rollback-transaction: トランザクションをロールバック
+        restore-checkpoint: チェックポイントを復元
+        list-transactions: トランザクション一覧
+        get-transaction-detail: トランザクション詳細
+        search: 検索
+        read: 読み取り
+        git-status: Git ステータス
+        git-diff: Git 差分
+        typecheck: Typecheck
+        lint: Lint
+        write-text: テキスト書き込み
+      result-modes:
+        appended: 追記済み
+        range-replaced: 範囲置換済み
+        first-match-replaced: 最初の一致を置換済み
+        all-matches-replaced: すべての一致を置換済み
+        nth-match-replaced: N 番目の一致を置換済み
+        inserted-before-marker: マーカー前に挿入済み
+        inserted-after-marker: マーカー後に挿入済み
+        updated: 更新済み
+        created: 作成済み
+      states:
+        yes: はい
+        no: いいえ
+        not-available: 該当なし
+        changes-detected: 変更あり
+        no-op: 変更なし
+        existing-file: 既存ファイル
+        new-file-preview: 新規ファイルプレビュー
+        truncated: 省略あり
+        clean: クリーン
+        detached-head: detached HEAD
+        entire-workspace: ワークスペース全体
+        staged: staged
+        unstaged: unstaged
+        untracked: untracked
+        renamed: renamed
+        added: added
+        deleted: deleted
+        modified: modified
+        passed: passed
+        failed: failed
+        no-diagnostics: 診断なし
+        preview-truncated: プレビュー省略あり
+        full-preview: 全文プレビュー
+        available: 利用可
+        blocked: ブロック済み
+        unknown: 不明
+        tools-disabled: ツール未許可
+        memory-first: メモリ優先
+        best-effort-cache: ベストエフォートなディスクキャッシュ
+        ready: 利用可能
+        expired: 期限切れ
+        expiring-soon: まもなく期限切れ
+        none: なし
+      counts:
+        files: '{count} ファイル'
+        touched-files: '{count} ファイル'
+        unique-files: '{count} 個の一意なファイル'
+        transactions: '{count} 件のトランザクション'
+        rollback-capable-transactions: '{count} 件のロールバック可能トランザクション'
+        checkpoints: '{count} 件のチェックポイント'
+        conflicts: '{count} 件の競合'
+        matches: '{count} 件の一致'
+        issues: '{count} 件の問題'
+        errors: '{count} 件のエラー'
+        warnings: '{count} 件の警告'
+      meta:
+        chars: '{count} 文字'
+        chars-truncated: '{count} 文字 · 省略あり'
+        bytes: '{count} バイト'
+        bytes-truncated: '{count} バイト · 省略あり'
+      summaries:
+        git-session-unavailable: 制限付き Git コマンドに使えるアクティブまたは確認可能なセッションがまだありません。先にチャットセッションを開くか、トランザクションを選択してください。
+        git-session-active: '制限付き Git コマンドにはセッション {sessionId} を使用します。'
+        typecheck-session-unavailable: 制限付き typecheck コマンドに使えるアクティブまたは確認可能なセッションがまだありません。先にチャットセッションを開くか、トランザクションを選択してください。
+        typecheck-session-active: '制限付き typecheck コマンドにはセッション {sessionId} を使用します。'
+        lint-session-unavailable: 制限付き lint コマンドに使えるアクティブまたは確認可能なセッションがまだありません。先にチャットセッションを開くか、トランザクションを選択してください。
+        lint-session-active: '制限付き lint コマンドにはセッション {sessionId} を使用します。'
+        session-unavailable: まだ利用可能または確認可能なセッションがありません。先にチャットセッションを開くか、ジャーナルトランザクションを選択してください。
+        session-active: 'ガード付き preview/apply リクエストにはセッション {sessionId} を使用します。'
+        search-guidance: パス断片や周辺テキストしか分からない場合は、ここで対象ファイルを検索できます。
+        search-complete-no-candidates: 'トランザクション {transactionId} による検索は完了しましたが、候補ファイルパスは見つかりませんでした。'
+        search-found-candidates: '{count} 件の候補ファイルパスが見つかりました。ワークスペースパス欄に反映するものを選択してください。'
+        preview-guidance: dry-run プレビューを実行して、before/after スナップショット、行単位の変更サマリー、unified diff 出力を確認します。apply は preview が proposalId を返した後にのみ使えます。
+        preview-before-apply: 現在 apply に使える preview proposal はありません。先に preview を実行してください。
+        preview-proposal-ready: 'apply はこの preview が返した proposalId を使います: {proposalId}。有効期限は {expiresAt} で、フォームを変更すると無効になります。'
+        preview-result: '{path} · {writeMode} · {changeState} · {fileState}'
+        tool-capability-missing-model: 現在の provider / model 組み合わせをまだ解決できていないため、bundle 互換性は不明のままです。
+        tool-capability-tools-disabled: この provider / model 組み合わせには安定した tool-calling 実績がまだないため、ワークスペースツールは保守的に扱うべきです。
+        tool-capability-apply-enabled: この provider / model 組み合わせでは readonly / preview / apply bundle の安定記録があり、preview -> proposalId -> apply の全フローを使えます。
+        tool-capability-preview-only: この provider / model 組み合わせでは読み取りと preview は安定していますが、apply は明示確認までより保守的に扱うべきです。
+        tool-capability-edit-blocked: この provider / model 組み合わせには不安定な編集 bundle の既知記録があるため、readonly 分析は維持しつつ編集 bundle はブロックすべきです。
+        tool-capability-low-risk-open: 現在は低リスクツールの安定記録だけがあります。未知の bundle は事前ブロックしませんが、高リスク編集を安全だと決め打ちすべきではありません。
+        proposal-store-unavailable: Proposal キャッシュ状態はまだ読み込まれていません。先にランタイム状態を更新してください。
+        proposal-store-empty: 現在キャッシュ内に保留中の text edit proposal はありません。
+        proposal-store-active: '現在 {pendingCount} 件の proposal をキャッシュ中です。ディスクから復元: {recoveredCount} 件。まもなく期限切れ: {expiringSoonCount} 件。'
+        chat-tool-routing-no-request: 直近のメッセージはどの tool bundle も要求しませんでした。
+        chat-tool-routing-tools-disabled: '直近のメッセージは {requestedCount} 件の bundle を要求しましたが、このターンでは provider / model 組み合わせに対してツール呼び出しが許可されていません。'
+        chat-tool-routing-all-available: '直近のメッセージは {requestedCount} 件の bundle を要求し、すべて許可されました。'
+        chat-tool-routing-partially-blocked: '直近のメッセージは {requestedCount} 件の bundle を要求し、{availableCount} 件が許可され、{blockedCount} 件がブロックされました。'
+        tool-route-diagnostic-ok: 直近の LLM ツールルートでは失敗は報告されていません。
+        tool-route-diagnostic-provider-connection: 直近の LLM リクエストは provider 接続層で失敗しました。ワークスペース command service の失敗ではありません。
+        tool-route-diagnostic-compatibility-cache: 直近のツールルートは provider / model 互換性キャッシュによりスキップされました。
+        tool-route-diagnostic-fallback: 直近のターンは provider tool-calling からツールなし retry に降格しました。
+        tool-route-diagnostic-failure: 直近の LLM ツールルートは成功したツール応答の前に失敗しました。
+        journal-transactions-loaded: 'disk-backed トランザクションを {shownCount}/{totalCount} 件表示しています。'
+        checkpoints-loaded: '現在の journal ビューで {shownCount}/{totalCount} 件のチェックポイントを表示しています。'
+        restore-preview-source: このプレビューは現在のワークスペース状態と、このチェックポイント以降にある rollback 可能な applied トランザクションをもとに計算されます。
+        restore-select-checkpoint: 復元影響を確認するにはチェックポイントを選択してください。
+        restore-blocked: '復元は現在 {conflictCount} 件の競合によりブロックされています。対象は {transactionCount} 件のトランザクションと {fileCount} 個のファイルです。再試行前に下の競合を確認してください。'
+        restore-will-run: 'この復元では、このセッション内の applied トランザクション {transactionCount} 件（{fileCount} ファイル）をロールバックしようとします。'
+        preview-first-transactions: このプレビューでは最初の 5 件の一致トランザクションのみ表示しています。
+        preview-first-files: このプレビューでは最初の 10 件の一意なファイルパスのみ表示しています。
+        preview-first-conflicts: このプレビューでは最初の 5 件のブロッキング競合のみ表示しています。
+        persona-runtime-session-unavailable: ペルソナランタイムに使えるアクティブまたは確認可能なセッションがまだありません。
+        persona-runtime-recorded: このセッションでは最新のペルソナランタイムスナップショットを確認できます。
+        persona-runtime-ready: '最新のペルソナランタイムスナップショットを確認できます。シーンモード: {sceneMode} ({confidence})。'
+      confirm:
+        rollback: ロールバックを確認
+        rollback-files: 'ロールバックを確認 · {count} ファイル'
+        restore: 復元を確認
+        restore-blocked: '復元はブロック中 · {count} 件の競合'
+        restore-transactions: '復元を確認 · {transactionCount} 件の tx · {fileCount} ファイル'
+        restore-checkpoint-files: '復元を確認 · {count} 件のチェックポイントファイル'
+      empty:
+        no-git-status-request: まだ `git status` リクエストは実行されていません。
+        no-git-status-entries: 現在報告されている変更エントリはありません。
+        no-git-diff-request: まだ `git diff` リクエストは実行されていません。
+        no-git-diff-output: 最新の diff 出力は空です。
+        no-git-diff-files: 最新の diff から変更ファイルを解析できませんでした。
+        no-typecheck-request: まだ typecheck リクエストは実行されていません。
+        no-typecheck-output: 最新の typecheck 出力は空です。
+        no-lint-request: まだ lint リクエストは実行されていません。
+        no-lint-output: 最新の lint 出力は空です。
+        no-search-request: まだ検索リクエストはありません。
+        no-read-request: まだ読み取りリクエストはありません。
+        no-write-request: まだ書き込みリクエストはありません。
+        no-change-summary: 現在のファイル状態ではこの編集は no-op のため、変更サマリーブロックは生成されませんでした。
+        no-renderer-operations: まだ renderer 側のコマンド実行呼び出しはありません。
+        no-journal-transactions-loaded: まだジャーナルトランザクションは読み込まれていません。
+        no-journal-transactions-found: まだジャーナルトランザクションは見つかっていません。
+        no-transaction-selected: manifest と blob プレビューを確認するにはトランザクションを選択してください。
+        no-blobs: Blob は記録されていません。
+        blob-content-missing: Blob の内容がディスク上にありません。
+        no-checkpoints-loaded: まだチェックポイントは読み込まれていません。
+        no-session-available: 利用可能なセッションはまだありません
+        no-checkpoints-found: まだチェックポイントは見つかっていません。
+        no-checkpoint-selected: メタデータとスナップショットプレビューを確認するにはチェックポイントを選択してください。
+        no-rollback-transactions-after-checkpoint: このチェックポイント以降、選択中セッションに対して現在見えている rollback 可能な applied トランザクションはありません。
+        no-snapshot-blobs: スナップショット Blob は記録されていません。
+        no-chat-tool-routing: チャットツールルーティング結果はまだ記録されていません。
+        no-tool-route-diagnostic: LLM ツールルート診断はまだ記録されていません。
+        no-persona-runtime: このセッションではまだペルソナランタイムのスナップショットが記録されていません。
+      facts:
+        git-branch: 'ブランチ: {value}'
+        git-upstream: 'upstream: {value}'
+        git-ahead-behind: 'ahead {ahead} · behind {behind}'
+        git-detached: 'detached: {value}'
+        git-output: '出力: {value}'
+        git-diff-scope: 'diff 範囲: {value}'
+        git-diff-mode: 'diff モード: {value}'
+        git-context-lines: '文脈行数: {count}'
+        git-diff-files: '変更ファイル数: {count}'
+        typecheck-target: 'Typecheck target: {value}'
+        typecheck-package: 'パッケージ: {value}'
+        typecheck-command: 'コマンド: {value}'
+        typecheck-exit-code: '終了コード: {count}'
+        lint-target: 'Lint target: {value}'
+        lint-package: 'パッケージ: {value}'
+        lint-command: 'コマンド: {value}'
+        lint-exit-code: '終了コード: {count}'
+        diagnostic-total: '問題数: {count}'
+        diagnostic-files: '診断ファイル数: {count}'
+        diagnostic-errors: 'エラー数: {count}'
+        diagnostic-warnings: '警告数: {count}'
+        path: 'パス: {path}'
+        preview-proposal-id: 'プレビュー proposalId: {proposalId}'
+        session: 'セッション: {sessionId}'
+        write-mode: '書き込みモード: {writeMode}'
+        preview-expires-at: 'プレビュー有効期限: {value}'
+        preview-cache-state: 'Proposal キャッシュ状態: {value}'
+        provider-model: 'Provider / model: {provider} / {model}'
+        proposal-store-root: 'Proposal キャッシュディレクトリ: {path}'
+        proposal-store-source-of-truth: 'ソースオブトゥルース: {value}'
+        proposal-store-disk-cache: 'ディスク永続化: {value}'
+        proposal-store-pending-count: '保留中 proposal 数: {count}'
+        proposal-store-recovered-count: 'ディスクから復元した proposal 数: {count}'
+        proposal-store-expiring-soon-count: 'まもなく期限切れの proposal 数: {count}'
+        proposal-store-next-expires-at: '次の有効期限: {value}'
+        proposal-store-hydrated-at: '直近 hydrate 時刻: {value}'
+        chat-tool-routing-evaluated-at: '直近ルーティング時刻: {value}'
+        chat-tool-routing-tools-compatibility: 'ツール互換性: {value}'
+        chat-tool-routing-message: 'メッセージプレビュー: {value}'
+        tool-route-diagnostic-at: 'ツールルート記録時刻: {value}'
+        tool-route-diagnostic-model: 'モデル: {value}'
+        tool-route-diagnostic-phase: 'フェーズ: {value}'
+        tool-route-diagnostic-status: '状態: {value}'
+        tool-route-diagnostic-reason: '理由: {value}'
+        tool-route-diagnostic-provider-base-url: 'Provider base URL: {value}'
+        tool-route-diagnostic-bundles: 'Bundles: {value}'
+        tool-route-diagnostic-tools: 'Tools: {value}'
+        tool-route-diagnostic-failure-kind: '失敗種別: {value}'
+        tool-route-diagnostic-cache-updated: '互換性キャッシュ更新: {value}'
+        tool-route-diagnostic-fallback-context-messages: 'ローカル fallback context messages: {count}'
+        tool-route-diagnostic-persistent-unsupported: '永続的な未対応を記録: {value}'
+        tool-route-diagnostic-message: '診断メッセージ: {value}'
+        workspace-root: 'ワークスペースルート: {workspaceRoot}'
+        existing-file: '既存ファイル: {value}'
+        would-change-file: '変更されるか: {value}'
+        optimistic-sha256: '楽観的 SHA-256: {sha256}'
+        first-changed-index: '最初の変更インデックス: {value}'
+        before-lines: '変更前の行: L{line} × {count}'
+        after-lines: '変更後の行: L{line} × {count}'
+        chars-removed-added-delta: '削除/追加/差分文字数: -{removed} / +{added} / Δ{delta}'
+        matched-occurrences: '一致件数: {count}'
+        selected-occurrence: '選択した一致番号: {count}'
+        insertion-index: '挿入インデックス: {value}'
+        range: '範囲: {start}..{end}'
+        persona-runtime-evaluated-at: '直近評価時刻: {value}'
+        persona-runtime-message: 'メッセージプレビュー: {value}'
+        persona-runtime-scene-updated-at: 'シーンモード更新時刻: {value}'
+        persona-runtime-state-updated-at: 'ペルソナ状態更新時刻: {value}'
+        persona-runtime-guard-updated-at: '脱テンプレ警告更新時刻: {value}'
+      feedback:
+        no-file-paths-matched: '{query} に一致するファイルパスはありません。'
+        single-candidate-resolved: '候補パスが 1 件に解決されました: {path}。'
+        multiple-candidates-found: '{count} 件の候補ファイルパスが見つかりました。下から正確なファイルを選んでください。'
+        applied-edit: '{writeMode} を {path} に適用しました。'
+      errors:
+        integer-min: '{label} は {minimum} 以上の整数である必要があります。'
+        no-session-git-command: 制限付き Git コマンドに使えるセッションがありません。
+        no-session-typecheck: 制限付き typecheck コマンドに使えるセッションがありません。
+        no-session-lint: 制限付き lint コマンドに使えるセッションがありません。
+        no-session-preview: コマンド実行プレビューに使えるセッションがありません。
+        preview-before-apply-required: apply は現在の preview が返した proposalId しか使えません。先に preview を実行してください。
+        workspace-path-required: ワークスペース相対ファイルパスは必須です。
+        target-required: '{mode} では空でないターゲットマーカーが必要です。'
+        occurrence-required: replace-nth-match では occurrence >= 1 が必要です。
+        range-required: replace-range では range start と range end の両方が必要です。
+        no-session-search: コマンド実行検索に使えるセッションがありません。
+        search-query-required: 検索クエリは必須です。
+        select-candidate-first: プレビュー用フォームに適用する前に候補パスを選択してください。
+      hints:
+        title: トラブルシュートのヒント
+        file-diverged: 元のトランザクション適用後に対象ファイルが変更されたため、ワークスペース状態を確認するまでロールバックはブロックされます。
+        file-missing: ロールバックプランに記録されたパスにワークスペースファイルがもう存在しません。
+        file-already-exists: 復元はそのパスが存在しない前提でしたが、現在はファイルが存在します。
+        only-applied: ロールバックできるのは applied 状態のトランザクションだけです。
+        no-rollback-plan: このトランザクションの rollback plan には可逆なファイル変更が記録されていません。
+        no-later-rollback-transactions: このチェックポイントに対して、あとに続く applied かつ rollback 可能なトランザクションは現在ありません。
+        refresh-records: 再試行する前にトランザクション/チェックポイント一覧を更新してください。選択中のレコードは現在の journal ビューで利用できなくなっている可能性があります。
+    context-flow:
+      title: コンテキストのフロー
+    lag-visualizer:
+      title: ラグビジュアライザー
+    performance-visualizer:
+      title: パフォーマンスビジュアライザー
+      description: FPS/ロングタスク/メモリーオーバーレイの切り替え
+    markdown-stress:
+      title: Markdown ストレス
+      description: 大量のチャットデータを含むMarkdownの解析とレンダリング負荷のテスト
+    widgets-calling:
+      title: ウィジェット呼び出し
+screen-capture:
+  permissions-prompt:
+    title: 画面キャプチャ
+    description: 画面またはウィンドウをキャプチャするには、画面とシステムのオーディオ録音の許可が必要です。
+    open-preferences: システム設定を開く
+    dismiss: 閉じる
+    instructions:
+      step-1: '「システム設定」を開き、サイドバーから「プライバシーとセキュリティ」を選択します。'
+      step-2: '「画面&システム音声録音」および「システム音声録音のみ」のセクションで、Wuwiii用のスイッチをオンにしてください。'
+      step-2-note: Wuwiiiが表示されていない場合は、「+」ボタンをクリックして「アプリケーション」フォルダから「Wuwiii」を選択して手動で追加してください。

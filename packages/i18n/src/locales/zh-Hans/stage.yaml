@@ -1,0 +1,170 @@
+chat:
+  actions:
+    clear-messages: 清除当前对话
+    close-personas: 关闭角色列表
+    collapse-personas: 收起角色列表
+    disable-inner-voice: 关闭自动生成内心札记
+    disable-semantic-memory: 关闭长期记忆搜索（本轮不再查找旧记录）
+    disable-web-search: 关闭联网搜索
+    enable-inner-voice: 回复后自动生成仅供角色使用的内心札记
+    enable-semantic-memory: 允许在需要回忆旧对话时搜索长期记忆（本地检索，不额外消费）
+    enable-web-search: 需要时允许当前对话联网查找信息
+    hide-additional-capabilities: 收起更多聊天能力
+    open-personas: 选择聊天角色
+    show-additional-capabilities: 展开更多聊天能力
+  capability-consent:
+    action: 确认启用
+    approval-required: 请先在聊天栏开启并确认这项官方能力。
+    cancel: 暂不开启
+    changed-description: 这项官方能力的价格已上涨或计费方式发生变化，请确认当前价格后再启用。
+    description: 这是一项官方付费能力。确认后会持续启用；只有价格上涨或计费方式变化时才会再次确认。
+    login-required: 请先登录，再启用官方付费能力。
+    price-unavailable: 暂时无法获取当前价格，请等待服务恢复后重试。
+    prices:
+      embedding: 每次语义检索 {points} 点
+      inner-voice: 按官方内心札记模型结算，每次生成最低 {points} 点
+      speech: 每分钟 {points} 点，最低扣除 {minimum} 点
+      transcription: 首分钟 {first} 点，之后每开始一分钟 {additional} 点
+      web-search: 每次搜索 {points} 点
+    title: 启用{capability}？
+  capabilities:
+    inner-voice: 内心札记
+    semantic-memory: 语义记忆
+    speech: 语音播报
+    transcription: 语音输入
+    web-search: 联网搜索
+  group:
+    minimum-members: 群聊至少保留两名角色，当前无法移除。
+    remove-member-context: 右键将角色移出群聊
+    name-label: 群聊名称
+    name-placeholder: 输入群聊名称（可选）
+    member-already-in-room: 已在当前群聊
+    add-member: '将{name}加入群聊'
+    member-added: '已将{name}加入群聊。'
+    member-removed: '已将{name}移出群聊。'
+    member-change-failed: 群聊成员变更失败，请重试。
+    calls: 本轮将产生 {count} 次独立模型调用
+    cancel-create: 取消创建
+    create: 创建群聊
+    create-title: 新建多角色群聊
+    delete-cancel: 保留群聊
+    delete-confirm: 确认解散
+    delete-description: '要解散“{name}”并删除其中的全部聊天记录吗？此操作无法撤销。'
+    delete-failed: 群聊解散失败，请重试。
+    delete-room: '解散{name}'
+    delete-success: 群聊已解散。
+    delete-title: 解散群聊？
+    deleting: 正在解散…
+    member-limit: 选择 1–4 个角色
+    mention-hint: 已选中的成员是本轮话题重点，不会改变实际回应角色
+    mention-members: 提及群聊成员
+    mention-confirm: 插入提及
+    narration-label: 旁白
+    narration-on: 旁白已开启
+    narration-off: 旁白未开启
+    narration-configure: 请先在群聊剧本设置中应用房间剧本，再开启旁白。
+    narration-save-failed: 旁白设置保存失败，请稍后重试。
+    narration-speech-failed: 旁白语音播放失败，将继续显示文字旁白。
+    narration-speech-not-configured: 旁白专属音色和舞台默认声线均不可用，请先配置任一有效声线。
+    script-settings: 打开群聊剧本设置
+    expand-settings: 展开群聊设置
+    collapse-settings: 收起群聊设置
+    new-room: 新建群聊
+    no-responder: 请至少选择一个本轮回应角色
+    persona-unavailable: '{name} 当前不可用，已跳过。'
+    personas: 角色
+    responder-login-required: '{name} 使用官方云，请先登录再让该角色回应。'
+    responder-not-configured: '{name} 尚未配置聊天模型。'
+    responders: 本轮回应
+    empty-response: '{name} 本轮没有发言。'
+    remove-member: '将{name}移出群聊'
+    rooms: 多角色群聊
+    text-only: 多角色群聊当前仅支持文字消息。
+  error:
+    actions:
+      open-account: 账号与点数
+    official-cloud:
+      connection-failed: 无法连接官方云服务，请检查服务地址或稍后重试。
+      insufficient-points: 点数不足，请前往账号与点数页面补充点数。
+      login-required: 登录后才能使用官方云模型。
+      not-configured: 官方云模型尚未配置，请联系服务管理员。
+      unavailable: 当前官方云模型暂时不可用，请稍后重试或切换模型。
+  official-cloud-login-required: 登录后使用官方云
+  official-cloud-send-disabled: 当前未登录，无法使用官方云发送消息。
+  recommended-replies:
+    failed: 推荐回复生成失败，请稍后重试
+    fill-input: 填入消息框
+    title: 你可以这样回复
+  message:
+    character-name:
+      airi: 小呜
+      core-system: 核心系统
+      you: 你
+  reasoning: 思考
+actions:
+  cancel: 取消
+  interrupt: 打断
+  send: 发送
+  voice-input-start: 语音输入
+  voice-input-stop: 停止语音输入
+voice-call:
+  accept: 接听
+  decline: 拒接
+  incoming-title: '{name} 来电'
+  incoming-description: 想和你说说话
+  already-active: 已有语音通话正在进行
+  collapse: 收起语音通话
+  configure-chat: 请先配置对话模型
+  configure-hearing: 请先配置实时听力
+  configure-speech: 请先配置语音输出
+  end: 挂断语音通话
+  ended: 语音通话已结束
+  expand: 展开语音通话
+  microphone-error: 无法开启麦克风：{message}
+  transcription-error: 无法连接实时语音识别：{message}
+  transcription-rate-limited: 语音识别启动得太频繁了，请在 {seconds} 秒后再试
+  transcription-concurrency: 上一次语音通话还在收尾，请稍后再试
+  transcription-busy: 实时语音服务当前繁忙，请稍后再试
+  sign-in: 请先登录当前对话服务
+  start: 开始语音通话
+  started: 语音通话已开始
+  starting: 正在接通
+  listening: 正在听你说
+  responding: '{name} 正在回复'
+  source-chat: 对话
+  source-hearing: 听觉
+  source-speech: 语音
+  source-unavailable: 未配置
+chat-cleanup:
+  title: 清除对话
+  description: 选择要从当前对话中清除的内容。
+  messages-only: 仅清除聊天记录
+  messages-only-description: 保留短期上下文和人物状态。
+  messages-and-memory: 清除聊天记录和短期记忆
+  messages-and-memory-description: 同时重置当前对话的短期上下文和状态。
+message: 发消息、写文档或建文件...
+operations:
+  load-models: 加载模型
+  load-models-status:
+    loading: 模型加载中
+    ready: 已就绪
+select-a-audio-input: 选择一个音频输入设备
+select-a-model: 选择一个模型
+select-a-voice: 选择一个声线
+viewers:
+  debug-menu:
+    emotions: 表情
+    emotions-btn:
+      angry: '😠 生气'
+      awkward: '😳 尴尬'
+      happy: '😄 开心'
+      neutral: '🙂 日常'
+      question: '🤔 疑问'
+      sad: '😫 难过'
+      surprised: '🤯 惊喜'
+      think: '🤨 思考'
+    vrm:
+      camera: 摄像机
+      model:
+        title: 模型
+waiting: 等待中

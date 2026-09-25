@@ -1,0 +1,895 @@
+operations:
+  load-models: 唤醒推理模型
+  load-models-status:
+    loading: 正在努力加载～
+    ready: 准备好啦
+bootstrap:
+  starting: Wuwiii 正在醒来，马上就绪～
+  interface: 正在把桌面小窝收拾好
+  services: 正在连接本地服务
+  model: 正在请角色来到桌面
+  character: 正在找回熟悉的角色状态
+  conversation: 正在把我们的对话记忆放回手边
+  provider: 正在唤醒聊天模型
+  windows: 正在打开桌面上的小窗口
+  ready: 准备好啦，来找我吧～
+  failed: 启动没有完成，请看看哪里需要帮忙
+  failed-detail: 桌面伙伴启动失败，请重试；若仍无法启动，可导出诊断信息或退出应用。
+  retry: 再试一次
+  quit: 退出应用
+  open-diagnostics: 打开诊断
+  export-diagnostics: 导出诊断
+  diagnostics-exported: 诊断副本已导出
+  waiting: 稍等我一下，角色和聊天窗口马上就准备好
+resource-status:
+  loading: 正在搬来需要的资源...
+  ready: 已经准备好啦
+  modules-pending: 还有几个模块在赶来...
+  modules-ready: 所有模块都到齐啦
+  preparing: 正在整理资源...
+speech-control:
+  title: 声音来源
+  enable: 让我开口说话
+  disable: 先安静陪着你
+  provider: 语音厂商
+  model: 语音模型
+  voice: 声线
+  voice-unavailable: 这条声线当前不可用，原声线保持不变。
+  official-cloud-description: 官方声线由服务端目录管理，进入声线面板可以搜索、收藏并切换主/副链路声线。
+  language: 讲话语言
+  configure: 语音设置
+  configure-first: 先帮我选好声音吧～
+  not-configured: 还没有可以说话的声音
+  languages:
+    zh-CN: 中文
+    en-US: 英语
+    ja-JP: 日语
+    ko-KR: 韩语
+update:
+  available: Wuwiii {version} 可以更新
+  required: Wuwiii {version} 需要更新
+  required-description: 此版本包含必须安装的更新。完成更新后才能继续使用 Wuwiii。
+  download: 下载更新
+  downloaded: Wuwiii {version} 已下载完成
+  restart: 重启并更新
+  about:
+    project: 项目
+    desktop-version: 桌面版
+    current-version: 当前版本
+    download: 下载更新
+    downloading: 正在下载更新...
+    ready: '更新 v{version} 已准备好安装。'
+    restart: 重启并更新
+    confirm-restart: 确认重启
+    cancel: 取消
+    error: '检查更新失败：{message}'
+    unknown-error: 未知错误
+    checking: 正在检查...
+    latest: 已是最新版本
+    disabled: 更新暂不可用
+    retry: 重新检查
+    check: 检查更新
+    links: 链接
+    home: 首页
+    documentation: 文档
+    available-title: 有可用更新
+    available-description: '新版本 v{version} 已可下载。'
+    no-release-notes: 暂无更新说明。
+    confirm-download: 确认下载
+model-control:
+  title: 对话模型
+  switch: 切换服务来源或模型
+  provider: 服务来源
+  model: 模型
+  model-name: 模型名称
+  no-model: 未选择模型
+  refresh: 刷新模型列表
+  points-short: '{points}点/{tokens}'
+  points-detail: '{points} 点 / {tokens} Token'
+  context-limit: '上下文 {tokens}'
+  output-limit: '单次输出 {tokens}'
+  workbench-price: '工作台参考价 {points} 点 / {tokens} Token'
+docs:
+  theme:
+    navbar:
+      appearance:
+        title: 外观
+'drag-to-move-window': 拖动以移动窗口
+'controls-island':
+  'fade-on-hover':
+    enable: 悬停时隐藏
+    disable: 总是显示
+  'mouse-mode':
+    title: 鼠标交互模式
+    interactive:
+      title: 正常交互
+      description: 可直接操作角色和控制项
+    smart:
+      title: 智能穿透
+      description: 仅透明区域传递点击
+  'open-settings': 设置
+  'open-chat': 完整聊天
+  'open-workbench': 打开工作台
+  'open-quick-chat': 气泡对话
+  'open-butler-tasks': 小屋管家
+  'open-turtle-soup': 打开海龟汤
+  'refresh': 刷新
+  'open-hearing-controls': 打开听力控制
+  'drag-to-move-window': 拖动以移动窗口
+  'switch-to-light-mode': 切换到亮色模式
+  'switch-to-dark-mode': 切换到暗色模式
+  'close': 关闭
+  'expand': 展开
+  'collapse': 折叠
+
+butler:
+  title: 小屋管家在这里
+  orb:
+    open: 打开小屋管家
+  status:
+    idle: 有事可以叫我
+    pending: 还有 {count} 条提醒
+    due: 有 {count} 条提醒到时间了
+  tabs:
+    today: 今天
+    tasks: 待办
+    tools: 工具
+  actions:
+    chat: 聊天
+    voice: 语音
+    reminder: 提醒
+    alarm: 闹钟
+    timer: 计时器
+    tasks: 任务
+    more: 更多
+    settings: 设置
+    workbench: 工作台
+    quick-chat: 气泡对话
+    turtle-soup: 海龟汤
+    light: 亮色
+    dark: 暗色
+    refresh: 刷新
+    collapse: 收起
+    orb-settings: 小球取景设置
+    mute-reminders: 静音提醒
+    unmute-reminders: 取消静音
+    enable-do-not-disturb: 开启免打扰
+    disable-do-not-disturb: 关闭免打扰
+    lock-position: 锁定位置
+    unlock-position: 解锁位置
+  settings:
+    default-model: 当前角色
+    orb-title: 角色头像取景
+    orb-description: 调整角色在管家球、聊天联系人、消息头像和电话界面的取景。每个模型会单独保存。
+    crop-x: 左右
+    crop-y: 上下
+    crop-scale: 缩放
+    lens: 凸透镜
+    reset-orb: 重置头像取景
+    notifications-title: 通知
+    notification-status:
+      enabled: 开启
+      muted: 已静音
+      do-not-disturb: 免打扰
+      quiet-hours: 安静时段
+    mute-reminders: 静音提醒
+    reminder-sound: 提醒铃声
+    reminder-sound-volume: 音量
+    test-reminder-sound: 试听
+    sound:
+      off: 关闭
+      focus-tap: 专注轻点
+      soft-chime: 轻提示音
+      warm-bell: 温和铃声
+    do-not-disturb: 免打扰
+    quiet-hours: 安静时段
+    quiet-start: 开始
+    quiet-end: 结束
+    desktop-title: 桌面控制
+    mouse-interaction-title: 鼠标交互
+    mouse-interaction-description: 选择角色窗口如何响应鼠标点击。
+    always-on-top: 总在最前
+    visible-all-workspaces: 所有桌面可见
+    lock-position: 锁定位置
+    opacity: 透明度
+    window-size: 大小
+    hide-butler: 隐藏
+    quit-airi: 退出
+    quit-confirm-title: 退出 Wuwiii？
+    quit-confirm-description: 退出后，桌面角色、快捷聊天和管家提醒都会停止运行。
+    quit-confirm-cancel: 取消
+    quit-confirm-action: 确认退出
+  overview:
+    idle-title: 今天还很安静
+    idle-description: 没有急事。我可以陪你聊天、记提醒，或者把下一件事整理出来。
+    due-title: 这件事到时间了
+    next-preview: 下一条：{time} {title}
+    quiet-preview: 今天还没有提醒
+    due-summary: 有 {count} 件到时间了
+    tasks-summary: 今天还有 {count} 件
+    no-tasks-summary: 暂无待办
+    task-page-hint: 提醒、闹钟、计时器和未来待办都放在这里。
+    talk: 和当前居民说
+    add-reminder: 加提醒
+    open-tasks: 看待办
+    schedule:
+      now: 现在
+      missed: 错过
+      today: 今天
+      upcoming: 以后
+      timer: 计时
+      empty: 还没有安排提醒、闹钟或计时器。
+      today-short: 今
+      day-count: '{count} 件'
+  tools:
+    tasks: 任务
+    notifications: 通知
+    communication: 交流
+    desktop: 桌面
+    advanced: 高级
+  tasks:
+    placeholder: 添加一条提醒
+    placeholders:
+      reminder: 想让当前居民提醒什么？
+      alarm: 闹钟名称（可不填）
+      timer: 计时器名称（可不填）
+    note-placeholder: 备注、要打开的事或补充说明（可不填）
+    add: 添加提醒
+    submit:
+      reminder: 添加
+      alarm: 设定
+      timer: 开始
+    save: 保存
+    saving: 正在保存
+    cancel-edit: 取消
+    modes:
+      reminder: 提醒
+      alarm: 闹钟
+      timer: 计时器
+    repeat:
+      none: 不重复
+      daily: 每天
+      weekly: 每周
+    repeat-days: 重复日期（不选就是单次）
+    weekdays:
+      0: 日
+      1: 一
+      2: 二
+      3: 三
+      4: 四
+      5: 五
+      6: 六
+    defaults:
+      reminder: 提醒
+      alarm: 闹钟
+      timer: '{time} 计时器'
+    errors:
+      save-failed: 任务没有保存成功，输入内容仍然保留，请重试。
+    alarm-time: 时间
+    alarm-date-time: 响铃时间
+    date: 日期
+    time: 时间
+    timer-hours: 时
+    timer-minutes: 分
+    timer-seconds: 秒
+    custom-time: 准确时间
+    timer-preset: '{count}分'
+    timer-remaining: '还剩 {time}'
+    notification-title: 小屋管家提醒
+    delivery:
+      blocked: 通知已被静音/勿扰拦截
+      failed: 系统通知不可用
+    edit: 编辑
+    done: 完成
+    pause: 暂停
+    resume: 继续
+    reset: 重置
+    snooze: 稍后 10 分钟
+    snooze-minutes: '{count}分后'
+    cancel: 取消
+    snooze-short: 稍后
+    snooze-short-minutes: '{count}分'
+    overdue: 已超时 {count} 分钟
+    due-in-minutes: '{count} 分钟后'
+    due-at: '{time}'
+    timer-paused: '已暂停，还剩 {time}'
+    presets:
+      10m: 10分
+      30m: 30分
+      1h: 1时
+      today: 今天
+      tomorrow: 明天
+      custom: 自定
+  empty:
+    overview: 现在没有紧急提醒，需要时可以直接用快捷入口叫我。
+    tasks: 还没有提醒。
+
+workbench:
+  title: 命令工作台
+  session:
+    idle: 空闲
+    inspecting: 正在检查
+    planning: 正在计划
+    running: 正在执行
+    waiting-approval: 等待确认
+    compacting: 正在压缩
+    paused: 已暂停
+    stopped-action: 已停止
+    completed: 已完成
+    failed: 已失败
+  workspace:
+    none: 未选择工作区
+    default-session: 默认会话
+  workspace-guard:
+    title: 工作区不匹配
+    unknown-workspace: 另一个工作区
+    current-missing: 未选择工作区
+    blocked-summary: '已阻止{action}。这条记录属于 {recordedWorkspace}，但当前工作区是 {currentWorkspace}。{reason}'
+    next-step: 请切回 {recordedWorkspace}，或在当前工作区重新生成这条记录后再试。
+    action:
+      apply-proposal: 应用这项修改
+      project-preview: 启动项目预览
+      run-recipe: 运行这条命令
+    reason:
+      current-workspace-missing: 当前没有选择工作区。
+      workspace-id-mismatch: 记录的工作区 ID 与当前选择的工作区不同。
+      workspace-root-mismatch: 记录的工作区路径与当前选择的工作区不同。
+  memory:
+    all: 全部
+    goals: 目标
+    plans: 计划
+    tools: 工具
+    commands: 命令
+    files: 文件
+    diffs: 差异
+    compact: 压缩
+    note-title: '{kind}记录'
+  task:
+    auto-title: 待整理目标
+    untitled: 未命名任务
+    auto-run-title: 运行 {recipe}
+    auto-run-summary: 运行 {recipe} 辅助检查，结果会记录到当前任务。
+    delete-file-title: 删除 {path}
+  tabs:
+    run: 工作
+    files: 文件
+    changes: 变更
+    preview: 预览
+    details: 详情
+  input-mode:
+    new-task: 新任务
+    continue-task: 继续
+    ask: 提问
+  work-mode:
+    confirm-major: 重大改动确认
+    autopilot: 放开自动推进
+  work-mode-description:
+    confirm-major: 当前居民可以观察和准备工作，但重大修改和高风险动作仍需要确认。
+    autopilot: 当前居民可以连续执行已批准的辅助检查和常规工作，但仍遵守硬安全边界。
+  model-selection:
+    mode:
+      label: 模型选择
+      auto: 自动
+      manual: 手动
+    reason:
+      manual-selection: '手动：{model}'
+      official-codex-for-code: '已为代码/游戏选择 {model}'
+      official-claude-for-long-context: '已为复杂长上下文任务选择 {model}'
+      official-long-context: '已为长上下文选择 {model}'
+      official-balanced-default: '自动选择 {model}'
+      configured-provider-fallback: '使用已配置模型 {model}'
+      chat-model-fallback: '沿用聊天模型 {model}'
+  kind:
+    user-goal: 目标
+    plan: 计划
+    tool-result: 工具
+    command-output: 命令
+    file-summary: 文件
+    diff-state: 差异
+    approval: 审批
+    checkpoint: 检查点
+    compact-summary: 压缩
+    note: 记录
+    error: 错误
+  quick:
+    plan: 计划
+    observe: 观察
+    command: 命令
+    diff: 差异
+  trust:
+    unknown: 未确认
+    trusted: 已信任
+    restricted: 受限制
+  permission:
+    observe: 只读
+    edit-preview: 预览修改
+    edit-apply: 应用修改
+    execute: 执行命令
+    elevated: 高权限
+  permission-description:
+    observe: 只能读取和观察。当前居民可以查看工作区上下文，但不能准备修改，也不能运行工作台命令。
+    edit-preview: 当前居民可以准备修改建议和 diff 预览，但不能把修改写入文件。
+    edit-apply: 当前居民可以在工作区内应用已经确认过的文件修改，命令执行仍然单独控制。
+    execute: 当前居民可以运行已批准的辅助检查，例如 typecheck、lint、test、build。
+    elevated: 保留给高风险或需要更高权限的工作，必须始终经过明确确认。
+  retention:
+    summarize: 摘要保留
+    artifact-ref: 产物引用
+    pin: 固定保留
+  retention-description:
+    summarize: 将这条内容作为可压缩摘要保留，后续 compact 时可以进一步整理。
+    artifact-ref: 只保留简短记录，并关联命令、diff、文件等产物，不把完整内容长期放进上下文。
+    pin: compact 时仍然保留在当前工作上下文里，适合目标、当前计划和关键决定。
+  labels:
+    commands: 命令
+    console: 控制台
+    workspace: 工作区
+    context: 上下文
+    cwd: 工作目录
+    goal: 目标
+    permission: 权限
+    protection: 保护
+    protected-paths: 路径
+    protected-rules: 规则
+    profile: 配置
+    memory: 记忆
+    execution-log: 执行记录
+    details: 详情
+    terminal: 终端
+    search: 搜索
+    audit: 审计
+    selected: 当前选择
+    summary: 摘要
+    body: 内容
+    artifacts: 产物
+    total-items: 总条目
+    context-units: 上下文单位
+    active-run: 正在运行
+    running: 运行中
+    latest-result: 最新结果
+    work-context: 工作上下文
+    tasks: 任务
+    ai-process: 当前居民
+    execution-stream: 执行流
+    work-flow: 进展
+    current-task: 当前任务
+    continuing-task: 正在继续
+    airi-plan: 居民执行计划
+    task-process: 任务过程
+    task-steps: '{count} 条过程'
+    task-steps-window: '{visible} / {total} 条过程'
+    terminal-entries: '{count} 条输出'
+    latest-step: 最新追加
+    run-project: 运行项目
+    project-preview: 项目预览
+    static-preview: 静态预览
+    checks: 辅助检查
+    session-details: 会话详情
+    run-config: 检查项
+    workspace-files: 文件
+    workspace-notes: 工作区备注
+    provider: 服务商
+    model: 模型
+    belongs-to-task: 任务
+  command:
+    labels:
+      command: 命令
+      duration: 耗时
+      exit-code: 退出码
+      stdout: 标准输出
+      stderr: 错误输出
+      output: 输出
+      raw-output: 原始输出
+      error: 错误
+      risk: 风险
+    status:
+      running: 运行中
+      success: 成功
+      failed: 失败
+      cancelled: 已取消
+    terminal:
+      empty: 终端只显示命令、辅助检查或项目预览的输出；写文档这类任务没有运行命令时这里会为空。
+      no-raw-output: 这次运行还没有捕获原始输出。
+    risk:
+      low: 低
+      normal: 普通
+      high: 高
+      blocked: 已阻断
+    risk-reason:
+      empty-command: 未提供命令。
+      high-risk-command: 该命令命中高风险类别。
+      low-local-diagnostic: 本地 git status 和 diff 属于低风险诊断。
+      low-local-recipe: 这是允许列表内的低风险本地检查。
+      normal-local-command: 这是本地检查、构建、测试或预览命令。
+      normal-project-preview: 这个 dev 配方是普通风险的本地预览。
+      cwd-outside-workspace: 配方工作目录位于所选工作区之外。
+      recipe-disabled: 这个工作区配方已禁用。
+      recipe-high-risk: 这个配方被配置为高风险。
+      recipe-run-risk-not-low: 本地检查配方必须配置为低风险。
+      unknown-command: 该命令未识别为常规本地诊断或项目配方。
+      unsupported-project-preview-kind: 只有 dev 配方可以启动项目预览。
+      unsupported-recipe-command: 该配方不是允许列表内的包管理器脚本。
+      unsupported-recipe-kind: MVP-1 中暂不支持把该配方类型作为本地检查运行。
+    policy-blocked-title: 命令策略已阻断 {recipe}
+    policy-blocked-summary: '{recipe} 未启动。{reason}'
+    values:
+      pending: 等待中
+      no-exit-code: 无退出码
+      truncated: 输出已截断
+  web-search:
+    empty: 搜索只显示联网搜索请求和来源状态；当前任务还没有记录搜索步骤。
+    labels:
+      query: 查询
+      sources: 来源
+      provider: 服务
+    provider-status:
+      completed: 已完成
+      failed: 失败
+      not-run: 未执行
+      unconfigured: 未配置
+  audit:
+    count: '{count} 条记录'
+    count-window: '{visible} / {total} 条记录'
+    developer-details: 开发者详情
+    empty: 暂无审计记录。
+    open-related: 打开关联详情
+    kind:
+      planner-decision: 规划决策
+      file-read: 文件读取
+      file-proposal: 文件提案
+      file-apply: 文件应用
+      command: 命令
+      web-search: 联网搜索
+      confirmation: 确认
+      error: 错误
+      recovery: 恢复
+    source:
+      memory: 记忆
+      runtime: 运行时
+      command: 命令
+    detail:
+      event-id: 事件
+      event-kind: 事件类型
+      source: 来源
+      status: 状态
+      detail-tab: 详情页
+      workspace-id: 工作区
+      workspace-root: 工作区根目录
+      file-path: 文件
+      command-run-id: 命令运行
+      proposal-id: 提案
+      risk: 风险
+      risk-reason: 风险原因
+      risk-reason-code: 风险代码
+      search-query: 搜索查询
+      search-source-count: 搜索来源数
+      search-provider-status: 搜索服务
+  performance:
+    folded-audit-entries: 已为性能折叠 {count} 条较早审计记录。
+    folded-process-events: 已为性能折叠 {count} 条较早过程记录。
+  card:
+    needs-confirmation: 需要确认
+    completed: 已完成
+    updated: 已更新
+  process:
+    current: 当前
+    mode: 工作模式
+    model: 工作台模型
+    confirmation: 确认状态
+    no-confirmation: 暂无需要确认
+  process-stage:
+    waiting-confirmation: 等待你确认
+    previewing-project: 正在预览 {recipe}
+    running-command: 正在运行 {recipe}
+    agent-loop: 呜异工作台正在处理
+    choose-workspace: 选择工作区
+    choose-workspace-description: 当前居民需要先知道项目位置，才能浏览文件或运行安全的项目命令。
+    tell-task: 告诉当前居民要做什么
+    tell-task-description: 在下方输入任务、粘贴报错，或询问下一步怎么处理。
+    reviewing-card: 当前任务
+    idle: 可以继续下一步
+    idle-description: 当前没有正在运行的命令。
+  agent-loop:
+    run-label: 居民任务循环
+    inspection-title: 检查工作区
+    plan-title: 下一步计划
+    edit-plan-title: 准备 {task}
+    error-title: 居民处理已停止
+    deferred-title: 已记录指令
+    continue-title: 任务已更新
+    run-check-title: 运行 {recipe}
+    preview-title: 预览 {recipe}
+    edit-preview-skipped-title: 暂未生成文件改动
+    inspect-only-complete-title: 已整理当前状态
+    none: 无
+    no-files: 未发现文件
+    deferred-active: 这条指令已记录。当前已有命令或项目预览正在运行，当前居民不会同时启动另一条任务循环。
+    continue-body: 已记录到当前任务，呜异工作台会按任务上下文判断下一步。
+    choose-workspace-first: 请先选择工作区，这样当前居民才能检查文件并判断下一步安全动作。
+    next-inspecting: 检查当前工作区。
+    next-inspect-only: 已整理当前任务状态。
+    next-edit-preview: 准备文件修改预览，确认前不会写入文件。
+    next-run-check: 运行 {recipe} 辅助检查并观察结果。
+    next-preview-project: 启动 {recipe} 项目预览。
+    next-web-search: 记录联网搜索请求和来源状态。
+    inspect-workspace: '工作区：{workspace}'
+    inspect-files: '顶层文件：{files}'
+    inspect-checks: '辅助检查：{recipes}'
+    inspect-project-runs: '项目运行入口：{recipes}'
+    inspect-directory-failed: '无法检查文件：{error}'
+    plan-received: '任务：{task}'
+    plan-run-check: '运行受控辅助检查：{recipe}。'
+    plan-preview-project: '启动受控项目预览：{recipe}。'
+    plan-web-search: '检索当前外部信息：{query}。'
+    plan-web-search-boundary: 搜索细节保留在 Search 过程视图里，原始结果不刷屏聊天。
+    plan-edit-preview: 准备文件修改预览，确认前不写入文件。
+    plan-inspect-only: 整理当前任务状态；如果目标已经足够明确，下一步会进入修改预览或运行。
+    plan-observe-result: 在这张任务卡里观察结果，再决定下一步。
+    plan-boundary: 需要写入文件时会进入变更页确认；安装、删除、联网命令和高权限动作仍走专门确认。
+    run-check-start: '开始受控辅助检查：{recipe}。'
+    preview-start: '开始受控项目预览：{recipe}。'
+    web-search-plan-title: 准备联网搜索
+    web-search-query-title: 已请求联网搜索
+    web-search-result-title: 已记录搜索来源状态
+    web-search-query-body: '查询：{query}'
+    web-search-start: '准备联网搜索：{query}'
+    web-search-deferred: '已记录查询：{query}。当前可用来源数：{sourceCount}。MVP-1 基线暂未接入真实 provider 执行。'
+    web-search-deferred-next-step: '已记录搜索请求：{query}。'
+    edit-preview-skipped: 当前已有待确认改动，或工作区还没准备好；当前居民暂停生成新的文件改动。
+    inspect-only-complete: 这一步没有触发文件修改或命令运行；当前居民已把状态记录在当前任务里。
+    public-kind: 居民整理
+    public-inspection-title: 已检查工作区
+    public-plan-title: 当前居民已整理下一步
+    public-run-check-title: 准备运行 {recipe}
+    public-preview-title: 准备预览 {recipe}
+    public-web-search-query-title: 已请求联网搜索
+    public-web-search-result-title: 已记录搜索来源状态
+    public-deferred-title: 已记录指令
+    public-note-title: 居民记录
+    public-inspection-summary: 已找到 {fileCount} 个顶层文件、{checkCount} 个检查入口、{runCount} 个项目运行入口。
+    public-inspection-error-summary: 工作区检查没有完成，细节已折叠在下方。
+    public-inspection-generic: 已检查当前工作区，细节已折叠在下方。
+    public-plan-run-check: 呜异工作台会先运行 {recipe} 辅助检查，再根据结果判断下一步。
+    public-plan-preview-project: 呜异工作台会先启动 {recipe} 项目预览，确认项目能否运行。
+    public-plan-edit-preview: 当前居民正在准备可审查的文件修改。
+    public-plan-web-search: 呜异工作台会使用当前外部信息，并把来源细节保留在 Search。
+    public-plan-inspect-only: 当前居民已整理当前任务状态。
+    public-deferred-summary: 当前已有动作正在运行，这条输入已保留在当前任务里。
+    public-run-check-summary: 正在启动 {recipe} 辅助检查。
+    public-preview-summary: 正在启动 {recipe}。
+    public-web-search-query-summary: '搜索查询：{query}。'
+    public-web-search-result-summary: '当前可用来源数：{sourceCount}。服务状态已记录在 Search。'
+    public-error-summary: 当前居民处理这一步时遇到问题，细节已折叠在下方。
+    internal-details: 过程细节
+  start:
+    eyebrow: 呜异工作台
+    title: 当前居民准备接手
+    description: 先确认项目位置，再把要做的事交给当前居民。过程会整理在右侧，需要你确认时再打断你。
+    workspace: 1. 工作区
+    workspace-empty: 选择项目文件夹
+    task: 2. 任务
+    task-empty: 描述要当前居民做什么
+    task-ready: 任务卡正在记录本次工作
+    process: 3. 过程
+    focus-input: 交给当前居民
+  compact:
+    manual-title: 手动压缩
+    auto-title: 自动压缩
+  mini:
+    title: 高级工作台已收起
+    description: 需要文件、命令或详细处理时，从管家任务继续进入。
+    resume: 继续高级工作台
+  actions:
+    pause: 暂停当前会话
+    resume: 继续当前会话
+    stop: 停止当前动作
+    collapse: 收起为小菜单
+    expand: 展开工作台
+    select-workspace: 选择工作区
+    save-goal: 保存目标
+    save: 保存
+    compact: 压缩上下文
+    add-plan: 添加计划
+    add-selected: 添加{kind}
+    send: 发送
+    send-to-airi: 发送给当前居民
+    delete-item: 删除记录
+    delete-task-card: 删除任务卡
+    resume-from-card: 从这张卡片继续
+    continue-task-card: 继续任务卡
+    collapse-sidebar: 收起侧栏
+    expand-sidebar: 展开侧栏
+    close: 关闭工作台
+    minimize-window: 最小化
+    maximize-window: 最大化
+    restore-window: 还原
+    zoom-in-file: 放大文件文字
+    zoom-out-file: 缩小文件文字
+    clear-errors: 清除错误并刷新状态
+    close-file-preview: 关闭文件预览
+    save-file: 保存文件
+    reload-file: 从磁盘刷新
+    revert-file: 撤销未保存编辑
+    run: 运行
+    run-file: 运行此文件
+    refresh-files: 刷新文件
+    delete-file: 删除文件
+    remove-workspace: 从最近列表移除工作区
+    preview-project: 预览项目
+    stop-preview: 停止预览
+    refresh-preview: 刷新预览
+    open-preview-external: 在外部打开预览
+    run-recipe: 运行辅助检查
+    rerun-recipe: 重新运行检查
+    cancel-continuation: 下一条改为新任务
+    voice-input-start: 语音输入
+    voice-input-stop: 停止语音输入
+  file-editor:
+    labels:
+      editor: 编辑
+      preview: 预览
+      unsaved: 未保存
+      readonly: 只读
+      saving: 保存中
+      running: 运行中
+    readonly:
+      no-file: 未选择文件。
+      truncated: 文件预览已被截断，因此暂不允许编辑。
+      large-file: 文件过大，暂不放入内嵌编辑器。
+      unsupported-file-type: 此文件类型按只读处理。
+    errors:
+      missing-base-hash: 缺少原始文件哈希。请先刷新文件再保存。
+      dirty-close-blocked: 请先保存或回滚未保存编辑，再关闭这个文件。
+      dirty-reload-blocked: 请先保存或回滚未保存编辑，再刷新这个文件。
+      dirty-delete-blocked: 请先保存或回滚未保存编辑，再准备删除这个文件。
+  project-run:
+    choose-workspace: 先选择工作区，才能预览项目。
+    detected: 已发现运行入口：{recipe}。点击预览项目后会在当前工作区启动受控运行会话。
+    policy-blocked: '项目预览被命令策略阻断：{reason}'
+    running: 正在运行 {recipe}，等待项目输出预览地址。
+    running-url: 项目正在运行：{url}
+    previewing: 项目预览
+    empty: 暂无运行入口。继续描述任务后，当前居民可以创建或识别运行方式。
+    status:
+      pending: 等待中
+      starting: 启动中
+      running: 运行中
+      stopping: 停止中
+      stopped: 已停止
+      failed: 失败
+  static-preview:
+    empty-title: 暂无预览
+    empty-description: 应用 HTML 提案并预览，或启动项目预览后会显示在这里。
+    load-failed-title: 无法预览此文件
+    load-failed-description: 当前格式无法在工作台中查看或播放，请使用系统中的其他应用打开。
+  checks:
+    description: 用于收尾自检，不是主要运行入口；做完或遇到报错时再按需运行。
+  transient:
+    greeting-title: 当前居民在
+    greeting-body: 直接说要做什么就行，我会按当前工作区推进。
+    no-task-title: 还没有任务
+    no-task-body: 先告诉我要做什么；有任务卡后，我会按当前任务上下文判断下一步。
+  confirmation:
+    pending-title: 等待确认
+  changes:
+    review-title: 文件改动
+    review-summary: 已有 {count} 条改动记录，具体差异在变更面板查看。
+    open-panel: 查看变更
+    review-and-confirm: 查看并确认变更
+    proposal-title: 准备修改 {path}
+    proposal-summary: 准备修改 {path}，新增 {added} 字符，移除 {removed} 字符。确认前不会写入文件。
+    delete-proposal-title: 准备删除 {path}
+    delete-proposal-summary: 准备删除 {path}，将移除 {removed} 字符内容。确认前不会删除文件。
+    generated-invalid: 当前居民没有生成可用的文件修改。
+    diff-preview: 差异预览
+    content-preview: 内容预览
+    file-meta: 等待确认
+    file-meta-with-mode: '{mode} · 等待确认'
+    file-meta-delete: 删除文件 · 等待确认
+    unchanged: 内容相同
+    status-pending: 待确认
+    status-applied: 已应用
+    status-discarded: 已撤回
+    status-conflict: 有冲突
+    status-stale: 已过期
+    fact-proposal-id: 'proposal {proposalId}'
+    fact-base-hash: 'base {baseHash}'
+    fact-base-hash-missing: base 新文件
+    fact-workspace: 'workspace {workspaceId}'
+    fact-expires-at: '{time} 过期'
+    waiting-apply: 等待在变更页应用 {path}
+    waiting-apply-multiple: 等待在变更页应用 {count} 个文件改动
+    apply: 应用
+    apply-and-preview: 应用并预览
+    apply-all: 全部应用
+    applying: 应用中
+    discard: 撤回
+    discard-all: 全部撤回
+    discarding: 撤回中
+    applied-title: 已应用 {path}
+    applied-summary: 已应用 {path} 的文件改动。
+    deleted-title: 已删除 {path}
+    deleted-summary: 已删除 {path}。
+    applied-next-step: 已应用 {path}，可以打开文件或运行项目检查。
+    applied-next-step-preview: 已应用 {path}，下一步可以用 {recipe} 预览项目。
+    deleted-next-step: 已删除 {path}，可以打开工作区或运行项目检查。
+    preview-failed-title: 预览启动失败
+    preview-failed-summary: '文件改动已经应用，但静态预览没有启动：{message}'
+    applied-final-summary: 已应用 {path}，文件已经写入工作区。
+    applied-final-summary-preview: 已应用 {path}，文件已经写入工作区，接下来可以用 {recipe} 预览。
+    deleted-final-summary: 已删除 {path}，这个删除已经应用到工作区。
+    applied-final-summary-multiple: 已应用 {count} 个文件改动，工作区已经更新。
+    apply-failed-title: 应用修改失败
+    conflict-title: '{path} 有冲突'
+    conflict-summary: '{path} 在提案创建后发生了变化。请重新生成该文件的修改后再应用。'
+    conflict-next-step: '{path} 存在冲突。请先保存或回滚你的手动编辑，然后重新生成这个文件修改。'
+    manual-edit-conflict-summary: '{path} 在编辑器里还有未保存的手动编辑。请先保存或回滚，再应用工作台的修改提案。'
+    apply-conflict-summary: '{path} 在居民提案创建后已被磁盘内容改动。本次没有应用修改。'
+    stale-summary: '{path} 的修改提案已过期。请重新生成后再应用。'
+    discard-failed-title: 撤回修改失败
+    discarded-title: 已撤回 {path}
+    discarded-summary: 已撤回 {path} 的待应用改动，文件没有被写入。
+    discarded-next-step: 已撤回 {path}，可以继续调整需求或重新生成改动。
+  risk-notice:
+    title: 使用工作台前请确认
+    description: 工作台会接触本机工作区和项目进程。请先确认当前工作区与准备执行的内容。
+    read-only: 浏览和读取文件属于较低风险操作，但内容仍可能包含隐私或敏感信息。
+    file-changes: 文件改动会先作为提案显示；只有你在“变更”页明确应用后才会写入。
+    guarded-actions: 命令、安装、删除、提权、外部访问和跨工作区操作仍受单独限制或确认，不能因这次提示而跳过。
+    cancel: 暂不进入
+    confirm: 我已了解，进入工作台
+  input:
+    goal-placeholder: 任务目标
+    workspace-notes: 工作区备注
+    placeholder-mini: 告诉当前居民下一步做什么
+    placeholder-full: 描述任务、写文档/建文件、粘贴报错，或询问当前居民下一步怎么做
+    placeholder-continue: 继续给当前任务补充下一步指令
+    voice-listening: 正在听写，转写文本会先插入这里，发送前仍可编辑。
+    voice-recording: 正在录音，停止后会转写到输入框。
+    voice-active-elsewhere: 其他聊天界面正在使用语音输入。
+  empty:
+    title: 暂无活动
+    description: 当前会话记忆为空。
+    no-selection: 未选择条目。
+    no-selection-title: 选择任务查看过程
+    no-selection-description: 左侧任务卡会显示当前居民已整理的工作。选中任务后，右侧会显示步骤、结果和需要确认的细节。
+    no-recipes: 当前工作区没有可运行检查项。
+    no-checks: 当前工作区没有可用辅助检查。
+    awaiting-task: 等待任务
+    no-files: 暂未加载文件。
+    no-workspace-files: 先选择工作区再浏览文件。
+    no-provider: 无服务商
+    current-provider: 当前服务商
+    no-model: 无模型
+    run-title: 暂无工作卡片
+    run-description: 告诉当前居民要做什么，命令、结果和确认会显示在这里。
+    files-title: 暂无文件上下文
+    files-description: 当前居民读取或记录工作区文件后，文件摘要会显示在这里。
+    changes-title: 暂无变更
+    changes-description: 当前居民准备或检查修改后，diff 和变更摘要会显示在这里。
+    preview-title: 暂无预览
+    preview-description: 生成的 HTML 或项目运行预览会显示在这里。
+    details-title: 暂无详情
+    details-description: 终端输出、过程记录和审计详情会在这里集中查看。
+  details:
+    counts: '{pinned} 个固定 / {compact} 个压缩'
+  values:
+    yes: 是
+    no: 否
+    loading: 加载中
+    lines: 行
+notice:
+  'fade-on-hover':
+    title: 悬停淡出
+    intro: 当光标靠近时自动让角色变淡，减少干扰又保持可见。
+    opacity: 开启后，当光标靠近时， {targets} 的不透明度会降到 {value}。
+    toggle: 可以通过将光标移动到 {controls} 区域，再次点击 {icon} 来关闭此功能。
+    controls-label: 控制岛
+    icon-label: 隐藏图标
+    value: '0'
+    targets: 角色和界面
+    confirm: 知道了
+    dont-show-again: 不再提示
+    preparing: 准备中…
+    read-more: 阅读更多
+    preview-title: 这是什么？

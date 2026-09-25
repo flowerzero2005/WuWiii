@@ -1,0 +1,924 @@
+allow-visible-on-all-workspaces:
+  title: 跨桌面可见性
+  description: 允许窗口在所有虚拟桌面中可见，仅限 macOS。
+pages:
+  notifications:
+    title: 通知中心
+    description: 查看曾经收到的产品公告。公告负责单向通知，客服回复由 QQ 群承接。
+    open-center: 查看通知中心
+    refresh: 刷新公告
+    refresh-behavior: 主界面启动、切换显示语言后及运行期间每 15 分钟会自动刷新公告；打开本页也会立即刷新。已收到的公告保存在本机，离线时仍可查看。
+    refresh-error: 暂时无法刷新公告，下面仍保留此前收到的内容。
+    empty: 暂时没有公告。
+    popups:
+      title: 弹出公告提醒
+      description: 关闭后公告仍会保存在通知中心，但不会在主界面弹出；重新开启时不会补弹关闭期间收到的旧公告。
+    level:
+      critical: 重要
+      warning: 提醒
+      info: 通知
+    status:
+      cached: 已离线保存
+    support:
+      title: 付费 Beta 客服
+      description: 如有付费 Beta 使用问题或反馈，请加入 QQ 群。公告只负责发布通知，客服回复在群内进行。
+      group-label: QQ 群
+      copy: 复制群号
+      copied: QQ 群号已复制。
+      copy-error: 无法复制 QQ 群号。
+  official-voices:
+    title: 官方声线
+    description: 浏览、搜索并收藏 Wuwiii 官方声线；选择通过服务端目录确认后才会生效。
+    views:
+      recommended: 推荐
+      all: 全部
+      favorites: 收藏
+      recent: 最近
+    channels:
+      primary: 主链路声线
+      secondary: 备用链路声线
+    statuses:
+      idle: 空闲
+      busy: 忙碌
+      congested: 拥挤
+      maintenance: 维护中
+      error: 暂不可用
+      recovering: 恢复中
+    search: 搜索名称、说明或声线 ID
+    all-languages: 全部语言
+    current: 当前声线
+    billing-rule: '基础 {points} 点/分钟，最低 {minimum} 点；声线附加 {surcharge} 点/次'
+    per-minute: 基础语音
+    minimum-base: 单次最低基础
+    per-use-surcharge: 声线附加
+    points-short: 点
+    points-value: '{points} 点'
+    points-per-minute: '{points} 点/分钟'
+    points-per-use: '{points} 点/次'
+    rate-with-surcharge: '{points} 点/分钟 + {surcharge} 点/次'
+    price-follows-server: 最终按实际语音时长结算
+    loading: 正在加载官方声线…
+    load-error: 官方声线目录暂时无法加载，当前声线没有改变，请稍后重试。
+    empty: 没有找到符合条件的声线。
+    favorite: 收藏声线
+    points: 点/次
+    use: 使用此声线
+    in-use: 正在使用
+    unavailable: 这条声线已下架或当前套餐不可用，原声线保持不变。
+    selected: 声线已切换。
+    preview: 试听声线
+    preview-error: 试听暂时无法播放。
+    load-more: 加载更多
+  modules:
+    mcp-server:
+      description: 连接与管理 MCP 服务器和工具
+      title: MCP 服务器
+  speech:
+    title: 语音设置
+    description: 把当前居民的声线、播放节奏和响应速度调成你喜欢的样子，呜异屋会保存这些选择。
+    info:
+      title: 语音交互集中设置
+      description: 声音从哪里来、怎样听见你、何时开口，都可以在这里调整。
+    providers:
+      title: 语音厂商
+      description: 接入常用的 TTS/STT 服务，让当前居民用你喜欢的声音听见并回应你。
+  system:
+    sections:
+      section:
+        window-shortcuts:
+          title: 键盘快捷键
+    window-shortcuts:
+      description: 修改窗口快捷方式
+      title: 窗口快捷方式
+      toggle-move:
+        label: 切换移动状态
+      toggle-resize:
+        label: 调整大小
+      toggle-ignore-mouse-event:
+        label: 忽略鼠标事件
+      press-keys: 请按下按键...
+    speech-output:
+      title: 语音输出
+      description: 在更快开口和更连贯的表达之间，选择适合你的输出节奏。
+      mode:
+        label: 输出模式
+        fast: 低延迟
+        balanced: 平衡
+        smooth: 流畅
+        custom: 自定义
+      mode-description:
+        fast: 抢先送出第一小段语音，适合想立刻听见中文回复时使用。
+        balanced: 兼顾开口速度与自然停顿，日常聊天会比较顺耳。
+        smooth: 等句子更完整后再开口，听起来连贯一些，也会多等一会儿。
+        custom: 分段与首段加速都交给你亲手安排。
+      custom-settings:
+        title: 自定义分段
+        boost:
+          label: 首段加速
+          description: 开头几段准备好后立即送出，缩短第一句话的等待时间。
+        min-words:
+          label: 最小语音单位
+          description: 片段优先等待到这个长度后再输出。
+        max-words:
+          label: 最大语音单位
+          description: 没有标点时达到这个长度也会强制输出。
+        merge-short-sentences:
+          label: 合并短句
+          description: 先合并过短的句子，让语音更完整，也减少连续 TTS 请求。
+    speech-playback:
+      title: 语音播放
+      description: 调整播放缓冲、TTS 超时与语音打断，让每次开口都更跟手。
+    speech-latency:
+      title: 语音延迟
+      description: 查看最近一次 TTS 的合成、解码、首声延迟和失败位置。
+    quick-chat:
+      title: 快捷聊天
+      description: 把桌面快捷聊天与角色旁的回复气泡，打扮成你看着顺眼的模样。
+      info:
+        title: 桌面快捷聊天界面
+        description: 这里的选择会一起照顾浮动输入窗口，以及快捷聊天唤出的角色旁气泡。
+      sections:
+        behavior: 窗口
+        bubbles: 回复气泡
+      window-controls:
+        close-settings: 关闭快捷聊天设置
+        drag: 拖动快捷聊天
+        drag-voice-call: 拖动语音通话窗口
+        expand: 展开快捷聊天
+        resize: 拖动上方短柄可移动，拖动左右边缘可调整宽度
+        settings: 打开快捷聊天设置
+        collapse: 收起快捷聊天
+        hide: 隐藏快捷聊天
+        hide-confirm-title: 隐藏快捷聊天？
+        hide-confirm-description: 隐藏后可以从管家球或托盘菜单再次打开，当前聊天记录不会丢失。
+        hide-confirm-cancel: 取消
+        hide-confirm-action: 确认隐藏
+        you: 我
+      custom-position:
+        title: 已保存自定义位置
+        description: 当前窗口位置为 X {x}，Y {y}。
+        clear: 清除自定义位置
+      fields:
+        recommended-replies:
+          description: 默认关闭。开启后，每次助手回复完成都会向当前第三方聊天服务额外请求一次，可能产生服务商费用；官方云在支持独立计价确认前不会生成。
+          label: 生成推荐回复（每次会额外请求一次模型）
+        floating-replies-enabled:
+          label: 显示桌面浮动回复
+          description: 仅在收起快捷聊天或语音通话时，在角色附近显示用户、思考和回复气泡。
+        follow-chat-appearance:
+          label: 跟随聊天气泡外观
+          description: 让桌面回复气泡与正常聊天共用字体、颜色、图片和形状；关闭后可分别设置。
+        auto-open:
+          label: 启动时打开快捷聊天
+          description: 桌面舞台醒来时，快捷聊天输入框也会乖乖出现。
+        always-on-top:
+          label: 保持置顶
+          description: 让快捷聊天停在普通桌面窗口上方，随时等你开口。
+        visible-on-all-workspaces:
+          label: 在所有工作区显示
+          description: 切换虚拟桌面时仍保持快捷聊天可见。
+        click-through-when-blurred:
+          label: 失焦后点击穿透
+          description: 快捷聊天窗口失去焦点后让鼠标点击穿透到下方窗口。重新打开快捷聊天后可再次交互。
+        dock:
+          label: 停靠位置
+          description: 安排快捷聊天折叠后待在哪里；选择自定义后，可以亲手拖到喜欢的位置。
+        collapsed-width:
+          label: 折叠宽度
+          description: 紧凑输入条的宽度。
+        expanded-width:
+          label: 展开宽度
+          description: 展开聊天面板的宽度。
+        expanded-height:
+          label: 展开高度
+          description: 展开聊天面板的高度。
+        separate-dark-background:
+          label: 单独设置深色背景
+          description: 想让深色模式换一身装扮时，就为它单独选张背景吧。
+        floating-user-background-light:
+          label: 我的桌面气泡背景
+          description: 为你已发送的消息气泡铺上一张桌面背景图片。
+        floating-user-background-dark:
+          label: 我的深色桌面气泡背景
+          description: 深色模式下，你已发送的消息气泡会使用这张背景图片。
+        floating-assistant-background-light:
+          label: 居民桌面气泡背景
+          description: 为当前居民的桌面回复气泡挑一张陪你聊天的背景图片。
+        floating-assistant-background-dark:
+          label: 居民深色桌面气泡背景
+          description: 深色模式下，当前居民的桌面回复气泡会换上这张背景图片。
+        floating-background-strength:
+          label: 桌面气泡图片强度
+          description: 调淡或调浓气泡图片，别让漂亮背景盖住要说的话。
+        reply-anchor:
+          label: 回复气泡位置
+          description: 决定当前居民的回复气泡从哪里出现。
+        thinking-bubble-offset-x:
+          label: 思考气泡水平偏移
+          description: 调整思考气泡相对角色参考位置的左右距离，负值向左，正值向右。
+        thinking-bubble-offset-y:
+          label: 思考气泡垂直偏移
+          description: 调整思考气泡相对角色参考位置的上下距离，负值向上，正值向下。
+        reply-bubble-offset-x:
+          label: 回复气泡水平偏移
+          description: 调整回复气泡相对角色参考位置的左右距离，负值向左，正值向右。
+        reply-bubble-offset-y:
+          label: 回复气泡垂直偏移
+          description: 调整回复气泡相对角色参考位置的上下距离，负值向上，正值向下。
+        sent-preview-duration:
+          label: 发送预览停留时间
+          description: 决定你的消息预览气泡要在桌面上停留多久。
+        reply-bubble-dwell:
+          label: 回复气泡停留时间
+          description: 当前居民打完字后，回复气泡还会停留这么久。
+        bubble-enter-duration:
+          label: 气泡出现动画时间
+          description: 调整气泡来到你面前时的动画时长。
+        bubble-exit-duration:
+          label: 气泡消失动画时间
+          description: 调整气泡轻轻退场时的动画时长。
+      options:
+        background:
+          none: 不使用图片
+        dock:
+          top-left: 左上
+          top-right: 右上
+          bottom-left: 左下
+          bottom-right: 右下
+          custom: 自定义 / 已拖拽
+        reply-anchor:
+          near-character: 角色附近
+          top-center: 顶部居中
+          bottom-center: 底部居中
+      actions:
+        reset-behavior: 重置窗口
+        reset-bubbles: 重置气泡
+        reset: 重置全部快捷聊天设置
+    developer:
+      sections:
+        section:
+          use-window-mouse:
+            title: 使用窗口鼠标工具
+            description: 测试 Electron 窗口鼠标位置
+    memory-advanced:
+      title: 高级设置
+      description: 调整记忆与对话的进阶能力，让陪伴方式更贴近你的习惯。
+      info:
+        title: 系统高级功能
+        description: 这些能力默认保持待机，可按需逐项开启；现有配置仍会保持兼容。
+      scope-overview:
+        title: 记忆如何隔离
+        description: 会话历史与长期记忆使用不同边界，避免一个人格继承另一个人格的私有理解。
+        persona:
+          title: 人格记忆
+          status: 已隔离
+          description: 单聊长期记忆按用户与人格分别保存。
+        room:
+          title: 房间历史
+          status: 已记录
+          description: 公开消息会保留所属房间和发言角色身份。
+        group:
+          title: 群聊长期记忆
+          status: 已暂停
+          description: 在房间与人格作用域可显式传入前，不会自动提取群聊长期记忆。
+      isolation:
+        title: 记忆隔离
+        multi-user:
+          label: 启用多用户识别
+          description: 根据设备区分不同用户，并为每个人独立保存记忆。
+          warning: 首次启用会自动迁移现有数据到新用户，原有数据不会丢失
+      semantic:
+        title: 语义理解
+        search:
+          label: 启用语义搜索
+          description: 借助知识图谱扩展关键词，提高相关记忆的召回率。
+        official-cloud-embedding:
+          label: 使用官方云嵌入
+          description: 开启后，当前查询和符合条件的记忆文本会发送到 Wuwiii 官方嵌入服务并消耗账户点数；服务不可用时会自动使用本地关键词召回。此项默认关闭。
+          pricing:
+            loading: 正在读取官方云当前价格…
+            official: '官方云：每次嵌入请求 {points} 点。本地关键词召回不消耗官方点数。'
+          status:
+            checking: 正在确认官方语义记忆服务状态…
+            available: 官方语义记忆服务可用；开启后才会发送文本并按服务端实时价格扣点。
+            unavailable: 官方语义记忆服务暂不可用，当前继续使用本地关键词召回，且不会发送记忆文本。
+        value-judgment:
+          label: 智能价值判断
+          description: 再判断一次哪些内容值得长期保留，过滤临时和低价值信息。
+      natural:
+        title: 自然对话
+        conversation-init:
+          label: 对话初始化
+          description: 在开始对话时带入与你有关的记忆，让开场更连贯自然。
+        inner-voice-prewarm:
+          label: 自动预热心声札记
+          description: 回复结束后在后台提前生成心声札记，主动话题的语音回复也会跟随预热；会额外消耗一次模型调用，关闭后仍可在可见消息上手动点击心声按钮按需生成
+        output:
+          label: 自然输出节奏
+          description: 在句子之间保留自然停顿，让表达更像思考后说出。
+        output-delay:
+          label: 停顿时长
+          description: 句子间停顿的时间（毫秒）
+        semantic-segmentation:
+          label: 启用语义分段
+          description: 按语义把回复拆成几个完整片段，避免气泡在不自然的位置断开。
+          badge: 推荐
+        bubble-delay:
+          label: 气泡间延迟时间
+          description: 多个气泡之间的延迟时间（毫秒），范围 500-5000ms
+        adaptive-bubble-delay:
+          label: 启用自适应气泡延迟
+          description: 根据下一个气泡的文字数量自动调整延迟时间（启用后将覆盖固定延迟设置）
+        typing-speed:
+          label: 打字机速度
+          description: 气泡内文字逐字显示的速度（毫秒/字符），范围 10-100ms
+      message:
+        title: 消息处理
+        merging:
+          label: 启用消息合并
+          description: 连续收到多条消息时先合并，再作为一个完整上下文理解。
+          badge: 推荐
+        merge-delay:
+          label: 合并等待时间
+          description: 等待多久后合并消息（毫秒）
+      proactive:
+        title: 主动话题
+        experimental: 实验性功能
+        enable:
+          label: 启用主动话题
+          description: AI 会在合适时机主动来找你聊聊，提醒待办事项或关心近况；主动话题由隐藏触发消息生成，回复会作为 AI 消息写入当前会话，心声札记需要开启自动预热或在可见消息上手动生成
+        random-interval:
+          label: 启用随机间隔
+          description: 允许当前居民偶尔主动打开话题，自然地来聊两句。
+          badge: 推荐
+        interval:
+          label: 检查间隔
+          description: 多久检查一次待发起话题（分钟）
+        min-interval:
+          label: 最小间隔
+          description: 随机间隔的最小值（分钟）
+        max-interval:
+          label: 最大间隔
+          description: 随机间隔的最大值（分钟）
+        time-range:
+          label: 允许时间段
+          description: AI 可以主动发起对话的时间范围（24小时制）
+          unit: 时
+      reset: 重置为默认值
+devtools:
+  title: 开发者选项
+  pages:
+    command-execution:
+      title: 命令执行
+      description: 查看工作区 search/read/write 事务和命令执行状态。
+      intro: 查看桌面端工作区工具、事务状态，以及最近一次渲染进程侧调用。
+      actions:
+        run-git-status: 运行 Git 状态
+        run-git-diff: 运行 Git 差异
+        run-typecheck: 运行 Typecheck
+        run-lint: 运行 Lint
+        refresh-status: 刷新状态
+        refresh-journal: 刷新事务日志
+        refresh-checkpoints: 刷新检查点
+        refreshing: 刷新中…
+        loading: 加载中…
+        preview-edit: 预览编辑
+        apply-edit: 应用编辑
+        search-candidates: 搜索候选项
+        use-selected-path: 使用所选路径
+        rollback-transaction: 回滚事务
+        restore-checkpoint: 恢复检查点
+        create-checkpoint: 创建检查点
+        load-more-transactions: 加载更多事务
+        load-more-checkpoints: 加载更多检查点
+        cancel: 取消
+      labels:
+        persona-runtime-signals: 运行时信号
+        persona-runtime-overhang: 情绪余波
+        persona-runtime-last-failure-kind: 最近失手类型
+        persona-runtime-repeated-openings: 重复开头
+        persona-runtime-repeated-endings: 重复结尾
+        persona-runtime-repeated-self-references: 重复自白
+        persona-metrics:
+          closeness: 亲近度
+          seriousness: 认真度
+          hurt: 受伤余波
+          affection: 在意程度
+          need-for-attention: 想被注意程度
+          arousal: 激活度
+          inhibition: 克制度
+        git-status: 'Git 状态：'
+        git-diff: 'Git 差异：'
+        typecheck: 'Typecheck：'
+        lint: 'Lint：'
+        search: '搜索：'
+        read: '读取：'
+        write: '写入：'
+        requested-bundles: 请求的 bundles
+        available-bundles: 已放行 bundles
+        blocked-bundles: 已阻止 bundles
+        detected-intent: 检测到的工具意图
+        last-tool-route-diagnostic: 最近 LLM 工具路由诊断
+        risk: 风险
+        rollback: 可回滚
+        target-session: 目标会话
+        last-created: 最近创建
+        last-restored: 最近恢复
+        last-rollback: 最近回滚
+      descriptions:
+        restricted-git-commands: 手动运行当前允许的只读 Git 受限命令，并把最新结果和 journal 记录放在一起检查。
+        git-status: '通过固定受限适配器运行 `git status --short --branch`，并把输出记为一条 command transaction。'
+        git-diff: '运行受限 `git diff` 适配器，可选路径、暂存区模式、上下文行数和输出上限。'
+        restricted-typecheck: 手动运行当前允许的白名单 typecheck 命令，并把最新输出和 journal 记录放在一起检查。
+        typecheck: 对允许的呜异工作区 target 之一运行受限的 package-scoped typecheck adapter。
+        restricted-lint: 手动运行当前允许的白名单 lint 命令，并把最新输出和 journal 记录放在一起检查。
+        lint: 对允许的呜异工作区 target 之一运行受限的 package-scoped lint adapter。
+        guarded-text-edit-preview: 对 builtin tools 使用的同一套 preview -> proposal -> apply 受保护编辑流程做 dry-run，先查看变更摘要和 unified diff，再决定是否用这次 preview 返回的 proposalId 落盘。
+        journal-transactions: 按最新更新时间排序的磁盘事务 manifest。
+        checkpoints: 为当前选中的或最新的会话手动创建检查点。
+      fields:
+        git-diff-path:
+          label: Diff 路径
+          description: 可选的工作区相对路径；留空时比较整个工作区。
+        git-diff-staged:
+          label: 比较暂存区
+          description: '启用后使用 `--cached`，查看 staged diff。'
+        git-diff-context-lines:
+          label: 上下文行数
+          description: '`git diff --unified=<n>` 的上下文行数，范围 0-20。'
+        git-diff-max-bytes:
+          label: 输出字节上限
+          description: 可选输出上限；留空时使用服务默认值。
+        typecheck-target:
+          label: Typecheck 目标
+          description: 要通过受限 typecheck adapter 运行的呜异工作区白名单 target。
+        typecheck-max-bytes:
+          label: 输出字节上限
+          description: 可选输出上限；留空时使用服务默认值。
+        lint-target:
+          label: Lint 目标
+          description: 要通过受限 lint adapter 运行的呜异工作区白名单 target。
+        lint-max-bytes:
+          label: 输出字节上限
+          description: 可选输出上限；留空时使用服务默认值。
+        search-query:
+          label: 搜索查询
+          description: 用于定位候选文件的路径片段或附近文本。
+        scope:
+          label: 范围
+          description: 可选的工作区相对目录，用于缩小搜索范围。
+        search-mode:
+          label: 搜索模式
+          description: Auto 会同时尝试 path 和 text；单独的 path / text 过滤更严格。
+        search-limit:
+          label: 搜索上限
+          description: 产出候选文件路径前，最多检查多少条搜索命中。
+        candidate-file:
+          label: 候选文件
+          description: 当搜索返回多个候选路径时，选择准确的文件。
+        workspace-path:
+          label: 工作区路径
+          description: 用于预览或编辑的工作区相对文件路径。
+        edit-mode:
+          label: 编辑模式
+          description: 使用与 builtin tools 暴露的 write-text strategy 相同的模式。
+        allow-create-if-missing:
+          label: 允许缺失时创建
+          description: 允许 preview/apply 将缺失路径视为新文件。
+        content:
+          label: 内容
+          description: 替换、追加或插入到目标位置的文本内容。
+          placeholder: 本次编辑要写入的文本内容
+        target-marker:
+          label: 目标标记
+          description: marker/match 类编辑模式必填。
+          placeholder: 精确的标记文本或匹配文本
+        occurrence:
+          label: 第几个匹配
+          description: 仅供 replace-nth-match 使用的 1 基匹配序号。
+        range-start:
+          label: 起始范围
+          description: replace-range 使用的起始字符偏移（包含）。
+        range-end:
+          label: 结束范围
+          description: replace-range 使用的结束字符偏移（不包含）。
+        preview-chars:
+          label: 预览字符数
+          description: before/after/diff 预览内容的字符上限。
+        max-read-bytes:
+          label: 最大读取字节数
+          description: 可选读取上限。留空则使用服务默认值。
+        checkpoint-summary:
+          placeholder: 可选的检查点摘要
+      sections:
+        persona-runtime: 人格运行时
+        scene-mode: 场景模式
+        persona-state: 人格状态
+        anti-template-guard: 去模板提醒
+        restricted-git-commands: 受限 Git 命令
+        restricted-typecheck: 受限 Typecheck
+        restricted-lint: 受限 Lint
+        git-status: Git 状态
+        git-diff: Git 差异
+        typecheck: Typecheck
+        lint: Lint
+        diagnostic-files: 诊断文件
+        diagnostic-entries: 诊断条目
+        git-status-entries: Git 状态条目
+        git-diff-files: Git diff 文件
+        command-output: 命令输出
+        runtime-status: 运行时状态
+        tool-capability: 工具能力
+        proposal-store: Proposal 缓存
+        raw-runtime-status: 原始状态 JSON
+        latest-activity: 最近活动
+        chat-tool-routing: 聊天工具路由
+        guarded-text-edit-preview: 受保护文本编辑预览
+        search-assisted-target-picker: 搜索辅助目标选择器
+        preview-summary: 预览摘要
+        before-preview: 变更前预览
+        after-preview: 变更后预览
+        change-summary: 变更摘要
+        removed-preview: 删除内容预览
+        added-preview: 新增内容预览
+        target-preview: 目标内容预览
+        unified-diff-preview: Unified Diff 预览
+        recent-transactions: 最近事务
+        journal-transactions: 事务日志
+        manifest-detail: Manifest 详情
+        before-state-blobs: 变更前 Blob
+        after-state-blobs: 变更后 Blob
+        checkpoints: 检查点
+        checkpoint-detail: 检查点详情
+        restore-impact-preview: 恢复影响预览
+        transactions-to-roll-back: 将要回滚的事务
+        files-likely-affected: 可能受影响的文件
+        blocking-conflicts: 阻塞冲突
+        snapshot-previews: 快照预览
+      write-modes:
+        replace: 替换整个文件
+        append: 追加
+        replace-range: 替换范围
+        replace-first-match: 替换首个匹配
+        replace-all-matches: 替换全部匹配
+        replace-nth-match: 替换第 N 个匹配
+        insert-before-marker: 在标记前插入
+        insert-after-marker: 在标记后插入
+      search-modes:
+        auto: 自动
+        path: 路径
+        text: 文本
+      tool-bundles:
+        workspace-readonly: 工作区只读工具
+        workspace-edit-preview: 工作区编辑预览
+        workspace-edit-apply: 工作区编辑应用
+        web-search: 联网搜索
+        memory: 记忆工具
+        widgets: 小组件工具
+        mcp-discovery: MCP 工具发现
+        mcp-explicit-action: MCP 显式调用
+        mcp-proactive-topic: MCP 主动话题
+      intent-tags:
+        workspace-read: 工作区读取
+        workspace-edit: 工作区编辑
+        workspace-apply: 工作区应用
+        web-search: 联网搜索
+        memory: 记忆
+        widgets: 小组件
+        mcp-discovery: MCP 工具发现
+        mcp-explicit-action: MCP 显式调用
+        proactive-topic: 主动话题
+      reason-tags:
+        tools-disabled: 当前轮工具未放行
+        bundle-known-unsupported: 该 bundle 有已知不稳定记录
+      source-tags:
+        direct-single-bundle-success: '来源：单 bundle 直接成功'
+        multi-bundle-success: '来源：多 bundle 成功记录'
+        direct-single-bundle-failure: '来源：单 bundle 直接失败'
+        fallback-inference: '来源：fallback 推断'
+      tool-route-phases:
+        tool-bundle: 工具 bundle
+        direct-tools: 直接工具
+        fallback-without-tools: 无工具降级
+        plain-stream: 普通流式请求
+      tool-route-statuses:
+        attempt: 尝试中
+        success: 成功
+        failure: 失败
+        fallback: 已降级
+        skipped: 已跳过
+      tool-route-reasons:
+        unsupported: 工具模式不支持
+        transient: 上游临时失败
+        provider-connection: provider 连接失败
+        compatibility-cache: 兼容性缓存
+        no-tool-bundle-attempts: 没有可尝试的工具 bundle
+        tool-mode-failure: 工具模式失败
+        unknown: 未知失败
+      scene-modes:
+        casual-chat: 日常闲聊
+        light-bickering: 熟人拌嘴
+        praise-receiving: 接夸奖
+        gentle-support: 轻接住
+        heavy-topic-companion-silence: 沉重话题陪伴
+        awkward-topic-avoidance: 尴尬话题回避
+        critical-short-answer: 关键问题短答
+        identity-clarification: 身份澄清
+        value-judgement: 价值判断
+        repair-after-failure: 失手后修复
+      confidence:
+        high: 高
+        medium: 中
+        low: 低
+      persona-overhangs:
+        steady: 稳
+        warm: 暖
+        playful: 玩闹
+        concerned: 挂心
+        heavy: 沉重
+        guarded: 收着
+        repairing: 修复中
+      failure-kinds:
+        too-hard: 太硬
+        too-robotic: 太机械
+        missed-emotion: 没接住情绪
+      operation-actions:
+        status: 状态查询
+        create-checkpoint: 创建检查点
+        list-checkpoints: 列出检查点
+        get-checkpoint-detail: 查看检查点
+        preview-restore-checkpoint: 预览恢复检查点
+        rollback-transaction: 回滚事务
+        restore-checkpoint: 恢复检查点
+        list-transactions: 列出事务
+        get-transaction-detail: 查看事务
+        search: 搜索
+        read: 读取
+        git-status: Git 状态
+        git-diff: Git 差异
+        typecheck: Typecheck
+        lint: Lint
+        write-text: 写入文本
+      result-modes:
+        appended: 已追加
+        range-replaced: 已替换范围
+        first-match-replaced: 已替换首个匹配
+        all-matches-replaced: 已替换全部匹配
+        nth-match-replaced: 已替换第 N 个匹配
+        inserted-before-marker: 已在标记前插入
+        inserted-after-marker: 已在标记后插入
+        updated: 已更新
+        created: 已创建
+      states:
+        clean: 干净
+        detached-head: 分离 HEAD
+        entire-workspace: 整个工作区
+        staged: 已暂存
+        unstaged: 未暂存
+        untracked: 未跟踪
+        renamed: 已重命名
+        added: 已新增
+        deleted: 已删除
+        modified: 已修改
+        passed: 通过
+        failed: 失败
+        no-diagnostics: 无诊断
+        yes: 是
+        no: 否
+        not-available: 不适用
+        changes-detected: 检测到变更
+        no-op: 无实际变更
+        existing-file: 已有文件
+        new-file-preview: 新文件预览
+        truncated: 已截断
+        preview-truncated: 预览已截断
+        full-preview: 完整预览
+        available: 可用
+        blocked: 已阻止
+        unknown: 未知
+        tools-disabled: 工具未放行
+        memory-first: 内存优先
+        best-effort-cache: 尽力写入磁盘缓存
+        ready: 可直接使用
+        expired: 已过期
+        expiring-soon: 即将过期
+        none: 无
+      counts:
+        files: '{count} 个文件'
+        touched-files: '{count} 个文件'
+        unique-files: '{count} 个唯一文件'
+        transactions: '{count} 条事务'
+        rollback-capable-transactions: '{count} 条可回滚事务'
+        checkpoints: '{count} 个检查点'
+        conflicts: '{count} 个冲突'
+        matches: '{count} 个匹配'
+        issues: '{count} 个问题'
+        errors: '{count} 个错误'
+        warnings: '{count} 个警告'
+      meta:
+        chars: '{count} 个字符'
+        chars-truncated: '{count} 个字符 · 已截断'
+        bytes: '{count} 字节'
+        bytes-truncated: '{count} 字节 · 已截断'
+      summaries:
+        git-session-unavailable: 当前还没有可用于受限 Git 命令的会话。先打开聊天会话，或先选中一条 transaction。
+        git-session-active: '当前受限 Git 命令使用会话 {sessionId}。'
+        typecheck-session-unavailable: 当前还没有可用于受限 typecheck 命令的会话。先打开聊天会话，或先选中一条 transaction。
+        typecheck-session-active: '当前受限 typecheck 命令使用会话 {sessionId}。'
+        lint-session-unavailable: 当前还没有可用于受限 lint 命令的会话。先打开聊天会话，或先选中一条 transaction。
+        lint-session-active: '当前受限 lint 命令使用会话 {sessionId}。'
+        session-unavailable: 当前还没有可用或可检查的会话。请先打开一个聊天会话，或先选择一条事务日志。
+        session-active: '正在使用会话 {sessionId} 发起受保护的预览/应用请求。'
+        search-guidance: 当你只知道路径片段或附近文本时，可以在这里搜索目标文件。
+        search-complete-no-candidates: '搜索事务 {transactionId} 已完成，但没有找到候选文件路径。'
+        search-found-candidates: '搜索找到了 {count} 个候选文件路径。请选择一个并回填到工作区路径字段。'
+        preview-guidance: 运行一次 dry-run 预览，检查变更前后快照、行级变更摘要和 unified diff 输出。只有 preview 返回 proposalId 之后才能 apply。
+        preview-before-apply: 当前还没有可应用的 preview proposal。先运行一次 preview，apply 才会启用。
+        preview-proposal-ready: '当前 apply 会使用这次 preview 返回的 proposalId：{proposalId}。它会在 {expiresAt} 过期，且任一表单字段变化后都会失效。'
+        preview-result: '{path} · {writeMode} · {changeState} · {fileState}'
+        tool-capability-missing-model: 当前还没有可解析的提供商 / 模型组合，因此 bundle 兼容性状态暂时未知。
+        tool-capability-tools-disabled: 当前提供商 / 模型组合还没有稳定的工具调用记录，这一轮不应假设工作区工具已放行。
+        tool-capability-apply-enabled: 当前提供商 / 模型组合对只读、preview 和 apply bundle 都有稳定记录，可以完整走 preview -> proposalId -> apply。
+        tool-capability-preview-only: 当前提供商 / 模型组合已知可读、可 preview，但 apply 仍应更保守，只在明确确认后再放行。
+        tool-capability-edit-blocked: 当前提供商 / 模型组合对编辑类 bundle 有已知不稳定记录，应保留只读分析而避免硬闯编辑。
+        tool-capability-low-risk-open: 当前只看见低风险工具的稳定记录；未知 bundle 不预先禁用，但也不应假设高风险编辑一定可用。
+        proposal-store-unavailable: 还没有读取到 proposal 缓存状态。先刷新一次运行时状态。
+        proposal-store-empty: 当前没有待应用的 text edit proposal。
+        proposal-store-active: '当前缓存了 {pendingCount} 个 proposal，其中磁盘恢复 {recoveredCount} 个，即将过期 {expiringSoonCount} 个。'
+        chat-tool-routing-no-request: 最新一条消息没有触发任何工具 bundle 请求。
+        chat-tool-routing-tools-disabled: '最新一条消息请求了 {requestedCount} 个 bundle，但当前提供商 / 模型组合这一轮没有放行工具调用。'
+        chat-tool-routing-all-available: '最新一条消息请求了 {requestedCount} 个 bundle，当前都已放行。'
+        chat-tool-routing-partially-blocked: '最新一条消息请求了 {requestedCount} 个 bundle，其中放行 {availableCount} 个，阻止 {blockedCount} 个。'
+        tool-route-diagnostic-ok: 最近一次 LLM 工具路由没有报告失败。
+        tool-route-diagnostic-provider-connection: 最近一次 LLM 请求失败在 provider 连接层，不是工作区命令服务失败。
+        tool-route-diagnostic-compatibility-cache: 最近一次工具路由被提供商 / 模型兼容性缓存跳过。
+        tool-route-diagnostic-fallback: 最近一轮已经从 provider 工具调用降级为无工具重试。
+        tool-route-diagnostic-failure: 最近一次 LLM 工具路由在成功工具响应前失败。
+        journal-transactions-loaded: '当前已加载 {shownCount} / {totalCount} 条磁盘事务。'
+        checkpoints-loaded: '当前 journal 视图中已加载 {shownCount} / {totalCount} 个检查点。'
+        restore-preview-source: 该预览基于当前工作区状态，以及此检查点之后所有仍处于 applied 状态且可回滚的事务计算得出。
+        restore-select-checkpoint: 选择一个检查点以查看恢复影响。
+        restore-blocked: '当前恢复被 {conflictCount} 个冲突阻塞，涉及 {transactionCount} 条事务和 {fileCount} 个文件。请先查看下方冲突后再重试。'
+        restore-will-run: '本次恢复将尝试回滚该会话中的 {transactionCount} 条已应用事务，涉及 {fileCount} 个文件。'
+        preview-first-transactions: 此预览只展示前 5 条匹配事务。
+        preview-first-files: 此预览只展示前 10 个唯一文件路径。
+        preview-first-conflicts: 此预览只展示前 5 个阻塞冲突。
+        persona-runtime-session-unavailable: 当前还没有可用于人格运行时的会话。
+        persona-runtime-recorded: 当前会话已经有最新的人格运行时快照。
+        persona-runtime-ready: '当前会话已记录最新的人格运行时快照。场景模式：{sceneMode}（{confidence}）。'
+      confirm:
+        rollback: 确认回滚
+        rollback-files: '确认回滚 · {count} 个文件'
+        restore: 确认恢复
+        restore-blocked: '恢复已阻塞 · {count} 个冲突'
+        restore-transactions: '确认恢复 · {transactionCount} 条事务 · {fileCount} 个文件'
+        restore-checkpoint-files: '确认恢复 · {count} 个检查点文件'
+      empty:
+        no-git-status-request: 还没有运行过 `git status` 请求。
+        no-git-status-entries: 当前工作区没有变更条目。
+        no-git-diff-request: 还没有运行过 `git diff` 请求。
+        no-git-diff-output: 当前 diff 没有输出。
+        no-git-diff-files: 没有从最新 diff 中解析出变更文件。
+        no-typecheck-request: 还没有运行过 typecheck 请求。
+        no-typecheck-output: 当前 typecheck 没有输出。
+        no-lint-request: 还没有运行过 lint 请求。
+        no-lint-output: 当前 lint 没有输出。
+        no-search-request: 还没有搜索请求。
+        no-read-request: 还没有读取请求。
+        no-write-request: 还没有写入请求。
+        no-change-summary: 当前文件状态下，这次编辑不会产生实际变更，因此没有生成变更摘要块。
+        no-renderer-operations: 还没有发生任何渲染进程侧的命令执行调用。
+        no-journal-transactions-loaded: 还没有加载事务日志。
+        no-journal-transactions-found: 还没有找到事务日志。
+        no-transaction-selected: 选择一条事务，查看它的 manifest 和 blob 预览。
+        no-blobs: 没有记录任何 blob。
+        blob-content-missing: Blob 内容在磁盘上缺失。
+        no-checkpoints-loaded: 还没有加载检查点。
+        no-session-available: 当前还没有可用会话
+        no-checkpoints-found: 还没有找到检查点。
+        no-checkpoint-selected: 选择一个检查点，查看它的元数据和快照预览。
+        no-rollback-transactions-after-checkpoint: 对当前选中会话来说，这个检查点之后暂时没有可见的可回滚已应用事务。
+        no-snapshot-blobs: 没有记录任何快照 blob。
+        no-chat-tool-routing: 还没有记录任何聊天工具路由结果。
+        no-tool-route-diagnostic: 还没有记录任何 LLM 工具路由诊断。
+        no-persona-runtime: 当前会话还没有记录人格运行时快照。
+      facts:
+        git-branch: '分支：{value}'
+        git-upstream: '上游：{value}'
+        git-ahead-behind: '领先 {ahead} · 落后 {behind}'
+        git-detached: '分离 HEAD：{value}'
+        git-output: '输出：{value}'
+        git-diff-scope: 'Diff 范围：{value}'
+        git-diff-mode: 'Diff 模式：{value}'
+        git-context-lines: '上下文行数：{count}'
+        git-diff-files: '变更文件数：{count}'
+        typecheck-target: 'Typecheck 目标：{value}'
+        typecheck-package: '包：{value}'
+        typecheck-command: '命令：{value}'
+        typecheck-exit-code: '退出码：{count}'
+        lint-target: 'Lint 目标：{value}'
+        lint-package: '包：{value}'
+        lint-command: '命令：{value}'
+        lint-exit-code: '退出码：{count}'
+        diagnostic-total: '问题数：{count}'
+        diagnostic-files: '诊断文件数：{count}'
+        diagnostic-errors: '错误数：{count}'
+        diagnostic-warnings: '警告数：{count}'
+        path: '路径：{path}'
+        preview-proposal-id: '预览 proposalId：{proposalId}'
+        session: '会话：{sessionId}'
+        write-mode: '写入模式：{writeMode}'
+        preview-expires-at: '预览过期时间：{value}'
+        preview-cache-state: 'Proposal 缓存状态：{value}'
+        provider-model: '提供商 / 模型：{provider} / {model}'
+        proposal-store-root: 'Proposal 缓存目录：{path}'
+        proposal-store-source-of-truth: '真实来源：{value}'
+        proposal-store-disk-cache: '磁盘持久化：{value}'
+        proposal-store-pending-count: '待处理 proposal 数：{count}'
+        proposal-store-recovered-count: '磁盘恢复 proposal 数：{count}'
+        proposal-store-expiring-soon-count: '即将过期 proposal 数：{count}'
+        proposal-store-next-expires-at: '最近一次过期时间：{value}'
+        proposal-store-hydrated-at: '最近 hydrate 时间：{value}'
+        chat-tool-routing-evaluated-at: '最近路由时间：{value}'
+        chat-tool-routing-tools-compatibility: '工具兼容性：{value}'
+        chat-tool-routing-message: '消息预览：{value}'
+        tool-route-diagnostic-at: '工具路由记录时间：{value}'
+        tool-route-diagnostic-model: '模型：{value}'
+        tool-route-diagnostic-phase: '阶段：{value}'
+        tool-route-diagnostic-status: '状态：{value}'
+        tool-route-diagnostic-reason: '原因：{value}'
+        tool-route-diagnostic-provider-base-url: 'Provider base URL：{value}'
+        tool-route-diagnostic-bundles: 'Bundles：{value}'
+        tool-route-diagnostic-tools: 'Tools：{value}'
+        tool-route-diagnostic-failure-kind: '失败类型：{value}'
+        tool-route-diagnostic-cache-updated: '已更新兼容性缓存：{value}'
+        tool-route-diagnostic-fallback-context-messages: '本地降级上下文消息数：{count}'
+        tool-route-diagnostic-persistent-unsupported: '已记录持久不支持：{value}'
+        tool-route-diagnostic-message: '诊断消息：{value}'
+        workspace-root: '工作区根目录：{workspaceRoot}'
+        existing-file: '是否为已有文件：{value}'
+        would-change-file: '是否会改动文件：{value}'
+        optimistic-sha256: '乐观并发 SHA-256：{sha256}'
+        first-changed-index: '首个变更索引：{value}'
+        before-lines: '变更前行范围：L{line} × {count}'
+        after-lines: '变更后行范围：L{line} × {count}'
+        chars-removed-added-delta: '删除/新增/差值字符数：-{removed} / +{added} / Δ{delta}'
+        matched-occurrences: '匹配到的次数：{count}'
+        selected-occurrence: '选中的匹配序号：{count}'
+        insertion-index: '插入索引：{value}'
+        range: '范围：{start}..{end}'
+        persona-runtime-evaluated-at: '最近评估时间：{value}'
+        persona-runtime-message: '消息预览：{value}'
+        persona-runtime-scene-updated-at: '场景模式更新时间：{value}'
+        persona-runtime-state-updated-at: '人格状态更新时间：{value}'
+        persona-runtime-guard-updated-at: '去模板提醒更新时间：{value}'
+      feedback:
+        no-file-paths-matched: '没有文件路径匹配 {query}。'
+        single-candidate-resolved: '已解析出唯一候选路径：{path}。'
+        multiple-candidates-found: '搜索命中了 {count} 个候选文件路径。请在下方选择准确文件。'
+        applied-edit: '已将 {writeMode} 应用到 {path}。'
+      errors:
+        no-session-git-command: 当前没有可用于执行受限 Git 命令的会话。
+        no-session-typecheck: 当前没有可用于执行受限 typecheck 命令的会话。
+        no-session-lint: 当前没有可用于执行受限 lint 命令的会话。
+        integer-min: '{label} 必须是大于等于 {minimum} 的整数。'
+        no-session-preview: 当前没有可用于命令执行预览的会话。
+        preview-before-apply-required: apply 只能使用当前 preview 返回的 proposalId。请先运行 preview。
+        workspace-path-required: 必须填写工作区相对文件路径。
+        target-required: '{mode} 需要提供非空目标标记。'
+        occurrence-required: replace-nth-match 需要 occurrence >= 1。
+        range-required: replace-range 需要同时提供范围起点和终点。
+        no-session-search: 当前没有可用于命令执行搜索的会话。
+        search-query-required: 必须填写搜索查询。
+        select-candidate-first: 先选择一个候选路径，才能把它应用到预览表单。
+      hints:
+        title: 排查提示
+        file-diverged: 目标文件在原事务应用后发生了变化，所以回滚会先被阻止，直到你确认当前工作区状态。
+        file-missing: 工作区文件已不再存在于回滚计划记录的路径上。
+        file-already-exists: 恢复流程原本预期该路径保持不存在，但现在那里已经有一个文件了。
+        only-applied: 只有仍处于 applied 状态的事务才可以回滚。
+        no-rollback-plan: 这条事务的 rollback plan 中没有记录可逆的文件改动。
+        no-later-rollback-transactions: 这个检查点之后当前没有附带回滚元数据的后续已应用事务。
+        refresh-records: 重试前先刷新事务/检查点列表；当前选中的记录可能已经不在当前 journal 视图里了。
+    context-flow:
+      title: Context Flow
+    lag-visualizer:
+      title: Lag 可视化
+    performance-visualizer:
+      title: 性能可视化
+      description: 切换 FPS/长任务/内存叠加
+    markdown-stress:
+      title: Markdown Stress
+      description: 用大量聊天负载来测试 Markdown 的解析和渲染能力
+    widgets-calling:
+      title: 挂件调用
+screen-capture:
+  permissions-prompt:
+    title: 屏幕捕获
+    description: 要捕获屏幕或窗口，需要屏幕和系统音频录制权限。
+    open-preferences: 打开系统偏好设置
+    dismiss: 取消
+    instructions:
+      step-1: 打开「系统首选项」，从侧边栏选择「隐私与安全」。
+      step-2: 在「屏幕和系统音频录制」和「系统音频录制」部分中，开启 Wuwiii 的开关。
+      step-2-note: 如果没有列出 Wuwiii，请通过单击「+」按钮和从应用程序文件夹中选择 Wuwiii 来手动添加。
