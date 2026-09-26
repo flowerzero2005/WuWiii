@@ -152,6 +152,20 @@ describe('inner voice note generator', () => {
     expect(String(messages[1]?.content)).not.toContain('replyIntent')
   })
 
+  it('keeps the current turn language explicit in the prompt payload', () => {
+    const messages = buildAiriInnerVoiceNoteMessages({
+      userMessage: 'current user message',
+      assistantText: 'current visible reply',
+      language: 'zh-Hans',
+      sceneMode,
+      personaState,
+      relationshipState,
+    })
+
+    expect(String(messages[0]?.content)).toContain('Write only in zh-Hans')
+    expect(JSON.parse(String(messages[1]?.content)).targetLanguage).toBe('zh-Hans')
+  })
+
   it('collects streamed note text and returns the cleaned note', async () => {
     const stream = vi.fn(async (_model, _provider, _messages, options) => {
       await options?.onStreamEvent?.({ type: 'text-delta', text: '内心：我有点不服气，' })
@@ -162,6 +176,7 @@ describe('inner voice note generator', () => {
       stream,
       model: 'test-model',
       chatProvider: {} as any,
+      language: 'zh-Hans',
       userMessage: '你刚才那句很奇怪。',
       assistantText: '嗯，那句我收回。我重新说。',
       sceneMode,
@@ -171,7 +186,12 @@ describe('inner voice note generator', () => {
     })
 
     expect(note).toBe('我有点不服气，但还是想把话说好。')
-    expect(stream).toHaveBeenCalledOnce()
+    expect(stream).toHaveBeenCalledWith(
+      'test-model',
+      expect.anything(),
+      expect.any(Array),
+      expect.objectContaining({ targetLanguage: 'zh-Hans' }),
+    )
   })
 
   it('derives compact mood tags from the current runtime state', () => {

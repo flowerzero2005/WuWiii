@@ -1,6 +1,7 @@
 import type { ChatProvider } from '@xsai-ext/providers/utils'
 import type { CompletionStep, CompletionToolCall, CompletionToolResult, Message, Tool, ToolChoice } from '@xsai/shared-chat'
 
+import type { SearchExecutionContext } from '../tools/web-search/execution-budget'
 import type { ChatTrustedToolStatus } from '../types/chat'
 import type { ChatRequestStage, ChatTraceContext } from './chat/chat-diagnostics'
 
@@ -10,6 +11,7 @@ import { streamText } from '@xsai/stream-text'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+import { bindSearchToolExecution, createSearchExecutionBudget } from '../tools/web-search/execution-budget'
 import { normalizeChatProviderError } from '../utils/chat-error'
 import { createChatTraceHeaders, createChatTraceRequest, isChatDiagnosticsEnabled, logChatTrace } from './chat/chat-diagnostics'
 import { createReadableFinalText } from './chat/readable-text'
@@ -55,6 +57,7 @@ interface StreamAttemptResult {
 }
 
 export interface StreamToolFallbackContextInput {
+  searchExecution?: SearchExecutionContext
   abortSignal?: AbortSignal
   messages: Message[]
 }
@@ -69,6 +72,7 @@ export interface StreamToolBundle {
 }
 
 export interface StreamOptions {
+  searchExecution?: SearchExecutionContext
   abortSignal?: AbortSignal
   firstEventTimeoutMs?: number
   /** Resolve as an empty provider result instead of throwing on first-event timeout. */
@@ -198,7 +202,10 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
   }
 
   const sanitized = sanitizeMessages(messages as unknown[])
-  const tools = await resolveStreamTools(options)
+  const resolvedTools = await resolveStreamTools(options)
+  const tools = options?.searchExecution
+    ? resolvedTools?.map(tool => bindSearchToolExecution(tool, { budget: options.searchExecution!.budget, trace: requestTrace ?? options.trace }))
+    : resolvedTools
   const toolChoice = tools ? (options?.toolChoice ?? 'auto') : undefined
 
   return new Promise<StreamAttemptResult>((resolve, reject) => {
@@ -1251,13 +1258,14 @@ export const useLLM = defineStore('llm', () => {
   }
 
   async function stream(model: string, chatProvider: ChatProvider, messages: Message[], options?: StreamOptions): Promise<LLMEmptyResult | undefined> {
+    options = { ...options, searchExecution: options?.searchExecution ?? { budget: createSearchExecutionBudget(), trace: options?.trace } }
     const cacheKey = getToolsCompatibilityKey(model, chatProvider)
     const hasCustomTools = options?.tools !== undefined
     const hasToolBundles = (options?.toolBundles?.length ?? 0) > 0
 
     if (hasToolBundles) {
       const resolvedBundles = (await Promise.all((options?.toolBundles ?? []).map(async bundle => ({
-        fallbackContext: bundle.fallbackContext,
+        fallbackContext: bundle.fallbackContext ? (input: StreamToolFallbackContextInput) => bundle.fallbackContext!({ ...input, searchExecution: options?.searchExecution }) : undefined,
         id: bundle.id,
         toolChoice: bundle.toolChoice,
         tools: await resolveToolList(bundle.tools),

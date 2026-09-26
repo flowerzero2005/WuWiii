@@ -5,6 +5,14 @@ import { parseOfficialPricing, useOfficialPricingStore } from './official-pricin
 
 const snapshot = { generatedAt: '2026-08-07T00:00:00Z', models: [{ id: 'airi-default', name: 'Default', pointsPerTokenUnit: 2, tokenUnit: 1000, minimumSettlePoints: 1, reserveBasePoints: 2, priceVersion: 'm1' }], features: [{ feature: 'official-chat', multiplier: 1, priceVersion: 'f1' }], capabilities: { speech: { chains: [{ channel: 'primary', provider: 'hidden', pointsPerMinute: 35, minimumBasePoints: 1, priceVersion: 's1', state: 'idle' }] }, transcription: { billingMode: 'duration', firstMinutePoints: 25, additionalMinutePoints: 20, priceVersion: 'a1' }, embedding: { billingMode: 'request', pointsPerRequest: 1, priceVersion: 'e1' }, webSearch: { billingMode: 'request', pointsPerRequest: 3, priceVersion: 'w1' } } }
 
+const visionSnapshot = {
+  ...snapshot,
+  capabilities: {
+    ...snapshot.capabilities,
+    vision: { billingMode: 'request' as const, pointsPerRequest: 5, priceVersion: 'v1' },
+  },
+}
+
 describe('official pricing store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -18,6 +26,17 @@ describe('official pricing store', () => {
     expect(store.getModel('airi-default')?.pointsPerTokenUnit).toBe(2)
     expect(store.getFeature('official-chat')?.multiplier).toBe(1)
     expect(store.getCapability('embedding')?.pointsPerRequest).toBe(1)
+  })
+  it('exposes the vision price without invalidating compatible older responses', () => {
+    expect(parseOfficialPricing(snapshot)?.capabilities.vision).toBeUndefined()
+    expect(parseOfficialPricing(visionSnapshot)?.capabilities.vision?.pointsPerRequest).toBe(5)
+    expect(parseOfficialPricing({
+      ...visionSnapshot,
+      capabilities: {
+        ...visionSnapshot.capabilities,
+        vision: { billingMode: 'request', pointsPerRequest: -1, priceVersion: 'v1' },
+      },
+    })).toBeUndefined()
   })
   it('deduplicates requests and retains the last good snapshot on failure', async () => {
     let resolve!: (response: Response) => void

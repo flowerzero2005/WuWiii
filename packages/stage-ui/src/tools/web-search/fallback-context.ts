@@ -1,12 +1,14 @@
 import type { Message } from '@xsai/shared-chat'
 
+import type { SearchExecutionContext, SearchToolExecuteOptions } from './execution-budget'
+
 import { intelligentWebSearch } from './intelligent-search'
 
 const MAX_MESSAGE_TEXT_LENGTH = 1200
 const MAX_FALLBACK_CONTEXT_LENGTH = 8000
 
-function previewForWebSearchFallbackLog(value: string) {
-  return value.replace(/\s+/g, ' ').trim().slice(0, 180)
+function getWebSearchFallbackLogMetadata(value: string) {
+  return { queryLength: value.replace(/\s+/g, ' ').trim().length }
 }
 
 function getMessageContentText(content: Message['content']): string {
@@ -91,6 +93,7 @@ function stringifyFallbackResult(result: unknown) {
 export async function buildWebSearchFallbackContext(input: {
   abortSignal?: AbortSignal
   messages: Message[]
+  searchExecution?: SearchExecutionContext
 }): Promise<Message[] | undefined> {
   const userMessage = getLastUserMessageText(input.messages)
   if (!userMessage) {
@@ -104,7 +107,7 @@ export async function buildWebSearchFallbackContext(input: {
   if (input.abortSignal?.aborted) {
     console.warn('[WebSearchTool] local fallback skipped', {
       reason: 'aborted-before-start',
-      userMessagePreview: previewForWebSearchFallbackLog(userMessage),
+      ...getWebSearchFallbackLogMetadata(userMessage),
     })
 
     return undefined
@@ -121,7 +124,8 @@ export async function buildWebSearchFallbackContext(input: {
       abortSignal: input.abortSignal,
       messages: input.messages,
       toolCallId: `local-web-search-${Date.now()}`,
-    })
+      searchExecution: input.searchExecution,
+    } as SearchToolExecuteOptions)
     const resultJson = stringifyFallbackResult(result)
 
     return [
@@ -143,7 +147,7 @@ export async function buildWebSearchFallbackContext(input: {
   catch (error) {
     console.warn('[WebSearchTool] local fallback failed', {
       error: error instanceof Error ? error.message : String(error),
-      userMessagePreview: previewForWebSearchFallbackLog(userMessage),
+      ...getWebSearchFallbackLogMetadata(userMessage),
     })
 
     return [

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Live2DActionCleanupMode, Live2DAvailableExpression, Live2DAvailableMotion, Live2DCompositeExpressionPreset, Live2DMotionRef, Live2DPerformanceResourceMetadata, Live2DPerformanceResourceMetadataSet } from '@proj-airi/stage-ui-live2d'
+import type { Live2DActionBinding, Live2DActionCleanupMode, Live2DAvailableExpression, Live2DAvailableMotion, Live2DCompositeExpressionPreset, Live2DMotionRef, Live2DPerformanceResourceMetadata, Live2DPerformanceResourceMetadataSet } from '@proj-airi/stage-ui-live2d'
 
 import { createLive2DCompositeExpressionKey, createLive2DPerformanceExpressionResourceId, createLive2DPerformanceMotionResourceId, createLive2DRandomIdleCustomActionKey, createLive2DRandomIdleMotionKey, defaultModelParameters, filterLive2DCompositeExpressionPresetsByModel, LIVE2D_RANDOM_IDLE_MAX_INTERVAL_MS_DEFAULT, LIVE2D_RANDOM_IDLE_MIN_INTERVAL_MS_DEFAULT, normalizeLive2DRandomIdleIntervalMs, useLive2d } from '@proj-airi/stage-ui-live2d'
 import { Button, Checkbox, DoubleCheckButton, FieldRange, Input, SelectTab, Textarea } from '@proj-airi/ui'
@@ -16,6 +16,7 @@ const props = defineProps<{
   extractingColors?: boolean
   previewExpression?: (expression: number | string, durationMs?: number) => Promise<void> | void
   previewMotion?: (motionName: string, index?: number) => Promise<void> | void
+  previewAction?: (action: Pick<Live2DActionBinding, 'motion' | 'expression' | 'durationMs'>) => Promise<boolean | undefined> | boolean | undefined
   resetPreviewExpression?: () => void
   resetPreviewModel?: () => void
   listPreviewMotions?: () => Live2DAvailableMotion[]
@@ -801,6 +802,17 @@ function resetAllCompositeExpressionPresets() {
 async function previewCompositeExpressionPreset(preset: Live2DCompositeExpressionPreset) {
   if (!preset.motion && preset.expressions.length === 0)
     return
+
+  if (props.previewAction) {
+    await props.previewAction({
+      motion: preset.motion,
+      expression: preset.expressions.length > 0
+        ? { name: createLive2DCompositeExpressionKey(preset.id), presetId: preset.id }
+        : undefined,
+      durationMs: Math.max(0, preset.durationMs ?? 2400),
+    })
+    return
+  }
 
   live2d.requestLive2DAction('persona:custom-action', {
     enabled: true,

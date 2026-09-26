@@ -93,4 +93,71 @@ describe('intelligentWebSearch', () => {
     }))
     expect(result).toMatchObject({ success: true })
   })
+
+  it('caps multi-round search at two requests and passes one cancellation signal to each round', async () => {
+    mocks.buildSearchQueryStrategy.mockReturnValue({
+      depth: 'shallow',
+      fallbackQueries: ['second query', 'third query'],
+      filters: {},
+      keywords: ['first query'],
+      multiRound: true,
+      queryType: 'exploratory_search',
+    })
+    mocks.performWebSearch
+      .mockResolvedValueOnce({
+        query: 'first query',
+        results: [{ snippet: 'one', source: 'test', title: 'one', url: 'https://example.com/one' }],
+        resultsCount: 1,
+        success: true,
+      })
+      .mockResolvedValueOnce({
+        query: 'second query',
+        results: [{ snippet: 'two', source: 'test', title: 'two', url: 'https://example.com/two' }],
+        resultsCount: 1,
+        success: true,
+      })
+    const controller = new AbortController()
+    const searchTool = await intelligentWebSearch
+
+    await searchTool.execute(
+      { conversationContext: [], userMessage: 'search two rounds' },
+      { abortSignal: controller.signal, messages: [], toolCallId: 'search-call' },
+    )
+
+    expect(mocks.performWebSearch).toHaveBeenCalledTimes(2)
+    expect(mocks.performWebSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      query: 'first query',
+      signal: expect.any(AbortSignal),
+    }))
+    expect(mocks.performWebSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      query: 'second query',
+      signal: expect.any(AbortSignal),
+    }))
+  })
+
+  it('does not spend a second request after an unrecoverable provider failure', async () => {
+    mocks.buildSearchQueryStrategy.mockReturnValue({
+      depth: 'shallow',
+      fallbackQueries: ['second query'],
+      filters: {},
+      keywords: ['first query'],
+      multiRound: true,
+      queryType: 'exploratory_search',
+    })
+    mocks.performWebSearch.mockResolvedValueOnce({
+      error: 'Invalid API key',
+      failureKind: 'api-key',
+      results: [],
+      retryable: false,
+      success: false,
+    })
+    const searchTool = await intelligentWebSearch
+
+    await searchTool.execute(
+      { conversationContext: [], userMessage: 'stop after credentials fail' },
+      { messages: [], toolCallId: 'search-call' },
+    )
+
+    expect(mocks.performWebSearch).toHaveBeenCalledOnce()
+  })
 })

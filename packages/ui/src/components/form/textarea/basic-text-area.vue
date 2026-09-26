@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
+  autoResize?: boolean
   defaultHeight?: string
 }>()
 
@@ -42,6 +43,9 @@ function onPaste(e: ClipboardEvent) {
 // javascript - Creating a textarea with auto-resize - Stack Overflow
 // https://stackoverflow.com/questions/454202/creating-a-textarea-with-auto-resize
 watch(input, () => {
+  if (props.autoResize === false)
+    return
+
   textareaHeight.value = 'auto'
   requestAnimationFrame(() => {
     if (!textareaRef.value)
@@ -60,7 +64,7 @@ watch(input, () => {
   <textarea
     ref="textareaRef"
     v-model="input"
-    :style="{ height: textareaHeight }"
+    :style="props.autoResize === false ? undefined : { height: textareaHeight }"
     @keydown="onKeyDown"
     @paste="onPaste"
   />

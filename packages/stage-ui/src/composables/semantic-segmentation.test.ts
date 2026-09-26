@@ -34,6 +34,10 @@ describe('semantic-segmentation', () => {
     expect(removeSpecialMarkers('好。<|ACT {"emotion":{"name":"happy"}}|><|DELAY:1|>继续。')).toBe('好。继续。')
   })
 
+  it('removes an unfinished ACT envelope through EOF', () => {
+    expect(removeSpecialMarkers('好。<|ACT {"actionCardId":"small-wave"')).toBe('好。')
+  })
+
   it('can preserve whitespace for the live transcript', () => {
     expect(removeSpecialMarkers('  第一行\n\n第二行  ', { trim: false })).toBe('  第一行\n\n第二行  ')
     expect(removeSpecialMarkers('  第一行\n\n第二行  ')).toBe('第一行\n\n第二行')

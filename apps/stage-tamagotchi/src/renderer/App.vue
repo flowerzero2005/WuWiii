@@ -2,13 +2,16 @@
 import type { ProductAnnouncement, ProductRelease } from './modules/product-notices'
 
 import { defineInvokeHandler } from '@moeru/eventa'
+import { useElectronScreenCapture } from '@proj-airi/electron-screen-capture/vue'
 import { useElectronAutoUpdater, useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { BackgroundProvider } from '@proj-airi/stage-layouts/components/Backgrounds'
 import { themeColorFromValue, useThemeColor } from '@proj-airi/stage-layouts/composables/theme-color'
 import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
 import { OnboardingDialog } from '@proj-airi/stage-ui/components'
 import { client } from '@proj-airi/stage-ui/composables/api'
+import { isVisionScreenshotOwnerHash, useAutomaticVisionScreenshot } from '@proj-airi/stage-ui/composables/use-automatic-vision-screenshot'
 import { provideDisplayModelFilePicker } from '@proj-airi/stage-ui/composables/use-display-model-file-dialog'
+import { provideVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useMcpRuntimeStatusStore } from '@proj-airi/stage-ui/stores/mcp-runtime'
 import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { useSettingsGeneral } from '@proj-airi/stage-ui/stores/settings/general'
@@ -42,6 +45,7 @@ import {
   electronPluginUnload,
   electronPluginUpdateCapability,
   electronRendererStateSyncRequested,
+  electronReportDesktopCapabilities,
   electronSettingsRouteRequested,
   i18nSetLocale,
   pluginProtocolListProviders,
@@ -61,6 +65,7 @@ import {
   selectUnseenAnnouncements,
 } from './modules/product-notices'
 import { resyncRendererState } from './modules/renderer-state-sync'
+import { createDesktopVisionScreenCapture } from './modules/vision-screen-capture'
 import { useServerChannelSettingsStore } from './stores/settings/server-channel'
 
 const { isDark: dark } = useTheme()
@@ -171,10 +176,22 @@ const notifyMainRendererBootstrapVisible = useElectronEventaInvoke(electronMainR
 const notifyMainRendererRuntimeReady = useElectronEventaInvoke(electronMainRendererRuntimeReady)
 const openDesktopDiagnostics = useElectronEventaInvoke(electronOpenDesktopDiagnostics)
 const exportDesktopDiagnostics = useElectronEventaInvoke(electronExportDesktopDiagnostics)
+const reportDesktopCapabilities = useElectronEventaInvoke(electronReportDesktopCapabilities)
 const pickDisplayModelFile = useElectronEventaInvoke(electronPickDisplayModelFile)
 const notifyButlerRendererRuntimeReady = useElectronEventaInvoke(electronButlerRendererRuntimeReady)
 const notifyQuickChatRendererRuntimeReady = useElectronEventaInvoke(quickChatRendererRuntimeReady)
 provideDisplayModelFilePicker(createDesktopDisplayModelFilePicker(pickDisplayModelFile))
+let visionCaptureOptions = { types: ['screen', 'window'] as Array<'screen' | 'window'>, thumbnailSize: { width: 480, height: 270 } }
+const { getSources: getVisionScreenSources } = useElectronScreenCapture(window.electron.ipcRenderer, () => visionCaptureOptions)
+const visionScreenCapture = createDesktopVisionScreenCapture((options) => {
+  visionCaptureOptions = options
+  return getVisionScreenSources()
+})
+provideVisionScreenCapture(visionScreenCapture)
+// Capture the window role before routing initializes; auxiliary windows must
+// not acquire ownership while their route temporarily looks like the stage.
+const isMainStageWindow = isVisionScreenshotOwnerHash(window.location.hash)
+useAutomaticVisionScreenshot(visionScreenCapture, isMainStageWindow, isStageRoute)
 const {
   state: autoUpdaterState,
   checkForUpdates,
@@ -703,6 +720,13 @@ function handleExportDesktopDiagnostics() {
 onMounted(() => {
   reportMainRendererBootstrapVisibleAfterPaint()
   void initializeAppRuntime()
+  if (isMainStageWindow) {
+    void import('./modules/desktop-capabilities')
+      .then(({ detectDesktopRendererCapabilities }) => reportDesktopCapabilities(
+        detectDesktopRendererCapabilities(typeof visionScreenCapture.listSources === 'function'),
+      ))
+      .catch(error => console.warn('[App] Failed to report desktop capabilities:', error))
+  }
 })
 
 watch(themeColorsHue, () => {

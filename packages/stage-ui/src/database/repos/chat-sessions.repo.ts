@@ -102,6 +102,8 @@ export const chatSessionsRepo = {
   },
 
   async saveIndex(index: ChatSessionsIndex) {
+    // Explicit replacement only. Incremental callers read and patch the latest
+    // index under the user index lock; deleted entries must never be unioned.
     const key = `local:chat/index/${index.userId}`
     await storage.setItemRaw(key, cloneForPersistence(index))
   },

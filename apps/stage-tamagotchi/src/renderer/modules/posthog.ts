@@ -15,8 +15,8 @@ function resolveStorage(storage?: Pick<Storage, 'getItem' | 'setItem'>) {
 }
 
 function initializePosthog() {
-  if (initialized || !POSTHOG_PROJECT_KEY_DESKTOP)
-    return false
+  if (initialized)
+    return
 
   posthog.init(POSTHOG_PROJECT_KEY_DESKTOP, {
     ...DEFAULT_POSTHOG_CONFIG,
@@ -28,7 +28,6 @@ function initializePosthog() {
     // Project-specific config...
   })
   initialized = true
-  return true
 }
 
 export function initializePosthogFromConsent(storage?: Pick<Storage, 'getItem' | 'setItem'>) {
@@ -36,7 +35,8 @@ export function initializePosthogFromConsent(storage?: Pick<Storage, 'getItem' |
   if (target?.getItem(ANALYTICS_CONSENT_STORAGE_KEY) !== 'true')
     return false
 
-  return initializePosthog()
+  initializePosthog()
+  return true
 }
 
 export function setAnalyticsConsent(consent: boolean, storage?: Pick<Storage, 'getItem' | 'setItem'>) {

@@ -11,6 +11,8 @@ export type ChatRequestStage
     | 'memory-extraction'
     | 'recommended-replies'
     | 'group-narration-tts'
+    | 'group-script-evaluation'
+    | 'group-script-sequel'
     | 'tts'
 
 export interface ChatTraceContext {

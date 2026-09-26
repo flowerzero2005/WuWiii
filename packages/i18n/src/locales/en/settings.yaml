@@ -429,6 +429,72 @@ microphone: Microphone
 models: Model
 pages:
   group-scripts:
+    chapters:
+      job-running: A story request is running.
+      job-expired: The earlier request expired. You can explicitly generate a new draft; a new request will be billed.
+      unknown-role: Unknown role
+      evidence-removed: This evidence message was removed.
+      evidence-confidence: Confidence {confidence}
+      actions:
+        initialize: Initial state
+        advance: Advance
+        rollback: Rollback
+        restart: Restart
+        extend: Append acts
+      timeline: Act timeline
+      timeline-description: Define fixed acts in story order. Every condition describes an outcome verified from real conversation evidence.
+      add-act: Add act
+      empty: No acts yet. Add an act to enable story progression.
+      act-title: Act {number}
+      title: Act title
+      goal: Act goal
+      narration: Opening narration
+      hidden: Hide until unlocked
+      hidden-description: Later acts are never included in the current speaker context.
+      conditions: Completion conditions
+      add-condition: Add condition
+      outcome: Outcome to verify
+      confidence: Minimum confidence
+      evidence-count: Evidence messages
+      progress: Story progression
+      complete: Story complete
+      current: Act {number} · {title}
+      threshold: Confidence ≥ {confidence}; at least {count} evidence messages
+      price: '{model}: at least {minimum} points per request; {points} points per {unit} tokens × {multiplier}.'
+      price-unavailable: Current official model pricing is unavailable. Sign in and reconnect before enabling.
+      own-provider: Uses your selected conversation provider and model. Your provider may charge for each evaluation or generation.
+      billing-description: Automatic evaluation adds one model request after each completed group turn. Sequel drafts add a separate request; actual usage is billed even when conditions are unmet or a draft is discarded.
+      consent: Review and accept this price
+      confirm-consent: Accept displayed billing terms
+      automatic: Automatically evaluate act completion
+      automatic-description: Off by default. Evaluate semantic outcomes after visible group replies finish; advance at most one act per turn.
+      show-narration: Show opening narration for newly unlocked acts
+      show-narration-description: Insert one local narration message per act revision. This does not generate narration or speech.
+      sequel-enabled: Allow sequel draft generation
+      sequel-description: Off by default. Generate only on your explicit request, preview the draft, then accept or discard it.
+      maximum: Maximum new acts per generation
+      save-settings: Save progression settings
+      restart: Restart current act
+      rollback: Return to previous act
+      confirm-progress: Confirm progress change
+      history: Progress history · revision {revision}
+      history-description: Restarting, rolling back and restoring append a revision. Earlier conversation messages and evidence remain.
+      revision: Revision {revision}
+      restore: Restore
+      sequel: Sequel draft
+      generation-basis: Based on the saved story, conversation and revision {revision}; up to {count} new acts.
+      generate: Generate sequel draft
+      conversation-required: Send a conversation turn in this room before generating.
+      draft-roles: Role slots
+      draft-after: Timeline and prerequisites
+      accept-draft: Append these acts
+      discard-draft: Discard draft
+      save-failed: The story changed or could not be saved. Reload the room and try again.
+      generation-failed: The sequel draft could not be generated or validated. Review the model and room settings.
+      results:
+        advanced: Conditions met; advanced one act
+        unmet: Conditions not yet met
+        failed: This turn evaluation failed; no retry
     title: Group scripts and casting
     description: Edit a reusable story script, then cast its role slots with members of a specific group chat.
     eyebrow: Group rehearsal desk
@@ -657,6 +723,7 @@ pages:
         asr: 'Realtime transcription: {first} points for the first started 60 seconds, then {additional} points for each additional started 60 seconds'
         embedding: Text embedding
         web-search: Web search
+        vision: Vision
         request: '{name}: {points} points / request'
         voice-surcharge-note: Voices may add a per-request surcharge; the effective price is shown when selecting a voice.
         no-official-charge: Local capabilities and services using your own API key do not consume Wuwiii official points.
@@ -924,6 +991,7 @@ pages:
         refunded-auxiliary: 'The background "{purpose}" request did not complete. The temporary {points}-point hold was released; net charge: 0. This does not mean the main reply failed.'
         refunded-unknown: 'This record has no recognized request purpose. The temporary {points}-point hold was released; net charge: 0.'
         source-surfaces:
+          automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
           quick-chat: Quick chat
@@ -940,8 +1008,11 @@ pages:
           recommended-replies: Recommended replies
           group-narration: Group narration
           group-narration-speech: Narration voice
+          group-script-evaluation: Story progress evaluation
+          group-script-sequel: Next act draft
           speech: Voice processing
           web-search: Web search
+          vision: Vision
           unknown: Unknown purpose
         features:
           daily-check-in: Daily check-in
@@ -984,6 +1055,7 @@ pages:
           speech: Voice
           service: Service request
         surfaces:
+          automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
           quick-chat: Quick chat
@@ -1062,6 +1134,7 @@ pages:
           reference: Reference
           request-outcome: Request outcome
         surfaces:
+          automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
           quick-chat: Quick chat
@@ -1078,8 +1151,11 @@ pages:
           recommended-replies: Recommended replies
           group-narration: Group narration
           group-narration-speech: Narration voice
+          group-script-evaluation: Story progress evaluation
+          group-script-sequel: Next act draft
           speech: Voice processing
           web-search: Web search
+          vision: Vision
           unknown: Other service
         failures:
           not-needed: No narration was needed here. You were not charged.
@@ -1391,6 +1467,9 @@ pages:
       collapse: Collapse
       delete: Delete
       delete-confirm: Confirm delete?
+      confirm-failed: Could not confirm the diary. It is still a draft; try again after storage is available.
+      discard-failed: Could not discard the diary. It is still a draft; try again after storage is available.
+      delete-failed: Could not delete the diary. It is still saved; try again after storage is available.
     workspace:
       title: Memory ledger
       description: Review and manage {count} long-term memories in the active persona's private space.
@@ -1786,6 +1865,7 @@ pages:
       rotation-y: Y rotation
       tips: Adjust VRM position, lighting, and environment below. On narrow windows, scroll to see all settings.
   modules:
+    additional-capabilities: More capabilities
     beat_sync:
       description: Vibe with beats from the audio source
       title: Beat Sync
@@ -2245,7 +2325,7 @@ pages:
             unsupported_voice_warning_title: No supported voices
             unsupported_voice_warning_content: >-
               Try a different model or provider. For support, visit
-              https://www.wuwiii.cn/help/refund.
+              http://127.0.0.1:5173/help/refund.
             show_less: Show less
             show_more: Show more
             title: Provider
@@ -2258,14 +2338,67 @@ pages:
       title: Speech
     title: Modules
     web-search:
+      budget:
+        requests: Maximum actual search requests per turn (including backups)
+        points: Official search points limit per turn
+        description: '0 uses the current per-request quote times the request limit. The budget includes failed attempts and backup providers. The default of one request cannot switch to a backup. Cached results use no request or points; custom services never switch to billed official search.'
+        maximum: 'At most {requests} actual searches and {points} official points per turn. Failed attempts must be refunded before retrying.'
       title: Web search
       description: Configure web search providers and persona content filtering.
       pricing:
         loading: Loading the current official cloud price…
         official: 'Official cloud: {points} points per search. Local and bring-your-own-key providers do not consume official points.'
     vision:
-      description: Vision
+      description: Configure image understanding services and chat uploads.
       title: Vision
+      heading: Image understanding
+      intro: Upload or paste images in the chat composer. The selected vision service first creates a private visual summary, then the current chat model uses it to reply.
+      pricing:
+        accept: Accept the current image understanding fee
+        accepted: Current image understanding fee accepted.
+        loading: Loading the current official cloud price…
+        official: 'Official vision: {points} points per image request. It is billed independently even when chat uses a local model; bring-your-own-key and local vision services do not use official points.'
+      enabled:
+        label: Enable image understanding
+        description: When disabled, chat stays text-only and does not upload or analyze images.
+      provider:
+        label: Vision provider
+        description: Official cloud uses an Alibaba Cloud vision model by default. Your own provider charges for bring-your-own-key requests.
+      provider-options:
+        official-cloud: Wuwiii Official Cloud (Alibaba Cloud Vision)
+        aliyun: Alibaba Cloud Model Studio (own API key)
+        openai-compatible: OpenAI-compatible vision API
+        gemini: Google Gemini native API
+      fields:
+        aliyun-api-key: Alibaba Cloud API key
+        gemini-api-key: Gemini API key
+        api-key-optional: API key (optional)
+        base-url: API base URL
+        local-key-placeholder: Leave empty for a local service
+        model: Vision model
+      configuration-missing: Complete the selected vision provider URL, model, and required API key.
+      last-error: 'Most recent vision request failed: {error}'
+      screenshot:
+        desktop-only: Screen capture is available only in the desktop app.
+        select-source: Select or refresh screen sources
+        source: Automatic screenshot source
+        no-source: No source selected
+        source-required: Select a screen or window and check the preview. An unavailable source stops capture and must be selected again.
+        price: 'Automatic screenshots cost {points} points each, at an interval of {seconds} seconds, billed separately from chat.'
+        heading: Automatic screenshots
+        intro: Disabled by default. When enabled, the desktop capture service requests screenshots at the selected interval. It never requests or uses a camera.
+        enabled:
+          label: Allow automatic screenshots
+          description: Turning this off immediately stops capture and clears the screen summary. Images stay in memory and are never saved; only a short-lived text summary is used by chat.
+        interval: Screenshot interval (seconds)
+      test:
+        heading: Connection test
+        intro: The test sends one image with the current configuration and follows the selected provider's billing rules.
+        image-required: Select an image first.
+        prompt: Briefly describe what is in this image.
+        disabled: Image understanding is disabled.
+        analyzing: Analyzing…
+        action: Test image understanding
     x:
       description: X / Twitter browsing and usage
       title: X / Twitter

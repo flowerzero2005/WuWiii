@@ -3,7 +3,7 @@ import { Alert, RadioCardSimple } from '@proj-airi/stage-ui/components'
 import { useWebSearchStore } from '@proj-airi/stage-ui/stores/modules/web-search'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
-import { Button, FieldCheckbox, FieldRange } from '@proj-airi/ui'
+import { Button, FieldCheckbox, FieldInput, FieldRange } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { computed, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -21,6 +21,8 @@ const { persistedWebSearchProvidersMetadata, configuredProviders } = storeToRefs
 const {
   enabled,
   activeProvider,
+  maxRequestsPerTurn,
+  maxOfficialPointsPerTurn,
   characterProfileEnabled,
   configured,
   apiKeyValid,
@@ -113,6 +115,11 @@ const subsectionDescriptionClass = 'airi-text-muted mb-4 text-sm'
         {{ officialWebSearchPoints === undefined
           ? t('settings.pages.modules.web-search.pricing.loading')
           : t('settings.pages.modules.web-search.pricing.official', { points: officialWebSearchPoints }) }}
+      </p>
+      <FieldRange v-model="maxRequestsPerTurn" :label="t('settings.pages.modules.web-search.budget.requests')" :min="1" :max="2" :step="1" />
+      <FieldInput v-model.number="maxOfficialPointsPerTurn" type="number" :label="t('settings.pages.modules.web-search.budget.points')" :description="t('settings.pages.modules.web-search.budget.description')" />
+      <p :class="['text-xs airi-text-muted']">
+        {{ t('settings.pages.modules.web-search.budget.maximum', { points: maxOfficialPointsPerTurn > 0 ? maxOfficialPointsPerTurn : (officialWebSearchPoints ?? 0) * maxRequestsPerTurn, requests: maxRequestsPerTurn }) }}
       </p>
 
       <!-- Enable/Disable -->

@@ -42,18 +42,26 @@ function getDeviceFingerprint(): string {
  * 数据迁移：将 default 用户的数据复制到新用户
  * 安全策略：只复制不删除，保留原数据作为备份
  */
-async function migrateOldDataToNewUser(newUserId: string): Promise<void> {
+function hasNotebookContent(data: Awaited<ReturnType<typeof notebookRepo.load>>): boolean {
+  return Boolean(data && (
+    data.entries.length > 0
+    || data.tasks.length > 0
+    || (data.diaryDrafts?.length ?? 0) > 0
+  ))
+}
+
+export async function migrateOldDataToNewUser(newUserId: string): Promise<void> {
   try {
     // 读取 default 用户的数据
     const defaultData = await notebookRepo.load('default')
 
-    if (!defaultData || (defaultData.entries.length === 0 && defaultData.tasks.length === 0)) {
+    if (!defaultData || !hasNotebookContent(defaultData)) {
       return
     }
 
     // 检查新用户是否已有数据
     const existingData = await notebookRepo.load(newUserId)
-    if (existingData && (existingData.entries.length > 0 || existingData.tasks.length > 0)) {
+    if (hasNotebookContent(existingData)) {
       return
     }
 
@@ -61,8 +69,10 @@ async function migrateOldDataToNewUser(newUserId: string): Promise<void> {
     await notebookRepo.save(newUserId, {
       entries: defaultData.entries,
       tasks: defaultData.tasks,
-      version: 1,
-    })
+      diaryDrafts: defaultData.diaryDrafts ?? [],
+      version: defaultData.version,
+      lastSyncedAt: defaultData.lastSyncedAt,
+    }, { preserveMetadata: true })
   }
   catch (error) {
     console.error('[UserIdentity] Data migration failed:', error)

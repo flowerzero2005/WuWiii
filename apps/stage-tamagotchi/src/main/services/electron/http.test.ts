@@ -30,7 +30,7 @@ describe('createHttpService', () => {
       })
     })
 
-    const payload = { method: 'POST', url: 'https://api.wuwiii.cn/health' }
+    const payload = { method: 'POST', url: 'http://127.0.0.1:3000/health' }
     const options = { raw: { ipcMainEvent: { sender: { id: 3 } } } }
     const results = await Promise.all(handlers.map(handler => handler(payload, options)))
 

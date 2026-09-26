@@ -1,11 +1,11 @@
 import type { OfficialPricingSnapshot } from '../official-pricing'
 
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 
 import { useOfficialPricingStore } from '../official-pricing'
 
-export type OfficialPaidCapability = 'web-search' | 'embedding' | 'transcription' | 'inner-voice-note' | 'speech'
+export type OfficialPaidCapability = 'web-search' | 'embedding' | 'transcription' | 'vision' | 'inner-voice-note' | 'group-script' | 'speech'
 
 export type OfficialCapabilityConsentDisplay
   = | { billingMode: 'request', pointsPerRequest: number }
@@ -72,8 +72,14 @@ export function createOfficialCapabilityConsentQuote(
   if (!snapshot)
     return
 
-  if (capability === 'web-search' || capability === 'embedding') {
-    const price = capability === 'web-search' ? snapshot.capabilities.webSearch : snapshot.capabilities.embedding
+  if (capability === 'web-search' || capability === 'embedding' || capability === 'vision') {
+    const price = capability === 'web-search'
+      ? snapshot.capabilities.webSearch
+      : capability === 'embedding'
+        ? snapshot.capabilities.embedding
+        : snapshot.capabilities.vision
+    if (!price)
+      return
     return completeQuote({
       capability,
       display: { billingMode: 'request', pointsPerRequest: price.pointsPerRequest },
@@ -105,7 +111,7 @@ export function createOfficialCapabilityConsentQuote(
   }
 
   const model = snapshot.models.find(item => item.id === (options.modelId || 'airi-default'))
-  const feature = snapshot.features.find(item => item.feature === 'inner-voice-note')
+  const feature = snapshot.features.find(item => item.feature === (capability === 'group-script' ? 'official-chat' : 'inner-voice-note'))
   if (!model || !feature)
     return
   const minimumPoints = model.minimumSettlePoints * feature.multiplier
@@ -153,7 +159,7 @@ function isQuote(value: unknown): value is OfficialCapabilityConsentQuote {
     && Array.isArray(quote.priceVector)
     && quote.priceVector.every(price => typeof price === 'number' && Number.isFinite(price) && price >= 0)
     && !!quote.display && typeof quote.display === 'object'
-    && ['web-search', 'embedding', 'transcription', 'inner-voice-note', 'speech'].includes(quote.capability ?? '')
+    && ['web-search', 'embedding', 'transcription', 'vision', 'inner-voice-note', 'group-script', 'speech'].includes(quote.capability ?? '')
 }
 
 function acceptanceKey(scopeId: string, capability: OfficialPaidCapability): string {
@@ -164,7 +170,7 @@ function parseAcceptanceKey(key: string): [string, OfficialPaidCapability] | und
   try {
     const value = JSON.parse(key) as unknown
     if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || !value[0].trim()
-      || !['web-search', 'embedding', 'transcription', 'inner-voice-note', 'speech'].includes(String(value[1]))) {
+      || !['web-search', 'embedding', 'transcription', 'vision', 'inner-voice-note', 'group-script', 'speech'].includes(String(value[1]))) {
       return
     }
     return [value[0].trim(), value[1] as OfficialPaidCapability]
@@ -206,6 +212,17 @@ function storage(): Storage | undefined {
 export const useOfficialCapabilityConsentStore = defineStore('official-capability-consent', () => {
   const pricing = useOfficialPricingStore()
   const acceptances = ref(parseOfficialCapabilityConsentAcceptances(storage()?.getItem(STORAGE_KEY) ?? null))
+
+  // Every paid capability shares the same account-scoped consent state, even
+  // in windows that never create an automatic screenshot scheduler.
+  if (typeof window !== 'undefined') {
+    const syncConsent = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY || event.key === null)
+        acceptances.value = parseOfficialCapabilityConsentAcceptances(event.newValue)
+    }
+    window.addEventListener('storage', syncConsent)
+    onScopeDispose(() => window.removeEventListener('storage', syncConsent))
+  }
 
   function persist() {
     storage()?.setItem(STORAGE_KEY, JSON.stringify(acceptances.value))

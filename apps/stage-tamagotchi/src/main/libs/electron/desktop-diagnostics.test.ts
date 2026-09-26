@@ -67,10 +67,18 @@ describe('desktop startup diagnostics', () => {
       on: () => undefined,
     } as unknown as App)
     diagnostics.record('provider-error', { apiKey: 'secret-value' })
+    const report = { version: 1, webAssemblyValidated: true, wasmSimdValidated: false, webGlAvailable: true, webGl2Available: false, workerConstructorAvailable: true, audioWorkletConstructorAvailable: false, desktopScreenCaptureBridgeAvailable: true, displayMediaApiAvailable: false }
+    expect(diagnostics.recordRendererCapabilities({ ...report, deviceName: 'private-device', username: 'private-user' })).toBe(true)
+    expect(diagnostics.recordRendererCapabilities({ ...report, wasmSimdValidated: 'invalid' })).toBe(false)
 
     const destination = join(root, 'airi-diagnostics.jsonl')
     expect(diagnostics.exportCopy(destination)).toBe(true)
     expect(readFileSync(destination, 'utf8')).toContain('"apiKey":"<redacted>"')
     expect(readFileSync(destination, 'utf8')).not.toContain('secret-value')
+    const exported = readFileSync(destination, 'utf8')
+    expect(exported).not.toContain('private-device')
+    expect(exported).not.toContain('private-user')
+    expect(exported).toContain('"event":"renderer-capabilities"')
+    expect(JSON.parse(exported.split('\n')[0])).toMatchObject({ details: { architecture: expect.any(String), osRelease: expect.any(String), electronVersion: expect.any(String), chromiumVersion: expect.any(String) } })
   })
 })

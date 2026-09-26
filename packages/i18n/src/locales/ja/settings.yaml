@@ -419,7 +419,7 @@ pages:
             search_voices_results: 結果{total}個中{count}個の音声が見つかりました
             unsupported_voice_warning_title: サポートされている音声がありません
             unsupported_voice_warning_content: >-
-              別のモデルまたはプロバイダーを試してください。サポートが必要な場合は https://www.wuwiii.cn/help/refund をご覧ください。
+              別のモデルまたはプロバイダーを試してください。サポートが必要な場合は http://127.0.0.1:5173/help/refund をご覧ください。
             show_less: 表示を減らす
             show_more: もっと表示
             title: プロバイダー

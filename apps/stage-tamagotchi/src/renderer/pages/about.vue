@@ -29,7 +29,7 @@ const isLatestVersion = computed(() => isLatestDesktopUpdateStatus(updateState.v
 const isError = computed(() => updateState.value.status === 'error')
 
 const links = computed(() => [
-  { label: t('tamagotchi.stage.update.about.home'), href: 'https://www.wuwiii.cn/', icon: 'i-solar:home-smile-outline' },
+  { label: t('tamagotchi.stage.update.about.home'), href: 'http://127.0.0.1:5173/', icon: 'i-solar:home-smile-outline' },
   { label: 'Project AIRI source', href: 'https://github.com/moeru-ai/airi', icon: 'i-simple-icons:github' },
 ])
 

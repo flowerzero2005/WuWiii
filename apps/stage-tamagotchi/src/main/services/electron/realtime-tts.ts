@@ -28,9 +28,9 @@ function setupAuthorizationHook(session: Session) {
     return
   hookedSessions.add(session)
 
-  session.webRequest.onBeforeSendHeaders({ urls: ['https://api.wuwiii.cn/*', 'wss://*.aliyuncs.com/*'] }, (details, callback) => {
+  session.webRequest.onBeforeSendHeaders({ urls: ['http://127.0.0.1:3000/*', 'wss://*.aliyuncs.com/*'] }, (details, callback) => {
     const requestUrl = new URL(details.url)
-    if (requestUrl.origin === 'https://api.wuwiii.cn') {
+    if (requestUrl.origin === 'http://127.0.0.1:3000') {
       const requestOrigin = details.requestHeaders.Origin ?? details.requestHeaders.origin
       if (requestOrigin && requestOrigin !== 'null') {
         callback({ requestHeaders: details.requestHeaders })
@@ -42,7 +42,7 @@ function setupAuthorizationHook(session: Session) {
       callback({
         requestHeaders: {
           ...details.requestHeaders,
-          Origin: 'https://www.wuwiii.cn',
+          Origin: 'http://127.0.0.1:5173',
         },
       })
       return

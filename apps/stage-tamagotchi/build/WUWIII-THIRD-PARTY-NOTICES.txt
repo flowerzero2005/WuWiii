@@ -1,21 +1,18 @@
-Wuwiii Development Source: Third-Party Notices
+Wuwiii Third-Party Notices
 
 Project AIRI
-WuWiii is derived from Project AIRI, Copyright (c) 2024-PRESENT Neko Ayaka,
-under the MIT License. The license and attribution are in the repository's
-root LICENSE file.
+Wuwiii is derived from Project AIRI source code, Copyright (c) 2024-PRESENT Neko Ayaka, under the MIT License. The complete license is included as PROJECT-AIRI-LICENSE.txt.
 
-Fonts
-The Xiaolai font is attributed to ʟxɢᴡ and identified as licensed under the
-SIL Open Font License in packages/font-xiaolai/package.json. Upstream:
-https://github.com/lxgw/kose-font
+Hiyori and Live2D
+Hiyori character artwork is attributed to Kani Biimu and its model to Live2D. Hiyori assets are governed by the terms bundled with the exact model archive and the Live2D sample-data terms at:
+https://www.live2d.com/zh-CHS/download/sample-data/
 
-The cjkFonts 全瀨體 font and its SIL Open Font License text are included in
-packages/font-cjkfonts-allseto/license.txt.
-
-Live2D
-Live2D SDK and sample model assets are not committed to this development
-repository. Builds that fetch them must follow the terms published by Live2D:
+Live2D Cubism SDK, Framework, and Core components are governed by the Cubism SDK Release License, Live2D Open Software License, and Live2D Proprietary Software License:
 https://www.live2d.com/en/download/cubism-sdk/release-license/
+https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html
+https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html
 
-Dependencies and other assets remain subject to their respective licenses.
+These attributions do not clear unresolved commercial or public redistribution rights. The repository asset register and release gate remain authoritative; assets marked Hold must block a paid public release.
+
+Production dependencies
+The production dependency inventory generated from the release lockfile is included as production-dependency-licenses.json. Each dependency and other bundled font, codec, icon, model, voice, or native component remains governed by its own terms.

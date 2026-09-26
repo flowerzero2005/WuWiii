@@ -20,6 +20,7 @@ import { openDebugger, setupDebugger } from './app/debugger'
 import { createGlobalAppConfig } from './configs/global'
 import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
 import { setupDesktopDiagnostics } from './libs/electron/desktop-diagnostics'
+import { configureDevelopmentProfile } from './libs/electron/development-profile'
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
 import { setupAgentSessionControllerService } from './services/airi/agent-session-controller'
@@ -36,6 +37,7 @@ import { setupWorkbenchMemoryService } from './services/airi/workbench-memory'
 import { setupWorkbenchStaticPreviewService } from './services/airi/workbench-static-preview'
 import { setupWorkbenchWorkspaceService } from './services/airi/workbench-workspace'
 import { setupAutoUpdater } from './services/electron/auto-updater'
+import { createDetachedComposerService } from './services/electron/detached-composer'
 import { setupMediaPermissions } from './services/electron/media-permissions'
 import { setupSingleInstance } from './single-instance'
 import { setupTray } from './tray'
@@ -61,6 +63,12 @@ ipcMain.setMaxListeners(100)
 
 setElectronMainDirname(dirname(fileURLToPath(import.meta.url)))
 const ENABLED_ENV_VALUE_REGEX = /^(?:1|true|yes|on)$/i
+const RUNTIME_ID_UNSAFE_CHARACTERS_RE = /[^a-z0-9.-]/gi
+const PATH_BACKSLASHES_RE = /\\/g
+const TRAILING_PATH_SLASHES_RE = /\/+$/
+function normalizeWorkspaceRoot(root: string) {
+  return root.replace(PATH_BACKSLASHES_RE, '/').replace(TRAILING_PATH_SLASHES_RE, '').toLowerCase()
+}
 
 function configureDesktopRegressionProfile() {
   if (!envFlagEnabled(env.AIRI_DESKTOP_REGRESSION_RUNTIME))
@@ -96,6 +104,7 @@ function configureDesktopRegressionProfile() {
 }
 
 configureDesktopRegressionProfile()
+configureDevelopmentProfile(app, envFlagEnabled(env.AIRI_DESKTOP_REGRESSION_RUNTIME))
 const singleInstance = setupSingleInstance(app)
 setGlobalFormat(Format.Pretty)
 setGlobalLogLevel(LogLevel.Log)
@@ -123,7 +132,7 @@ function envFlagEnabled(value?: string) {
 }
 
 function resolveDevelopmentAppUserModelId() {
-  const runtimeIdentity = basename(dirname(dirname(execPath))).replace(/[^a-z0-9.-]/gi, '-')
+  const runtimeIdentity = basename(dirname(dirname(execPath))).replace(RUNTIME_ID_UNSAFE_CHARACTERS_RE, '-')
   return `cn.wuwiii.desktop.dev.${runtimeIdentity}`
 }
 
@@ -244,8 +253,6 @@ if (isLinux) {
 app.dock?.setIcon(icon)
 // NOTICE: `@electron-toolkit/utils/dist/index.mjs:14-16` substitutes process.execPath
 // in development. Calling Electron directly keeps Wuwiii's taskbar identity.
-// NOTICE: This development mirror has its own packaged identity; the former
-// legacy startup-item cleanup was removed so it cannot alter an installed app.
 const desktopAppUserModelId = app.isPackaged ? 'cn.wuwiii.desktop.development' : resolveDevelopmentAppUserModelId()
 if (isWindows)
   app.setAppUserModelId(desktopAppUserModelId)
@@ -256,6 +263,8 @@ if (singleInstance.isPrimary)
 singleInstance.isPrimary && app.whenReady().then(async () => {
   setupMediaPermissions(session.defaultSession)
   startupWindow = app.isPackaged ? setupStartupWindow() : undefined
+
+  // NOTICE: Development startup does not migrate consumer login items.
 
   desktopDiagnostics.record('electron-app-ready')
   injeca.setLogger(createLoggLogger(useLogg('injeca').useGlobalConfig()))
@@ -334,12 +343,12 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
     build: async ({ dependsOn }) => setupCommandExecutionService({
       protectedResources: dependsOn.protectedResources,
       resolveWorkspaceProtectedPaths: (workspaceRoot) => {
-        const normalizedWorkspaceRoot = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+        const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot)
         const activeWorkspace = dependsOn.workbenchWorkspace
           .getStatus()
           .workspaces
           .find((workspace) => {
-            return workspace.root.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === normalizedWorkspaceRoot
+            return normalizeWorkspaceRoot(workspace.root) === normalizedWorkspaceRoot
           })
 
         return activeWorkspace?.protectedPaths ?? []
@@ -378,6 +387,11 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
     dependsOn: { serverChannel },
     build: ({ dependsOn }) => createServerChannelService({ serverChannel: dependsOn.serverChannel }),
   })
+
+  const detachedComposer = injeca.provide('modules:detached-composer', () => createDetachedComposerService())
+  // Register the source/editor commands before any chat renderer can load.
+  // injeca.invoke schedules work; resolving here makes ordering explicit.
+  await injeca.resolve({ detachedComposer })
 
   // BeatSync will create a background window to capture and process audio.
   const beatSync = injeca.provide('windows:beat-sync', () => setupBeatSync())
@@ -450,6 +464,7 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
         if (desktopDiagnostics.logFile)
           shell.showItemInFolder(desktopDiagnostics.logFile)
       },
+      reportRendererCapabilities: desktopDiagnostics.recordRendererCapabilities,
       exportDesktopDiagnostics: async () => {
         const { canceled, filePath } = await dialog.showSaveDialog({
           defaultPath: 'wuwiii-desktop-diagnostics.jsonl',

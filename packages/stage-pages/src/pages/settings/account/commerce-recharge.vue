@@ -723,7 +723,7 @@ onBeforeUnmount(() => commerceStore.stopPaymentPolling())
         <div :class="['text-sm font-medium airi-text']">
           {{ t('settings.pages.account.sections.recharge.history.title') }}
         </div>
-        <span :class="['flex items-center gap-3 text-xs airi-text-muted']"><a href="https://www.wuwiii.cn/help/refund" target="_blank" rel="noopener noreferrer" :class="['font-medium text-[var(--airi-accent-strong)] hover:underline']">{{ t('settings.pages.account.sections.recharge.history.refund-help') }}</a><span>{{ paymentOrders.length }}</span></span>
+        <span :class="['flex items-center gap-3 text-xs airi-text-muted']"><a href="http://127.0.0.1:5173/help/refund" target="_blank" rel="noopener noreferrer" :class="['font-medium text-[var(--airi-accent-strong)] hover:underline']">{{ t('settings.pages.account.sections.recharge.history.refund-help') }}</a><span>{{ paymentOrders.length }}</span></span>
       </div>
       <div v-if="isLoadingPaymentOrders && paymentOrders.length === 0" :class="['h-16 animate-pulse rounded-md bg-[var(--airi-surface-control-muted)]']" />
       <div v-else-if="ordersErrorMessage && paymentOrders.length === 0" :class="['rounded-md px-3 py-2.5 text-sm airi-status-error']">

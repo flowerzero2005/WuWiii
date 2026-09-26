@@ -1417,6 +1417,7 @@ describe('llm stream error bridging', () => {
     expect(fallbackContext).toHaveBeenCalledWith({
       abortSignal: abortController.signal,
       messages,
+      searchExecution: expect.objectContaining({ budget: expect.objectContaining({ begin: expect.any(Function) }) }),
     })
     expect(streamText).toHaveBeenCalledTimes(2)
 

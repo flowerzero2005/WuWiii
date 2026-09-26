@@ -3,6 +3,9 @@ import type { App } from 'electron'
 import { app } from 'electron'
 import { isWindows } from 'std-env'
 
+const LEGACY_WINDOWS_START_IN_TRAY_ARG = '--start-in-tray'
+const LEGACY_WINDOWS_APP_USER_MODEL_ID = 'ai.moeru.airi'
+
 type LoginItemApp = Pick<App, 'getAppPath' | 'getLoginItemSettings' | 'getPath' | 'isPackaged' | 'setLoginItemSettings'>
 
 export interface WindowsLoginItemSettings {
@@ -46,4 +49,21 @@ export function setWindowsLoginItemSettings(currentAppUserModelId: string, enabl
   })
 
   return getWindowsLoginItemSettings(electronApp, windows)
+}
+
+export function disableRetiredWindowsLoginItems(currentAppUserModelId: string, electronApp: LoginItemApp = app, windows = isWindows): void {
+  if (!windows || currentAppUserModelId === LEGACY_WINDOWS_APP_USER_MODEL_ID)
+    return
+
+  // NOTICE: Retire the former static development registration without touching
+  // the current packaged identity or the user's current startup preference.
+  electronApp.setLoginItemSettings({
+    args: electronApp.isPackaged
+      ? [LEGACY_WINDOWS_START_IN_TRAY_ARG]
+      : [electronApp.getAppPath(), LEGACY_WINDOWS_START_IN_TRAY_ARG],
+    enabled: false,
+    name: LEGACY_WINDOWS_APP_USER_MODEL_ID,
+    openAtLogin: false,
+    path: electronApp.getPath('exe'),
+  })
 }

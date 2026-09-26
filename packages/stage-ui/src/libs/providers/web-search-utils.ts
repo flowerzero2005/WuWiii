@@ -5,8 +5,6 @@ import type {
   WebSearchProviderResult,
 } from './types'
 
-import { errorMessageFrom } from '@moeru/std'
-
 import {
   isWebSearchProvider,
   WebSearchProviderError,
@@ -61,9 +59,55 @@ export function inferTopics(content: string): string[] {
 }
 
 export function compactWebSearchResults(results: WebSearchProviderResult[], maxResults: number) {
-  return results
-    .filter(result => result.url && (result.title || result.snippet))
-    .slice(0, maxResults)
+  const seenUrls = new Set<string>()
+
+  return results.flatMap((result) => {
+    const url = normalizeWebSearchUrl(result.url)
+    const title = cleanWebSearchText(result.title, 240)
+    const snippet = cleanWebSearchText(result.snippet, 2_000)
+    if (!url || (!title && !snippet) || seenUrls.has(url))
+      return []
+
+    seenUrls.add(url)
+    return [{
+      ...result,
+      snippet,
+      source: cleanWebSearchText(result.source, 160) || extractDomain(url),
+      title,
+      url,
+    }]
+  }).slice(0, maxResults)
+}
+
+export function cleanWebSearchText(value: string | undefined, maxLength: number) {
+  if (!value)
+    return ''
+
+  const text = value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}
+
+export function normalizeWebSearchUrl(value: string | undefined) {
+  if (!value)
+    return ''
+
+  try {
+    const url = new URL(value)
+    url.hash = ''
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_[^=]*|fbclid|gclid|mc_cid|mc_eid)$/i.test(key))
+        url.searchParams.delete(key)
+    }
+    return url.toString()
+  }
+  catch {
+    return ''
+  }
 }
 
 export function requireApiKey(apiKey: unknown, providerId: string, providerName: string) {
@@ -190,24 +234,14 @@ export function createWebSearchRuntimeValidator<TConfig extends Record<string, u
         }
       }
 
-      try {
-        await provider.webSearch({ maxResults: 1, query: 'test', searchDepth: 'basic' })
-        return {
-          errors: [],
-          reason: '',
-          reasonKey: '',
-          valid: true,
-        }
-      }
-      catch (error) {
-        const reason = sanitizeWebSearchProviderErrorMessage(errorMessageFrom(error) || '', options.providerName)
-          || `${options.providerName} search check failed.`
-        return {
-          errors: [{ error }],
-          reason,
-          reasonKey: '',
-          valid: false,
-        }
+      // A generic web-search request may consume a provider quota. Runtime
+      // validation only proves that the provider was created; the actual
+      // search remains an explicit user action.
+      return {
+        errors: [],
+        reason: '',
+        reasonKey: '',
+        valid: true,
       }
     },
   }

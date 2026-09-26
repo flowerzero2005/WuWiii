@@ -47,7 +47,10 @@ describe('auth state sync', () => {
 
     broadcastAuthStateChanged()
 
-    expect(refresh).toHaveBeenCalledWith('broadcast')
+    expect(refresh).toHaveBeenCalledWith({
+      broadcast: { reason: 'refresh', version: 1 },
+      reason: 'broadcast',
+    })
     vi.runAllTimers()
     stop?.()
   })
@@ -73,12 +76,12 @@ describe('auth state sync', () => {
     windowListeners.get('focus')?.(new Event('focus'))
     documentListeners.get('visibilitychange')?.(new Event('visibilitychange'))
     expect(refresh).toHaveBeenCalledOnce()
-    expect(refresh).toHaveBeenLastCalledWith('focus')
+    expect(refresh).toHaveBeenLastCalledWith({ reason: 'focus' })
 
     fakeDocument.visibilityState = 'visible'
     documentListeners.get('visibilitychange')?.(new Event('visibilitychange'))
     expect(refresh).toHaveBeenCalledTimes(2)
-    expect(refresh).toHaveBeenLastCalledWith('visibility')
+    expect(refresh).toHaveBeenLastCalledWith({ reason: 'visibility' })
 
     stop?.()
     expect(windowListeners.size).toBe(0)

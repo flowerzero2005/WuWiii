@@ -396,7 +396,7 @@ pages:
             search_voices_results: '{total}개의 항목 중에 {count}개의 모델 찾음'
             unsupported_voice_warning_title: 지원되는 음성 없음
             unsupported_voice_warning_content: >-
-              다른 모델 또는 제공자를 이용해 주세요. 도움이 필요하면 https://www.wuwiii.cn/help/refund 를 방문해 주세요.
+              다른 모델 또는 제공자를 이용해 주세요. 도움이 필요하면 http://127.0.0.1:5173/help/refund 를 방문해 주세요.
             show_less: 간략히 보기
             show_more: 더 보기
             title: 제공자

@@ -155,6 +155,91 @@ describe('account usage history display', () => {
     expect(result[0]?.children.map(entry => entry.id)).toEqual(['turn-text', 'turn-speech', 'turn-recommended'])
   })
 
+  it.each(['chat', 'quick-chat'] as const)('includes vision charges and refunds in the same %s turn', (surface) => {
+    const vision = usage({
+      chargedPoints: 5,
+      id: 'image-understanding',
+      netPoints: 3,
+      purpose: 'vision',
+      refundedPoints: 2,
+      reservedPoints: 5,
+      surface,
+      turnId: 'image-chat-turn',
+    })
+    const result = buildUsageHistoryDisplay([
+      usage({ id: 'main-reply', netPoints: 8, surface, turnId: 'image-chat-turn' }),
+      vision,
+      vision,
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      chargedPoints: 13,
+      id: 'turn:image-chat-turn',
+      netPoints: 11,
+      refundedPoints: 2,
+      surface,
+    })
+    expect(result[0]?.children).toHaveLength(2)
+    expect(result[0]?.children.find(entry => entry.purpose === 'vision')?.id).toBe('image-understanding')
+  })
+
+  it('keeps vision attached to a group turn under the room total', () => {
+    const result = buildUsageHistoryDisplay([
+      usage({ groupTurnId: 'image-room-turn', id: 'room-reply', netPoints: 8, turnId: 'image-room-turn:actor' }),
+      usage({ chargedPoints: 5, groupTurnId: 'image-room-turn', id: 'room-vision', netPoints: 5, purpose: 'vision', turnId: 'image-child-turn' }),
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      groupTurnId: 'image-room-turn',
+      id: 'group:image-room-turn',
+      netPoints: 13,
+      surface: 'group-chat',
+    })
+    expect(result[0]?.children.some(entry => entry.purpose === 'vision')).toBe(true)
+  })
+
+  it('keeps an automatic vision request with no chat turn as a separate charge', () => {
+    const result = buildUsageHistoryDisplay([
+      usage({ id: 'chat-reply', surface: 'chat', turnId: 'chat-turn' }),
+      usage({ id: 'automatic-vision', purpose: 'vision', surface: 'automatic-screenshot', turnId: undefined }),
+    ])
+
+    expect(result).toHaveLength(2)
+    expect(result.find(item => item.id === 'automatic-vision')).toMatchObject({ kind: 'single', turnId: undefined, surface: 'automatic-screenshot' })
+  })
+
+  it('includes script evaluation and sequel generation in the group total exactly once', () => {
+    const evaluation = usage({
+      chargedPoints: 2,
+      groupTurnId: 'script-room-turn',
+      id: 'script-evaluation',
+      netPoints: 2,
+      purpose: 'group-script-evaluation',
+    })
+    const result = buildUsageHistoryDisplay([
+      usage({ chargedPoints: 8, groupTurnId: 'script-room-turn', id: 'script-reply', netPoints: 8 }),
+      evaluation,
+      evaluation,
+      usage({ chargedPoints: 3, groupTurnId: 'script-room-turn', id: 'script-sequel', netPoints: 3, purpose: 'group-script-sequel' }),
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      chargedPoints: 13,
+      groupTurnId: 'script-room-turn',
+      id: 'group:script-room-turn',
+      netPoints: 13,
+    })
+    expect(result[0]?.children).toHaveLength(3)
+    expect(result[0]?.children.map(entry => entry.purpose)).toEqual(expect.arrayContaining([
+      'main-reply',
+      'group-script-evaluation',
+      'group-script-sequel',
+    ]))
+  })
+
   it('keeps separate direct chat turns from the same character independent', () => {
     const result = buildUsageHistoryDisplay([
       usage({ id: 'direct-turn-1', purpose: 'main-reply', surface: 'chat', turnId: 'turn-1', characterName: 'Mina' }),

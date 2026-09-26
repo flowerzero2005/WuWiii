@@ -76,14 +76,14 @@ describe('createRealtimeTtsService', () => {
 
     const callback = vi.fn()
     mock.getHeaderListener()!({
-      url: 'https://api.wuwiii.cn/api/auth/sign-out',
+      url: 'http://127.0.0.1:3000/api/auth/sign-out',
       requestHeaders: { Cookie: 'better-auth.session_token=session' },
     }, callback)
 
     expect(callback).toHaveBeenCalledWith({
       requestHeaders: {
         Cookie: 'better-auth.session_token=session',
-        Origin: 'https://www.wuwiii.cn',
+        Origin: 'http://127.0.0.1:5173',
       },
     })
   })
@@ -99,7 +99,7 @@ describe('createRealtimeTtsService', () => {
     }
     const callback = vi.fn()
     mock.getHeaderListener()!({
-      url: 'https://api.wuwiii.cn/api/auth/get-session',
+      url: 'http://127.0.0.1:3000/api/auth/get-session',
       requestHeaders,
     }, callback)
 

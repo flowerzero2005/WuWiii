@@ -85,6 +85,7 @@ describe('character notebook store', () => {
     setActivePinia(createPinia())
     repoMock.load.mockReset()
     repoMock.save.mockReset()
+    repoMock.save.mockImplementation(async (_scopeId: string, data: NotebookData) => data)
   })
 
   it('reloads the latest persona-card scope after an in-flight load resolves', async () => {
@@ -311,5 +312,250 @@ describe('character notebook store', () => {
     finally {
       vi.useRealTimers()
     }
+  })
+
+  it('serializes an in-flight draft save before persisting its confirmation', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue(null)
+    const savedSnapshots: NotebookData[] = []
+    let releaseFirstSave!: () => void
+    const firstSave = new Promise<void>((resolve) => {
+      releaseFirstSave = resolve
+    })
+    let saveCount = 0
+    repoMock.save.mockImplementation(async (_scopeId: string, data: NotebookData) => {
+      savedSnapshots.push(structuredClone(data))
+      saveCount += 1
+      if (saveCount === 1)
+        await firstSave
+      return data
+    })
+
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+    const draft = notebookStore.createDiaryDraft({
+      title: 'A quiet afternoon',
+      text: 'We watched the rain together.',
+      periodStart: 1,
+      periodEnd: 2,
+      sourceMessageIds: ['message-1'],
+      importantEvents: ['rain'],
+      preferenceNotes: [],
+    })
+
+    const firstSavePromise = notebookStore.saveToStorage()
+    await vi.waitFor(() => expect(savedSnapshots).toHaveLength(1))
+    const confirmPromise = notebookStore.confirmDiaryDraft(draft.id)
+    await flushPromises(2)
+    expect(savedSnapshots).toHaveLength(1)
+
+    releaseFirstSave()
+    await firstSavePromise
+    await confirmPromise
+
+    expect(savedSnapshots[0]?.diaryDrafts).toEqual([expect.objectContaining({ id: draft.id, status: 'draft' })])
+    expect(savedSnapshots.at(-1)?.diaryDrafts).toEqual([expect.objectContaining({ id: draft.id, status: 'confirmed' })])
+    expect(savedSnapshots.at(-1)?.entries).toEqual([expect.objectContaining({ kind: 'diary', text: draft.text })])
+    expect(notebookStore.lastSaveResult).toMatchObject({
+      scopeId: 'default::card:default',
+      succeeded: true,
+    })
+    notebookStore.cleanup()
+  })
+
+  it('waits for the current scope before confirming a diary draft', async () => {
+    const pendingLoad = deferredNotebookLoad('default::card:default')
+    vi.mocked(notebookRepo.load).mockReturnValue(pendingLoad.promise)
+
+    const notebookStore = useCharacterNotebookStore()
+    const confirmPromise = notebookStore.confirmDiaryDraft('draft-1')
+    await flushPromises(2)
+    expect(notebookRepo.save).not.toHaveBeenCalled()
+
+    pendingLoad.resolve({
+      entries: [],
+      tasks: [],
+      diaryDrafts: [{
+        id: 'draft-1',
+        title: 'Loaded draft',
+        text: 'The persisted draft is confirmed after loading.',
+        periodStart: 1,
+        periodEnd: 2,
+        sourceMessageIds: [],
+        importantEvents: [],
+        preferenceNotes: [],
+        status: 'draft',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      version: 4,
+    })
+    await confirmPromise
+
+    expect(notebookStore.diaryDrafts).toEqual([expect.objectContaining({ id: 'draft-1', status: 'confirmed' })])
+    expect(notebookRepo.save).toHaveBeenCalledWith('default::card:default', expect.objectContaining({
+      diaryDrafts: [expect.objectContaining({ id: 'draft-1', status: 'confirmed' })],
+    }))
+    notebookStore.cleanup()
+  })
+
+  it('forces the current scope to save after discarding a draft or deleting a diary', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue({
+      entries: [{
+        id: 'diary-1',
+        kind: 'diary',
+        text: 'A diary to delete.',
+        createdAt: 1,
+      }],
+      tasks: [],
+      diaryDrafts: [{
+        id: 'draft-1',
+        title: 'A draft to discard',
+        text: 'Draft text',
+        periodStart: 1,
+        periodEnd: 2,
+        sourceMessageIds: [],
+        importantEvents: [],
+        preferenceNotes: [],
+        status: 'draft',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      version: 1,
+    })
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+
+    await notebookStore.discardDiaryDraft('draft-1')
+    expect(vi.mocked(notebookRepo.save)).toHaveBeenLastCalledWith('default::card:default', expect.objectContaining({
+      diaryDrafts: [expect.objectContaining({ id: 'draft-1', status: 'discarded' })],
+    }))
+
+    await notebookStore.removeDiaryEntry('diary-1')
+    expect(vi.mocked(notebookRepo.save)).toHaveBeenLastCalledWith('default::card:default', expect.objectContaining({
+      entries: [],
+    }))
+    notebookStore.cleanup()
+  })
+
+  it('rejects a failed confirmation and restores the draft instead of claiming success', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue(null)
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+    const draft = notebookStore.createDiaryDraft({
+      title: 'A draft that must remain reviewable',
+      text: 'Storage should confirm this before the draft leaves the review list.',
+      periodStart: 1,
+      periodEnd: 2,
+      sourceMessageIds: [],
+      importantEvents: [],
+      preferenceNotes: [],
+    })
+    repoMock.save.mockRejectedValueOnce(new Error('IndexedDB unavailable'))
+
+    await expect(notebookStore.confirmDiaryDraft(draft.id)).rejects.toThrow('IndexedDB unavailable')
+
+    expect(notebookStore.diaryDrafts).toEqual([expect.objectContaining({ id: draft.id, status: 'draft' })])
+    expect(notebookStore.partitionDiary).toEqual([])
+    expect(notebookStore.lastSaveResult).toMatchObject({ succeeded: false })
+    notebookStore.cleanup()
+  })
+
+  it('restores a draft or diary entry when its explicit discard or deletion cannot be saved', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue({
+      entries: [{ id: 'diary-1', kind: 'diary', text: 'Still saved', createdAt: 1 }],
+      tasks: [],
+      diaryDrafts: [{
+        id: 'draft-1',
+        title: 'Still a draft',
+        text: 'This draft must stay visible after a failed discard.',
+        periodStart: 1,
+        periodEnd: 2,
+        sourceMessageIds: [],
+        importantEvents: [],
+        preferenceNotes: [],
+        status: 'draft',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      version: 1,
+    })
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+
+    repoMock.save.mockRejectedValueOnce(new Error('discard write failed'))
+    await expect(notebookStore.discardDiaryDraft('draft-1')).rejects.toThrow('discard write failed')
+    expect(notebookStore.diaryDrafts[0]).toMatchObject({ id: 'draft-1', status: 'draft' })
+
+    repoMock.save.mockRejectedValueOnce(new Error('delete write failed'))
+    await expect(notebookStore.removeDiaryEntry('diary-1')).rejects.toThrow('delete write failed')
+    expect(notebookStore.partitionDiary).toEqual([expect.objectContaining({ id: 'diary-1' })])
+    notebookStore.cleanup()
+  })
+
+  it('does not treat a failed load as an empty scope that may be saved', async () => {
+    vi.mocked(notebookRepo.load).mockRejectedValue(new Error('IndexedDB read failed'))
+    const notebookStore = useCharacterNotebookStore()
+    await flushPromises(2)
+
+    await expect(notebookStore.loadFromStorage()).rejects.toThrow('IndexedDB read failed')
+    expect(notebookStore.isLoaded).toBe(false)
+    expect(notebookStore.loadedScopeId).toBeNull()
+    notebookStore.addNote('must not overwrite unread notebook')
+    await flushPromises(2)
+    expect(notebookRepo.save).not.toHaveBeenCalled()
+    notebookStore.cleanup()
+  })
+
+  it('merges stale snapshots without rolling back a confirmed diary or reviving a deleted entry', async () => {
+    const draft = {
+      id: 'draft-1',
+      title: 'Confirmed draft',
+      text: 'A persistent diary entry.',
+      periodStart: 1,
+      periodEnd: 2,
+      sourceMessageIds: [],
+      importantEvents: [],
+      preferenceNotes: [],
+      status: 'confirmed' as const,
+      createdAt: 1,
+      updatedAt: 3,
+    }
+    const entry = {
+      id: 'diary:draft-1',
+      kind: 'diary' as const,
+      text: draft.text,
+      createdAt: 3,
+    }
+    const staleDraft = { ...draft, status: 'draft' as const, updatedAt: 2 }
+    const { mergeNotebookData } = await vi.importActual<typeof import('../../database/repos/notebook.repo')>('../../database/repos/notebook.repo')
+    const confirmed = mergeNotebookData({
+      entries: [entry],
+      tasks: [],
+      diaryDrafts: [draft],
+      version: 5,
+      revision: 5,
+    }, {
+      entries: [],
+      tasks: [],
+      diaryDrafts: [staleDraft],
+      version: 2,
+      revision: 2,
+    })
+
+    expect(confirmed.diaryDrafts).toEqual([expect.objectContaining({ status: 'confirmed' })])
+    expect(confirmed.entries).toEqual([entry])
+
+    const deleted = mergeNotebookData({
+      ...confirmed,
+      deletedDiaryEntryIds: [entry.id],
+    }, {
+      entries: [entry],
+      tasks: [],
+      diaryDrafts: [staleDraft],
+      version: 2,
+      revision: 2,
+    })
+    expect(deleted.entries).toEqual([])
+    expect(deleted.deletedDiaryEntryIds).toEqual([entry.id])
   })
 })

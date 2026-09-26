@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8')
+const live2dSource = readFileSync(new URL('./live2d.vue', import.meta.url), 'utf8')
 
 describe('model settings preview lifecycle', () => {
   it('pauses the loaded Live2D preview instead of rebuilding it after a chooser closes', () => {
@@ -22,10 +23,18 @@ describe('model settings preview lifecycle', () => {
 
   it('keeps full preview quality while isolating stage-only behavior', () => {
     expect(source).toContain('runtime-mode="preview"')
+    expect(source).toContain(':preview-action="previewLive2DAction"')
     expect(source).toContain(':live2d-max-fps="live2dMaxFps"')
     expect(source).toContain(':live2d-shadow-enabled="live2dShadowEnabled"')
     expect(source).not.toContain(':resolution="1"')
     expect(source).not.toContain('LIVE2D_SETTINGS_PREVIEW_MAX_FPS')
+  })
+
+  it('routes composite action previews through the local preview renderer', () => {
+    expect(source).toContain(':preview-action="previewLive2DAction"')
+    expect(live2dSource).toContain('previewAction?:')
+    expect(live2dSource).toContain('if (props.previewAction)')
+    expect(live2dSource).toContain('await props.previewAction({')
   })
 
   it('freezes the loaded high-quality preview after idle and resumes it on demand', () => {

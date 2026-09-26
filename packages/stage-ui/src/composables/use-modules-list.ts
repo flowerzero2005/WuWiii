@@ -13,6 +13,7 @@ import { useFactorioStore } from '../stores/modules/gaming-factorio'
 import { useHearingStore } from '../stores/modules/hearing'
 import { useSpeechStore } from '../stores/modules/speech'
 import { useTwitterStore } from '../stores/modules/twitter'
+import { useVisionStore } from '../stores/modules/vision'
 import { useWebSearchStore } from '../stores/modules/web-search'
 
 export interface Module {
@@ -37,6 +38,7 @@ export function useModulesList() {
   const discordStore = useDiscordStore()
   const twitterStore = useTwitterStore()
   const factorioStore = useFactorioStore()
+  const visionStore = useVisionStore()
   const webSearchStore = useWebSearchStore()
   const mcpRuntimeStatusStore = useMcpRuntimeStatusStore()
   const beatSyncState = ref<BeatSyncDetectorState>()
@@ -70,6 +72,24 @@ export function useModulesList() {
       category: 'essential',
     },
     {
+      id: 'vision',
+      name: t('settings.pages.modules.vision.title'),
+      description: t('settings.pages.modules.vision.description'),
+      icon: 'i-solar:gallery-bold-duotone',
+      to: '/settings/modules/vision',
+      configured: visionStore.enabled && visionStore.customProviderConfigured,
+      category: 'essential',
+    },
+    {
+      id: 'web-search',
+      name: t('settings.pages.modules.web-search.title'),
+      description: t('settings.pages.modules.web-search.description'),
+      icon: 'i-solar:global-bold-duotone',
+      to: '/settings/modules/web-search',
+      configured: webSearchStore.configured,
+      category: 'essential',
+    },
+    {
       id: 'memory-short-term',
       name: t('settings.pages.modules.memory-short-term.title'),
       description: t('settings.pages.modules.memory-short-term.description'),
@@ -85,15 +105,6 @@ export function useModulesList() {
       icon: 'i-solar:book-bookmark-bold-duotone',
       to: '/settings/modules/memory-long-term',
       configured: true,
-      category: 'essential',
-    },
-    {
-      id: 'web-search',
-      name: t('settings.pages.modules.web-search.title'),
-      description: t('settings.pages.modules.web-search.description'),
-      icon: 'i-solar:global-bold-duotone',
-      to: '/settings/modules/web-search',
-      configured: webSearchStore.configured,
       category: 'essential',
     },
     {

@@ -307,4 +307,14 @@ describe('useLlmmarkerParser', async () => {
 
     expect(endText).toBe(fullText)
   })
+
+  it('does not return an unfinished ACT envelope in the final text', async () => {
+    let endText = ''
+    const parser = useLlmmarkerParser({ onEnd: value => { endText = value } })
+
+    await parser.consume('Hello <|ACT {"actionCardId":"small-wave"')
+    await parser.end()
+
+    expect(endText).toBe('Hello ')
+  })
 })

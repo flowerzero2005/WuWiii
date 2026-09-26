@@ -11,7 +11,7 @@ vi.mock('posthog-js', () => ({ default: posthog }))
 describe('desktop analytics consent', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('does not initialize analytics without a configured project key', async () => {
+  it('does not initialize before consent and supports later opt-out and opt-in', async () => {
     const values = new Map<string, string>()
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
@@ -28,13 +28,20 @@ describe('desktop analytics consent', () => {
 
     setAnalyticsConsent(true, storage)
     expect(values.get(ANALYTICS_CONSENT_STORAGE_KEY)).toBe('true')
-    expect(posthog.init).not.toHaveBeenCalled()
+    expect(posthog.init).toHaveBeenCalledOnce()
+    expect(posthog.init.mock.calls[0]?.[1]).toMatchObject({
+      autocapture: false,
+      capture_pageleave: false,
+      capture_pageview: false,
+      disable_session_recording: true,
+      persistence: 'localStorage',
+    })
 
     setAnalyticsConsent(false, storage)
-    expect(posthog.opt_out_capturing).not.toHaveBeenCalled()
+    expect(posthog.opt_out_capturing).toHaveBeenCalledOnce()
 
     setAnalyticsConsent(true, storage)
-    expect(posthog.init).not.toHaveBeenCalled()
-    expect(posthog.opt_in_capturing).not.toHaveBeenCalled()
+    expect(posthog.init).toHaveBeenCalledOnce()
+    expect(posthog.opt_in_capturing).toHaveBeenCalledOnce()
   })
 })

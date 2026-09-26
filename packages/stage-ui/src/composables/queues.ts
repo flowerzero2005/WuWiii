@@ -21,7 +21,7 @@ function normalizeIntensity(value: unknown): number {
 }
 
 export function parseActPerformance(content: string) {
-  const match = /<\|ACT\s*(?::\s*)?(\{[\s\S]*\})\|>/i.exec(content)
+  const match = /<\|\s*ACT\s*(?::|=)?\s*(\{[\s\S]*?\})\s*\|>/i.exec(content)
   if (!match)
     return { ok: false, actionCardId: null as string | null, emotion: null as EmotionPayload | null }
 
@@ -49,8 +49,10 @@ export function parseActPerformance(content: string) {
     if (actionCardId)
       return { ok: true, actionCardId, emotion: null as EmotionPayload | null }
   }
-  catch (e) {
-    console.warn(`[parseActPerformance] Failed to parse ACT payload JSON: "${payloadText}"`, e)
+  catch {
+    // Do not log the private protocol body. Callers can still count this
+    // result as an invalid ACT marker for diagnostics.
+    console.warn('[parseActPerformance] Failed to parse ACT payload JSON')
   }
 
   return { ok: false, actionCardId: null as string | null, emotion: null as EmotionPayload | null }

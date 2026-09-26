@@ -17,59 +17,6 @@ import {
   MessageHeartbeatKind,
 } from '@proj-airi/server-shared/types'
 
-/**
- * Public HTTP contract used by client applications that call the optional
- * hosted AIRI API. It intentionally contains no implementation-only server
- * types, so desktop and web clients can compile without the server source.
- */
-export interface ServerApiResponse {
-  readonly ok: boolean
-  readonly status: number
-  json(): Promise<any>
-  text(): Promise<string>
-}
-
-export interface ServerApiRequest {
-  json?: unknown
-  param?: Record<string, string>
-  query?: Record<string, string>
-}
-
-export type ServerApiRequestMethod = (request?: ServerApiRequest) => Promise<ServerApiResponse>
-
-export interface ServerApiClient {
-  api: {
-    announcements: {
-      $get: ServerApiRequestMethod
-    }
-    characters: {
-      $get: ServerApiRequestMethod
-      $post: ServerApiRequestMethod
-      ':id': {
-        $delete: ServerApiRequestMethod
-        $get: ServerApiRequestMethod
-        $patch: ServerApiRequestMethod
-        bookmark: { $post: ServerApiRequestMethod }
-        like: { $post: ServerApiRequestMethod }
-      }
-    }
-    chats: {
-      sync: { $post: ServerApiRequestMethod }
-    }
-    providers: {
-      $get: ServerApiRequestMethod
-      $post: ServerApiRequestMethod
-      ':id': {
-        $delete: ServerApiRequestMethod
-        $patch: ServerApiRequestMethod
-      }
-    }
-    releases: {
-      $get: ServerApiRequestMethod
-    }
-  }
-}
-
 export interface ClientOptions<C = undefined> {
   url?: string
   name: string

@@ -426,6 +426,72 @@ microphone: 麦克风
 models: 模型
 pages:
   group-scripts:
+    chapters:
+      job-running: 剧情请求正在运行。
+      job-expired: 上一次请求已过期，可以主动点击生成新草稿；新请求会另行计费。
+      unknown-role: 未知角色
+      evidence-removed: 这条证据消息已删除。
+      evidence-confidence: 置信度 {confidence}
+      actions:
+        initialize: 初始化
+        advance: 推进
+        rollback: 回退
+        restart: 重开
+        extend: 追加章节
+      timeline: 章节时间线
+      timeline-description: 按剧情顺序编写固定章节；每项条件描述需要用真实对话证据验证的语义结果。
+      add-act: 添加章节
+      empty: 还没有章节。添加后可启用剧情推进。
+      act-title: 第 {number} 幕
+      title: 章节标题
+      goal: 本幕目标
+      narration: 开场旁白
+      hidden: 解锁前隐藏
+      hidden-description: 角色当前上下文不会包含后续未解锁章节。
+      conditions: 完成条件
+      add-condition: 添加条件
+      outcome: 需要验证的结果
+      confidence: 最低置信度
+      evidence-count: 最少证据消息数
+      progress: 剧情进度
+      complete: 剧本已完成
+      current: 第 {number} 幕 · {title}
+      threshold: 置信度 ≥ {confidence}；至少 {count} 条证据
+      price: '{model}：每次请求最低 {minimum} 积分；每 {unit} tokens 收取 {points} 积分 × {multiplier}。'
+      price-unavailable: 当前官方模型价格不可用，请登录并恢复连接后再启用。
+      own-provider: 使用当前选择的对话提供商和模型，每次评估或生成可能产生提供商费用。
+      billing-description: 自动评估会在每个完成的群聊回合后增加一次模型请求。续幕草稿另加一次请求；条件未满足或丢弃草稿时，仍按实际用量计费。
+      consent: 查看并接受当前费用
+      confirm-consent: 接受所显示的计费条款
+      automatic: 自动评估本幕完成条件
+      automatic-description: 默认关闭。等待群聊回复显示完成后按语义评估，每回合最多推进一幕。
+      show-narration: 显示新解锁章节的开场旁白
+      show-narration-description: 每个章节修订只插入一次本地旁白消息，不调用旁白生成或语音服务。
+      sequel-enabled: 允许生成续幕草稿
+      sequel-description: 默认关闭。仅在你主动点击后生成，预览草稿并决定采用或丢弃。
+      maximum: 每次最多生成章节数
+      save-settings: 保存推进设置
+      restart: 重开当前幕
+      rollback: 回退上一幕
+      confirm-progress: 确认修改进度
+      history: 进度历史 · 修订 {revision}
+      history-description: 重开、回退与恢复都会追加新修订，保留之前的对话消息与证据。
+      revision: 修订 {revision}
+      restore: 恢复
+      sequel: 续幕草稿
+      generation-basis: 以已保存的剧本、对话及修订 {revision} 为依据，最多生成 {count} 幕。
+      generate: 生成续幕草稿
+      conversation-required: 请先在这个房间发送一轮对话。
+      draft-roles: 角色槽位
+      draft-after: 时间线与前置章节
+      accept-draft: 追加这些章节
+      discard-draft: 丢弃草稿
+      save-failed: 剧情已变更或保存失败，请重新加载房间后再试。
+      generation-failed: 续幕草稿生成或校验失败，请检查模型与房间设置。
+      results:
+        advanced: 条件满足，已推进一幕
+        unmet: 条件尚未满足
+        failed: 本回合评估失败，不重复请求
     title: 群聊剧本与角色分配
     description: 编辑可复用的故事剧本，再把角色槽位分配给某个群聊里的成员。
     eyebrow: 群聊排练桌
@@ -654,6 +720,7 @@ pages:
         asr: 实时语音识别：首个开始计费的 60 秒 {first} 点，之后每个开始计费的 60 秒 {additional} 点
         embedding: 文本嵌入
         web-search: 联网搜索
+        vision: 视觉理解
         request: '{name}：{points} 点 / 次'
         voice-surcharge-note: 声线可另设每次附加点数，选择声线时会显示实际价格。
         no-official-charge: 本地能力和使用你自己 API Key 的服务不会扣除 Wuwiii 官方点数。
@@ -921,6 +988,7 @@ pages:
         refunded-auxiliary: 后台“{purpose}”请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点，不代表主回复失败。
         refunded-unknown: 此记录未包含可识别的请求用途；临时暂扣的 {points} 点已解除，本次净消费 0 点。
         source-surfaces:
+          automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
           quick-chat: 快捷聊天
@@ -937,8 +1005,11 @@ pages:
           recommended-replies: 推荐回复
           group-narration: 群聊旁白生成
           group-narration-speech: 群聊旁白语音
+          group-script-evaluation: 剧本进度评估
+          group-script-sequel: 后幕草案生成
           speech: 语音处理
           web-search: 联网搜索
+          vision: 视觉理解
           unknown: 用途未知
         features:
           daily-check-in: 每日签到
@@ -981,6 +1052,7 @@ pages:
           speech: 语音
           service: 服务处理
         surfaces:
+          automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
           quick-chat: 快捷聊天
@@ -1059,6 +1131,7 @@ pages:
           reference: 参考编号
           request-outcome: 请求结果
         surfaces:
+          automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
           quick-chat: 快捷聊天
@@ -1075,8 +1148,11 @@ pages:
           recommended-replies: 推荐回复
           group-narration: 群聊旁白生成
           group-narration-speech: 群聊旁白语音
+          group-script-evaluation: 剧本进度评估
+          group-script-sequel: 后幕草案生成
           speech: 语音处理
           web-search: 联网搜索
+          vision: 视觉理解
           unknown: 其他服务
         failures:
           not-needed: 本处无需旁白，本次未收费。
@@ -1384,6 +1460,9 @@ pages:
       collapse: 收起
       delete: 删除
       delete-confirm: 确认删除？
+      confirm-failed: 日记未能确认保存，仍保留为草稿；请在存储恢复后重试。
+      discard-failed: 日记未能保存为已丢弃，仍保留为草稿；请在存储恢复后重试。
+      delete-failed: 日记未能删除保存，日记仍保留；请在存储恢复后重试。
     workspace:
       title: 记忆账本
       description: 查看并管理当前人格私有空间中的 {count} 条长期记忆。
@@ -1779,6 +1858,7 @@ pages:
       rotation-y: Y 轴旋转
       tips: 使用下方参数调整 VRM 的位置、光照和环境；窄窗口下可滚动查看全部设置。
   modules:
+    additional-capabilities: 更多能力
     beat_sync:
       description: 随音源节拍律动
       title: 同步音律
@@ -2233,7 +2313,7 @@ pages:
             search_voices_results: 找到 {count} / {total} 个声线
             unsupported_voice_warning_title: 没有支持的声线
             unsupported_voice_warning_content: >-
-              我们正在尽快支持该模型的所有音色；如需帮助，请访问 https://www.wuwiii.cn/help/refund
+              我们正在尽快支持该模型的所有音色；如需帮助，请访问 http://127.0.0.1:5173/help/refund
             show_less: 显示更少
             show_more: 显示更多
             title: 选择语音合成服务来源
@@ -2246,14 +2326,67 @@ pages:
       title: 发声
     title: 机体模块
     web-search:
+      budget:
+        requests: 每回合最多实际搜索请求（包含备用调用）
+        points: 每回合官方搜索点数上限
+        description: '0 使用当前单次报价乘以请求上限。预算包含失败请求和备用服务商；默认一次时不会切换备用。缓存命中不请求、不扣费。自配服务不会切换到官方扣费。'
+        maximum: '每回合最多 {requests} 次实际搜索，官方搜索最多 {points} 点；备用失败退款后才可继续。'
       title: 智能联网
       description: 配置联网搜索服务与人格内容过滤。
       pricing:
         loading: 正在读取官方云当前价格…
         official: '官方云：每次搜索 {points} 点。本地与自带密钥服务不消耗官方点数。'
     vision:
-      description: 视觉
+      description: 配置图片理解服务与聊天上传。
       title: 视觉
+      heading: 图片理解
+      intro: 在聊天输入框中上传或粘贴图片。图片会先由这里选择的视觉服务理解，再把结果作为私有上下文交给当前聊天模型组织回复。
+      pricing:
+        accept: 接受当前图片理解费用
+        accepted: 已接受当前图片理解费用。
+        loading: 正在读取官方云当前价格…
+        official: '官方视觉：每次图片理解 {points} 点。即使聊天使用本地模型，官方视觉仍会独立计费；自配或本地视觉服务不消耗官方点数。'
+      enabled:
+        label: 开启图片理解
+        description: 关闭后聊天保持纯文本，不会上传或分析图片。
+      provider:
+        label: 视觉服务来源
+        description: 官方云默认使用阿里云视觉模型；自带密钥由你自己的服务商计费。
+      provider-options:
+        official-cloud: 呜异屋官方云（阿里云视觉）
+        aliyun: 阿里云百炼（自带密钥）
+        openai-compatible: OpenAI 兼容视觉接口
+        gemini: Google Gemini 原生接口
+      fields:
+        aliyun-api-key: 阿里云 API Key
+        gemini-api-key: Gemini API Key
+        api-key-optional: API Key（可选）
+        base-url: 接口地址
+        local-key-placeholder: 本地服务可以留空
+        model: 视觉模型
+      configuration-missing: 请补全当前视觉服务的地址、模型和所需密钥。
+      last-error: '最近一次视觉请求失败：{error}'
+      screenshot:
+        desktop-only: 屏幕截图仅在桌面端可用。
+        select-source: 选择或刷新屏幕来源
+        source: 自动截图来源
+        no-source: 尚未选择
+        source-required: 请先选择屏幕或窗口并确认预览。来源失效后会停止，需重新选择。
+        price: '自动截图每次单独扣除 {points} 点，间隔 {seconds} 秒；不包含聊天费用。'
+        heading: 自动截图
+        intro: 默认关闭。开启后才会按设置间隔请求桌面截图；不会请求或使用摄像头。
+        enabled:
+          label: 允许自动截图
+          description: 关闭后立即停止并清除屏幕摘要。截图仅在内存中用于理解，不保存图片；短期文字摘要供聊天参考。
+        interval: 截图间隔（秒）
+      test:
+        heading: 连接测试
+        intro: 测试会使用当前配置发送一张图片，并按所选服务的规则计费。
+        image-required: 请先选择一张图片。
+        prompt: 请简要说明这张图片里有什么。
+        disabled: 视觉模块当前未启用。
+        analyzing: 识别中…
+        action: 测试图片理解
     x:
       description: X / Twitter 的浏览和使用
       title: X / Twitter

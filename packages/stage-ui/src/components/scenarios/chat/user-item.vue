@@ -37,6 +37,17 @@ const content = computed(() => {
   return ''
 })
 
+const imageUrls = computed(() => {
+  const raw = props.message.content
+  if (!Array.isArray(raw))
+    return []
+  return raw.flatMap((part) => {
+    if (part.type !== 'image_url' || typeof part.image_url?.url !== 'string')
+      return []
+    return [part.image_url.url]
+  })
+})
+
 const containerClasses = computed(() => [
   'flex items-start gap-2',
   props.variant === 'mobile' ? 'ml-0 flex-row' : props.variant === 'compact' ? 'ml-7 flex-row-reverse' : 'ml-12 flex-row-reverse',
@@ -73,9 +84,19 @@ const presentation = computed(() => resolveChatBubblePresentation(
           <span class="inline text-sm font-normal opacity-65 <sm:hidden">{{ label }}</span>
         </div>
         <MarkdownRenderer
+          v-if="content"
           :content="content as string"
           class="break-words"
         />
+        <div v-if="imageUrls.length" class="mt-2 flex flex-wrap gap-2">
+          <img
+            v-for="(imageUrl, index) in imageUrls"
+            :key="`${index}-${imageUrl.slice(0, 48)}`"
+            :src="imageUrl"
+            alt="User uploaded image"
+            class="max-h-64 max-w-full rounded-lg object-contain"
+          >
+        </div>
       </div>
     </div>
   </div>

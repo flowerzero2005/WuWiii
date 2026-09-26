@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Live2DActionBinding } from '@proj-airi/stage-ui-live2d'
+
 import type { DisplayModel } from '../../../../stores/display-models'
 
 import { Live2DScene, useLive2d } from '@proj-airi/stage-ui-live2d'
@@ -185,6 +187,11 @@ async function previewLive2DMotion(motionName: string, index?: number) {
   await live2dSceneRef.value?.previewMotion(motionName, index)
 }
 
+async function previewLive2DAction(action: Pick<Live2DActionBinding, 'motion' | 'expression' | 'durationMs'>) {
+  resumeLive2DPreview(Math.max(LIVE2D_PREVIEW_MOTION_ACTIVE_MS, action.durationMs ?? 0))
+  return await live2dSceneRef.value?.previewAction(action)
+}
+
 function resetPreviewLive2DExpression() {
   resumeLive2DPreview()
   live2dSceneRef.value?.resetExpression()
@@ -364,6 +371,7 @@ defineExpose({
       :extracting-colors="props.extractingColors"
       :preview-expression="previewLive2DExpression"
       :preview-motion="previewLive2DMotion"
+      :preview-action="previewLive2DAction"
       :reset-preview-expression="resetPreviewLive2DExpression"
       :reset-preview-model="resetPreviewLive2DModel"
       :list-preview-motions="listLive2DPreviewMotions"

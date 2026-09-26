@@ -136,6 +136,7 @@ export const useProviderCatalogStore = defineStore('provider-catalog', () => {
       remote: async () => {
         const res = await client.api.providers[':id'].$patch({
           param: { id: providerId },
+          // @ts-expect-error hono client typing misses json option for this route
           json: {
             config: newConfig,
             validated: options.validated,

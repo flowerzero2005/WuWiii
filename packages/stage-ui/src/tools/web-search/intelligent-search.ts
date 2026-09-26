@@ -1,4 +1,5 @@
 import type { CharacterFilterResult, FilteredResult } from './character-filter'
+import type { SearchToolExecuteOptions } from './execution-budget'
 import type { IntentAnalysis } from './intent-analyzer'
 import type { QueryStrategy } from './query-builder'
 import type { DigestedInformation } from './response-digester'
@@ -7,11 +8,15 @@ import type { SearchResult, WebSearchExecuteResult } from './web-search'
 import { tool } from '@xsai/tool'
 import { z } from 'zod'
 
+import { createLinkedSearchAbortSignal } from './abort-signal'
+import { createSearchExecutionBudget } from './execution-budget'
+
 const MAX_SEARCH_ROUNDS = 2
 const MIN_RESULTS_BEFORE_STOP = 5
+const WHITESPACE_RE = /\s+/g
 
-function previewForWebSearchLog(value: string) {
-  return value.replace(/\s+/g, ' ').trim().slice(0, 180)
+function getWebSearchLogMetadata(value: string) {
+  return { queryLength: value.replace(WHITESPACE_RE, ' ').trim().length }
 }
 
 function buildSearchQueries(queryResult: QueryStrategy) {
@@ -19,7 +24,7 @@ function buildSearchQueries(queryResult: QueryStrategy) {
     queryResult.keywords.join(' '),
     ...(queryResult.fallbackQueries ?? []),
   ]
-    .map(query => query.replace(/\s+/g, ' ').trim())
+    .map(query => query.replace(WHITESPACE_RE, ' ').trim())
     .filter(Boolean)
 
   return [...new Set(queries)].slice(0, MAX_SEARCH_ROUNDS)
@@ -60,24 +65,27 @@ function shouldContinueSearchRounds(queryResult: QueryStrategy, results: SearchR
 
 async function performSearchRounds(
   queryResult: QueryStrategy,
-  executeSearch: (query: string) => Promise<WebSearchExecuteResult>,
+  executeSearch: (query: string, signal: AbortSignal) => Promise<WebSearchExecuteResult>,
+  signal: AbortSignal,
 ) {
   const queries = buildSearchQueries(queryResult)
+  const queriesTried: string[] = []
   let lastError: string | undefined
   let mergedResults: SearchResult[] = []
 
   for (let index = 0; index < queries.length; index += 1) {
     const query = queries[index]
-    const searchResult = await executeSearch(query)
+    queriesTried.push(query)
+    const searchResult = await executeSearch(query, signal)
     if (!searchResult.success) {
       lastError = searchResult.error || 'No search results found'
       console.warn('[WebSearchTool] Tavily search returned failure', {
         error: searchResult.error,
-        query,
+        queryLength: query.length,
         round: index + 1,
       })
 
-      if (!shouldContinueSearchRounds(queryResult, mergedResults, index, queries.length))
+      if (!searchResult.retryable || !shouldContinueSearchRounds(queryResult, mergedResults, index, queries.length))
         break
 
       continue
@@ -92,7 +100,7 @@ async function performSearchRounds(
     success: mergedResults.length > 0,
     error: mergedResults.length > 0 ? undefined : lastError ?? 'No search results found',
     query: queries[0] ?? '',
-    queriesTried: queries,
+    queriesTried,
     results: mergedResults,
   }
 }
@@ -151,13 +159,10 @@ export const intelligentWebSearch = tool({
     })).optional().describe('Recent conversation history, only for resolving references or omitted context'),
   }),
 
-  execute: async ({ userMessage, conversationContext }) => {
+  execute: async ({ userMessage, conversationContext }, context) => {
+    const execution = (context as SearchToolExecuteOptions).searchExecution ?? { budget: createSearchExecutionBudget() }
+    const searchAbort = createLinkedSearchAbortSignal(context.abortSignal, 30_000, 'intelligent-web-search-timeout', 'intelligent-web-search-cancelled')
     try {
-      // Add timeout protection
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Search timeout after 30 seconds')), 30000)
-      })
-
       const searchPromise = (async () => {
         // Import all necessary modules
         const { useWebSearchStore } = await import('../../stores/modules/web-search')
@@ -172,7 +177,7 @@ export const intelligentWebSearch = tool({
         // Check if web search is enabled
         if (!webSearchStore.enabled) {
           console.warn('[WebSearchTool] skipped because web search is disabled', {
-            userMessagePreview: previewForWebSearchLog(userMessage),
+            ...getWebSearchLogMetadata(userMessage),
           })
 
           return {
@@ -198,12 +203,15 @@ export const intelligentWebSearch = tool({
         // Step 3: Perform web search
         const searchResult = await performSearchRounds(
           queryResult,
-          query => performWebSearch({
+          (query, signal) => performWebSearch({
             query,
             maxResults: 10,
             timeRange: queryResult.filters.timeRange,
             searchDepth: queryResult.depth === 'deep' ? 'advanced' : 'basic',
+            signal,
+            execution,
           }),
+          searchAbort.signal,
         )
 
         if (!searchResult.success) {
@@ -229,7 +237,7 @@ export const intelligentWebSearch = tool({
 
         if (searchResult.results.length === 0) {
           console.warn('[WebSearchTool] Tavily search returned no results', {
-            query: searchResult.query,
+            queryLength: searchResult.query.length,
           })
 
           return {
@@ -290,12 +298,12 @@ export const intelligentWebSearch = tool({
         }
       })()
 
-      return await Promise.race([searchPromise, timeoutPromise]) as any
+      return await searchPromise
     }
     catch (error) {
       console.warn('[WebSearchTool] intelligent_web_search failed', {
         error: error instanceof Error ? error.message : String(error),
-        userMessagePreview: previewForWebSearchLog(userMessage),
+        ...getWebSearchLogMetadata(userMessage),
       })
 
       return {
@@ -316,6 +324,9 @@ export const intelligentWebSearch = tool({
           moreDetailsAvailable: false,
         },
       }
+    }
+    finally {
+      searchAbort.dispose()
     }
   },
 })

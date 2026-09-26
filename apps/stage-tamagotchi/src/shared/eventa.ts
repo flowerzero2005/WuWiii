@@ -1,5 +1,7 @@
 import type { Locale } from '@intlify/core'
 
+import type { DesktopRendererCapabilities } from './desktop-capabilities'
+
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
 export const electronStartTrackMousePosition = defineInvokeEventa('eventa:invoke:electron:start-tracking-mouse-position')
@@ -7,6 +9,7 @@ export const electronMainRendererRuntimeReady = defineInvokeEventa('eventa:invok
 export const electronMainRendererBootstrapVisible = defineInvokeEventa('eventa:invoke:electron:windows:main:renderer-bootstrap-visible')
 export const electronOpenDesktopDiagnostics = defineInvokeEventa('eventa:invoke:electron:desktop-diagnostics:open')
 export const electronExportDesktopDiagnostics = defineInvokeEventa<boolean>('eventa:invoke:electron:desktop-diagnostics:export')
+export const electronReportDesktopCapabilities = defineInvokeEventa<boolean, DesktopRendererCapabilities>('eventa:invoke:electron:desktop-diagnostics:capabilities')
 export const electronButlerRendererRuntimeReady = defineInvokeEventa('eventa:invoke:electron:windows:butler:renderer-runtime-ready')
 export interface ElectronRendererStateSyncPayload {
   requestedAt: number
@@ -1478,6 +1481,7 @@ export interface ElectronCommandExecutionGitDiffResult {
 
 export const electronCommandExecutionTypecheckTargets = [
   'stage-tamagotchi',
+  'stage-web',
   'stage-ui',
   'stage-pages',
   'stage-shared',
@@ -1535,6 +1539,7 @@ export interface ElectronCommandExecutionTypecheckResult {
 
 export const electronCommandExecutionLintTargets = [
   'stage-tamagotchi',
+  'stage-web',
 ] as const
 
 export type ElectronCommandExecutionLintTarget = typeof electronCommandExecutionLintTargets[number]
@@ -1941,5 +1946,6 @@ export const widgetsUpdateEvent = defineEventa<{ id: string, componentProps?: Re
 export const i18nSetLocale = defineInvokeEventa<void, Locale>('eventa:invoke:electron:i18n:set-locale')
 export const i18nGetLocale = defineInvokeEventa<Locale>('eventa:invoke:electron:i18n:get-locale')
 
+export * from './detached-composer-events'
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

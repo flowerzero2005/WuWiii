@@ -1,4 +1,4 @@
-import type { PublicUsageHistoryEntry, PublicUsageHistoryPage } from '@proj-airi/server-shared/types'
+import type { CommerceRequestPurpose, CommerceRequestSurface, PublicUsageHistoryEntry, PublicUsageHistoryPage } from '@proj-airi/server-shared/types'
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -44,10 +44,10 @@ export interface CommerceLedgerEntry {
   sourceId: string | null
   idempotencyKey: string | null
   note: string | null
-  sourceSurface?: 'voice-call' | 'group-chat' | 'quick-chat' | 'chat' | 'proactive' | 'unknown'
+  sourceSurface?: CommerceRequestSurface
   characterName?: string
   roomName?: string
-  usagePurpose?: 'main-reply' | 'tool-routing' | 'tool-processing' | 'response-enhancement' | 'inner-voice-note' | 'memory' | 'recommended-replies' | 'group-narration' | 'group-narration-speech' | 'speech' | 'web-search' | 'unknown'
+  usagePurpose?: CommerceRequestPurpose
   createdAt: string
 }
 

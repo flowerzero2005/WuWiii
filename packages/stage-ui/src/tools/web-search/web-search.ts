@@ -1,11 +1,15 @@
 import type { WebSearchProvider } from '../../libs/providers/types'
 import type { WebSearchDiagnosticEntry, WebSearchDiagnosticStatus, WebSearchFailureKind } from '../../stores/modules/web-search'
+import type { SearchExecutionContext, SearchToolExecuteOptions } from './execution-budget'
 
 import { tool } from '@xsai/tool'
 import { z } from 'zod'
 
 import { WebSearchProviderError } from '../../libs/providers/types'
-import { sanitizeWebSearchProviderErrorMessage } from '../../libs/providers/web-search-utils'
+import { compactWebSearchResults, sanitizeWebSearchProviderErrorMessage } from '../../libs/providers/web-search-utils'
+import { createChatTraceHeaders } from '../../stores/chat/chat-diagnostics'
+import { createLinkedSearchAbortSignal } from './abort-signal'
+import { createSearchExecutionBudget } from './execution-budget'
 
 export interface SearchResult {
   title: string
@@ -17,10 +21,12 @@ export interface SearchResult {
 }
 
 export interface WebSearchParams {
+  execution?: SearchExecutionContext
   query: string
   maxResults?: number
   timeRange?: string
   searchDepth?: 'basic' | 'advanced'
+  signal?: AbortSignal
 }
 
 export interface WebSearchSuccessResult {
@@ -35,6 +41,7 @@ export interface WebSearchFailureResult {
   error: string
   failureKind: WebSearchFailureKind
   httpStatus?: number
+  retryable: boolean
   query?: string
   results: SearchResult[]
 }
@@ -50,11 +57,17 @@ interface WebSearchFailureClassification {
   failureKind: WebSearchFailureKind
   message: string
   httpStatus?: number
+  retryable: boolean
 }
 
 const WEB_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000
 const WEB_SEARCH_CACHE_MAX_ENTRIES = 40
+const WEB_SEARCH_TIMEOUT_MS = 30_000
+const NETWORK_FAILURE_RE = /timeout|aborted|network|failed to fetch|fetch failed|econnreset|enotfound|dns|offline/i
+const CANCELLED_FAILURE_RE = /aborted|cancelled/i
+const WHITESPACE_RE = /\s+/g
 const webSearchResultCache = new Map<string, WebSearchCacheEntry>()
+let currentCacheScope: string | undefined
 
 export const webSearch = tool({
   name: 'web_search',
@@ -74,8 +87,8 @@ export const webSearch = tool({
     searchDepth: z.enum(['basic', 'advanced']).optional().default('basic').describe('Search depth: "basic" for quick results, "advanced" for comprehensive search'),
   }),
 
-  execute: async ({ query, maxResults = 5, timeRange, searchDepth = 'basic' }) => {
-    return await performWebSearch({ query, maxResults, timeRange, searchDepth })
+  execute: async ({ query, maxResults = 5, timeRange, searchDepth = 'basic' }, context) => {
+    return await performWebSearch({ query, maxResults, timeRange, searchDepth, signal: context.abortSignal, execution: (context as SearchToolExecuteOptions).searchExecution })
   },
 })
 
@@ -84,8 +97,10 @@ export async function performWebSearch({
   maxResults = 5,
   timeRange,
   searchDepth = 'basic',
+  signal,
+  execution,
 }: WebSearchParams): Promise<WebSearchExecuteResult> {
-  const cacheKey = createWebSearchCacheKey({ query, searchDepth, timeRange })
+  const requestAbort = createLinkedSearchAbortSignal(signal, WEB_SEARCH_TIMEOUT_MS, 'web-search-timeout', 'web-search-cancelled')
 
   try {
     const { useWebSearchStore } = await import('../../stores/modules/web-search')
@@ -93,6 +108,9 @@ export async function performWebSearch({
     const webSearchStore = useWebSearchStore()
     const providersStore = useProvidersStore()
     const providerId = webSearchStore.activeProvider
+    const budget = execution?.budget ?? createSearchExecutionBudget()
+    let officialPoints = 0
+    let officialPriceVersion: string | undefined
 
     if (!providerId) {
       console.warn('[WebSearch] web search provider is not selected')
@@ -140,32 +158,60 @@ export async function performWebSearch({
       return failure
     }
 
-    const cachedResult = getCachedWebSearchResult(cacheKey)
-    if (cachedResult) {
-      recordWebSearchDiagnostic(webSearchStore, {
-        cacheExpiresAt: cachedResult.expiresAt,
-        cacheKey,
-        maxResults,
-        query,
-        resultsCount: cachedResult.result.results.length,
-        searchDepth,
-        status: 'cache-hit',
-        timeRange,
-      })
-
-      return limitSearchSuccessResult(cachedResult.result, maxResults)
+    const configRevision = createWebSearchProviderConfigRevision(providersStore.getProviderConfig(providerId))
+    let assertOfficialCurrent = () => {}
+    const assertCurrent = () => {
+      requestAbort.signal.throwIfAborted()
+      if (webSearchStore.activeProvider !== providerId || createWebSearchProviderConfigRevision(providersStore.getProviderConfig(providerId)) !== configRevision)
+        throw Object.assign(new Error('The search provider configuration changed during the request.'), { failureKind: 'budget' })
+      assertOfficialCurrent()
     }
+    ensureWebSearchCacheScope(providerId, configRevision)
+    const cacheKey = createWebSearchCacheKey({
+      configRevision,
+      maxResults,
+      providerId,
+      query,
+      searchDepth,
+      timeRange,
+    })
+    const diagnosticCacheKey = createWebSearchCacheDiagnosticKey({
+      configRevision,
+      maxResults,
+      providerId,
+      query,
+      searchDepth,
+      timeRange,
+    })
 
+    // Cached official results still need the current price acknowledgement.
+    // A previous request must not silently grant consent in a later session.
     if (providerId === 'official-cloud-web-search') {
       const { useAuthStore } = await import('../../stores/auth')
       const { useOfficialPricingStore } = await import('../../stores/official-pricing')
       const { useOfficialCapabilityConsentStore } = await import('../../stores/settings/official-capability-consent')
       const pricingStore = useOfficialPricingStore()
       const consentStore = useOfficialCapabilityConsentStore()
+      const authStore = useAuthStore()
+      const accountId = authStore.user?.id
       if (!pricingStore.snapshot)
         await pricingStore.refresh()
       const quote = consentStore.getQuote('web-search')
-      if (consentStore.needsConsent(useAuthStore().user?.id, 'web-search', quote)) {
+      if (quote?.display?.billingMode === 'request') {
+        officialPoints = quote.display.pointsPerRequest
+        officialPriceVersion = quote.priceVersion
+      }
+      assertOfficialCurrent = () => {
+        const currentQuote = consentStore.getQuote('web-search')
+        const currentPoints = currentQuote?.display?.billingMode === 'request' ? currentQuote.display.pointsPerRequest : undefined
+        const acceptedPoints = quote?.display?.billingMode === 'request' ? quote.display.pointsPerRequest : undefined
+        if (authStore.user?.id !== accountId || currentQuote?.priceVersion !== quote?.priceVersion
+          || currentPoints !== acceptedPoints
+          || consentStore.needsConsent(accountId, 'web-search', currentQuote)) {
+          throw Object.assign(new Error('The official search account, consent or price changed during the request.'), { failureKind: 'budget' })
+        }
+      }
+      if (consentStore.needsConsent(accountId, 'web-search', quote)) {
         const failure = createFailureResult({
           failureKind: 'unknown',
           message: 'Official web search requires confirmation before use.',
@@ -185,13 +231,57 @@ export async function performWebSearch({
       }
     }
 
+    assertCurrent()
+    const cachedResult = getCachedWebSearchResult(cacheKey)
+    if (cachedResult) {
+      recordWebSearchDiagnostic(webSearchStore, {
+        cacheExpiresAt: cachedResult.expiresAt,
+        cacheKey: diagnosticCacheKey,
+        maxResults,
+        query,
+        resultsCount: cachedResult.result.results.length,
+        searchDepth,
+        status: 'cache-hit',
+        timeRange,
+      })
+
+      return limitSearchSuccessResult(cachedResult.result, maxResults)
+    }
+
     const provider = await providersStore.getProviderInstance<WebSearchProvider>(providerId)
-    const data = await provider.webSearch({ maxResults, query, searchDepth, timeRange })
-    const results: SearchResult[] = data.results
+    assertCurrent()
+    const maxRequests = Math.min(2, Math.max(1, Math.floor(webSearchStore.maxRequestsPerTurn || 1)))
+    const configuredPoints = webSearchStore.maxOfficialPointsPerTurn
+    const lease = budget.begin({
+      providerId,
+      maxRequests,
+      maxPoints: configuredPoints > 0 ? Math.floor(configuredPoints) : officialPoints * maxRequests,
+      pointsPerRequest: officialPoints,
+      priceVersion: officialPriceVersion,
+      official: providerId === 'official-cloud-web-search',
+    })
+    const trace = execution?.trace
+    const requestId = `search:${crypto.randomUUID()}`
+    const data = await provider.webSearch({
+      maxResults,
+      query,
+      searchDepth,
+      signal: requestAbort.signal,
+      timeRange,
+      ...(providerId === 'official-cloud-web-search'
+        ? {
+            headers: trace ? createChatTraceHeaders(undefined, { ...trace, parentRequestId: trace.requestId ?? trace.parentRequestId, requestId }) : { 'x-airi-request-id': requestId },
+            searchBudget: { maxRequests: lease.maxRequests, maxPoints: lease.maxPoints, priceVersion: lease.priceVersion },
+          }
+        : {}),
+    })
+    lease.finish(data.attemptsUsed)
+    assertCurrent()
+    const results: SearchResult[] = compactWebSearchResults(data.results, maxResults)
 
     if (results.length === 0) {
       console.warn('[WebSearch] provider request returned no results', {
-        query,
+        queryLength: normalizeWebSearchQuery(query).length,
       })
 
       const failure = createFailureResult({
@@ -223,7 +313,7 @@ export async function performWebSearch({
     setCachedWebSearchResult(cacheKey, successResult)
     recordWebSearchDiagnostic(webSearchStore, {
       cacheExpiresAt: Date.now() + WEB_SEARCH_CACHE_TTL_MS,
-      cacheKey,
+      cacheKey: diagnosticCacheKey,
       maxResults,
       query,
       resultsCount: results.length,
@@ -235,7 +325,9 @@ export async function performWebSearch({
     return limitSearchSuccessResult(successResult, maxResults)
   }
   catch (error) {
-    const failure = classifyWebSearchRuntimeFailure(error)
+    const failure = requestAbort.signal.aborted
+      ? createAbortedSearchFailure(requestAbort.signal.reason)
+      : classifyWebSearchRuntimeFailure(error)
     console.error('[WebSearch] Search failed:', failure.message)
 
     try {
@@ -261,25 +353,43 @@ export async function performWebSearch({
       failureKind: failure.failureKind,
       httpStatus: failure.httpStatus,
       query,
+      retryable: failure.retryable,
       results: [],
     }
+  }
+  finally {
+    requestAbort.dispose()
   }
 }
 
 export function createWebSearchCacheKey({
+  configRevision = 'default',
+  maxResults = 5,
+  providerId = 'unknown',
   query,
   searchDepth = 'basic',
   timeRange,
-}: Pick<WebSearchParams, 'query' | 'searchDepth' | 'timeRange'>) {
+}: Pick<WebSearchParams, 'maxResults' | 'query' | 'searchDepth' | 'timeRange'> & {
+  configRevision?: string
+  providerId?: string
+}) {
   return [
-    query.replace(/\s+/g, ' ').trim().toLowerCase(),
+    providerId,
+    configRevision,
+    normalizeWebSearchQuery(query),
+    maxResults,
     timeRange || 'any-time',
     searchDepth,
   ].join('|')
 }
 
+export function createWebSearchProviderConfigRevision(config: unknown) {
+  return `cfg-${hashWebSearchValue(stableSerializeWebSearchConfig(config))}`
+}
+
 export function clearWebSearchShortTermCache() {
   webSearchResultCache.clear()
+  currentCacheScope = undefined
 }
 
 export function sanitizeTavilyErrorMessage(value: string) {
@@ -298,6 +408,7 @@ export function classifyWebSearchRuntimeFailure(error: unknown): WebSearchFailur
       failureKind: providerError?.failureKind || 'unknown',
       httpStatus: providerError?.httpStatus,
       message: sanitizeWebSearchProviderErrorMessage(providerError?.message || '', providerName) || 'Web search failed.',
+      retryable: isWebSearchFailureRetryable(providerError?.failureKind || 'unknown', providerError?.httpStatus),
     }
   }
 
@@ -305,19 +416,28 @@ export function classifyWebSearchRuntimeFailure(error: unknown): WebSearchFailur
   const message = sanitizeWebSearchProviderErrorMessage(rawMessage) || 'Web search failed.'
   const lowerMessage = message.toLowerCase()
 
-  if (/timeout|aborted|network|failed to fetch|fetch failed|econnreset|enotfound|dns|offline/i.test(lowerMessage)) {
+  if (NETWORK_FAILURE_RE.test(lowerMessage)) {
     return {
       failureKind: 'network',
       message: lowerMessage.includes('timeout')
         ? 'Web search timed out before the provider returned results.'
         : 'Network error while contacting the web search provider.',
+      retryable: !CANCELLED_FAILURE_RE.test(lowerMessage),
     }
   }
 
   return {
     failureKind: 'unknown',
     message,
+    retryable: false,
   }
+}
+
+export function isWebSearchFailureRetryable(failureKind: WebSearchFailureKind, httpStatus?: number) {
+  return failureKind === 'network'
+    || failureKind === 'rate-limit'
+    || failureKind === 'server'
+    || (failureKind === 'upstream' && (httpStatus === undefined || httpStatus >= 500))
 }
 
 export const classifyTavilyRuntimeFailure = classifyWebSearchRuntimeFailure
@@ -327,6 +447,7 @@ function createFailureResult(input: {
   httpStatus?: number
   message: string
   query?: string
+  retryable?: boolean
   results: SearchResult[]
 }): WebSearchFailureResult {
   return {
@@ -335,6 +456,7 @@ function createFailureResult(input: {
     failureKind: input.failureKind,
     httpStatus: input.httpStatus,
     query: input.query,
+    retryable: input.retryable ?? isWebSearchFailureRetryable(input.failureKind, input.httpStatus),
     results: input.results,
   }
 }
@@ -379,6 +501,62 @@ function setCachedWebSearchResult(cacheKey: string, result: WebSearchSuccessResu
   }
 }
 
+function createAbortedSearchFailure(reason: unknown): WebSearchFailureClassification {
+  const timedOut = reason === 'web-search-timeout' || reason === 'intelligent-web-search-timeout'
+  return {
+    failureKind: 'network',
+    message: timedOut
+      ? 'Web search timed out before the provider returned results.'
+      : 'Web search was cancelled.',
+    retryable: timedOut,
+  }
+}
+
+function ensureWebSearchCacheScope(providerId: string, configRevision: string) {
+  const nextScope = `${providerId}|${configRevision}`
+  if (currentCacheScope && currentCacheScope !== nextScope)
+    webSearchResultCache.clear()
+
+  currentCacheScope = nextScope
+}
+
+export function createWebSearchCacheDiagnosticKey(input: Parameters<typeof createWebSearchCacheKey>[0]) {
+  return [
+    input.providerId || 'unknown',
+    input.configRevision || 'default',
+    `q-${hashWebSearchValue(normalizeWebSearchQuery(input.query))}`,
+    input.maxResults ?? 5,
+    input.timeRange || 'any-time',
+    input.searchDepth || 'basic',
+  ].join('|')
+}
+
+function normalizeWebSearchQuery(query: string) {
+  return query.replace(WHITESPACE_RE, ' ').trim().toLowerCase()
+}
+
+function stableSerializeWebSearchConfig(value: unknown): string {
+  if (value === null || typeof value !== 'object')
+    return JSON.stringify(value) ?? String(value)
+
+  if (Array.isArray(value))
+    return `[${value.map(stableSerializeWebSearchConfig).join(',')}]`
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => `${JSON.stringify(key)}:${stableSerializeWebSearchConfig(child)}`)
+  return `{${entries.join(',')}}`
+}
+
+function hashWebSearchValue(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 function limitSearchSuccessResult(result: WebSearchSuccessResult, maxResults: number): WebSearchSuccessResult {
   const limitedResults = result.results.slice(0, maxResults)
   return {
@@ -404,5 +582,8 @@ function recordWebSearchDiagnostic(
     cacheExpiresAt?: number
   },
 ) {
-  webSearchStore.recordDiagnostic?.(entry)
+  webSearchStore.recordDiagnostic?.({
+    ...entry,
+    query: `q-${hashWebSearchValue(normalizeWebSearchQuery(entry.query))}:${normalizeWebSearchQuery(entry.query).length}`,
+  })
 }

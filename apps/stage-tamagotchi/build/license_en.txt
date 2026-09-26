@@ -1,4 +1,4 @@
-﻿Software License Notice
+Software License Notice
 
 The application's main source code is provided under the MIT License. Third-party components, fonts, voices, character models, and other assets may be governed by their own licenses and terms of use; those rights are not transferred by this license.
 

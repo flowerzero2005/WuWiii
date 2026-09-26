@@ -19,6 +19,7 @@ import { useChatStreamStore } from '../../chat/stream-store'
 import { useConsciousnessStore } from '../../modules/consciousness'
 import { useProvidersStore } from '../../providers'
 import { useModsServerChannelStore } from './channel-server'
+import { prepareBroadcastTransport } from './context-bridge-transport'
 
 /**
  * 创建一个可安全克隆的 context 副本
@@ -36,9 +37,41 @@ function createMinimalContext(context: Partial<ChatStreamEventContext>): ChatStr
     message,
     contexts: {},
     composedMessage: [],
-    input: context.input ? toRaw(context.input) : undefined,
-    internal: context.internal ? { ...context.internal } : undefined,
-    speech: context.speech ? { ...context.speech } : undefined,
+    // Input events may contain runtime payloads that belong to the sending
+    // window only. The receiving window only mirrors visible stream state.
+    internal: context.internal
+      ? {
+          hiddenUserMessage: context.internal.hiddenUserMessage,
+          memoryUserMessage: context.internal.memoryUserMessage,
+          proactiveTopic: context.internal.proactiveTopic,
+          runtimeSignal: context.internal.runtimeSignal,
+          sourceSessionId: context.internal.sourceSessionId,
+          sourceCreatedAt: context.internal.sourceCreatedAt,
+          sourceUserMessageId: context.internal.sourceUserMessageId,
+          sourceAssistantMessageId: context.internal.sourceAssistantMessageId,
+          sourceAssistantMessageIds: context.internal.sourceAssistantMessageIds,
+          sourceSurface: context.internal.sourceSurface,
+          groupChat: context.internal.groupChat,
+          groupTurnId: context.internal.groupTurnId,
+          roomName: context.internal.roomName,
+          personaCardId: context.internal.personaCardId,
+          speech: context.internal.speech,
+          speechTone: context.internal.speechTone,
+          performance: context.internal.performance,
+          // groupSpeechSynthesisBarrier and groupSpeechPlaybackBarrier are
+          // local Promise barriers. They must remain in their source window.
+        }
+      : undefined,
+    speech: context.speech
+      ? {
+          finalText: context.speech.finalText,
+          intentId: context.speech.intentId,
+          segmentation: context.speech.segmentation,
+          selection: context.speech.selection,
+          streamId: context.speech.streamId,
+          turnId: context.speech.turnId,
+        }
+      : undefined,
     // Speech playback hooks use the frozen turn snapshot to resolve the
     // speaker-specific provider/model/voice. Preserve it across windows so a
     // mirrored group turn cannot fall back to the active global voice.
@@ -57,6 +90,20 @@ function resolveStreamSessionId(context: Partial<ChatStreamEventContext>, fallba
   return context.internal?.sourceSessionId || fallback
 }
 
+function resolveStreamTurnId(context: Partial<ChatStreamEventContext>) {
+  return context.turn?.turnId ?? context.internal?.sourceUserMessageId
+}
+
+function resolveInputSourceUserMessageId(event: { data: unknown, metadata?: { event?: { id?: unknown } } }) {
+  const data = event.data && typeof event.data === 'object'
+    ? event.data as { sourceUserMessageId?: unknown }
+    : {}
+  const sourceUserMessageId = data.sourceUserMessageId ?? event.metadata?.event?.id
+  return typeof sourceUserMessageId === 'string' && sourceUserMessageId.trim()
+    ? sourceUserMessageId
+    : undefined
+}
+
 export const useContextBridgeStore = defineStore('mods:api:context-bridge', () => {
   const mutex = new Mutex()
 
@@ -69,11 +116,116 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
   const providersStore = useProvidersStore()
   const { activeProvider, activeModel } = storeToRefs(consciousnessStore)
 
-  const { post: broadcastContext, data: incomingContext } = useBroadcastChannel<ScopedContextMessage, ScopedContextMessage>({ name: CONTEXT_CHANNEL_NAME })
-  const { post: broadcastStreamEvent, data: incomingStreamEvent } = useBroadcastChannel<ChatStreamEvent, ChatStreamEvent>({ name: CHAT_STREAM_CHANNEL_NAME })
+  const { post: postBroadcastContext, data: incomingContext } = useBroadcastChannel<ScopedContextMessage, ScopedContextMessage>({ name: CONTEXT_CHANNEL_NAME })
+  const { post: postBroadcastStreamEvent, data: incomingStreamEvent } = useBroadcastChannel<ChatStreamEvent, ChatStreamEvent>({ name: CHAT_STREAM_CHANNEL_NAME })
 
   const disposeHookFns = ref<Array<() => void>>([])
-  let remoteStreamGuard: { sessionId: string, generation: number } | null = null
+  let remoteStreamGuard: { sessionId: string, generation: number, turnId?: string } | null = null
+  const completedRemoteStreamTurns = new Set<string>()
+  const INPUT_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000
+  const MAX_INPUT_RECEIPTS_PER_SESSION = 512
+
+  function claimInputSourceUserMessage(sessionId: string, sourceUserMessageId: string) {
+    if (typeof localStorage === 'undefined')
+      return true
+
+    const receiptKey = `airi:context-bridge:input:${sessionId}`
+    try {
+      const stored = localStorage.getItem(receiptKey)
+      const receipts = stored ? JSON.parse(stored) as Record<string, number> : {}
+      const now = Date.now()
+      const previousAt = receipts[sourceUserMessageId]
+      if (typeof previousAt === 'number' && now - previousAt < INPUT_RECEIPT_TTL_MS)
+        return false
+      const retained = Object.entries(receipts)
+        .filter(([, at]) => typeof at === 'number' && now - at < INPUT_RECEIPT_TTL_MS)
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, MAX_INPUT_RECEIPTS_PER_SESSION - 1)
+      localStorage.setItem(receiptKey, JSON.stringify(Object.fromEntries([
+        ...retained,
+        [sourceUserMessageId, now],
+      ])))
+      return true
+    }
+    catch {
+      // Storage can be unavailable in private/browser-embedded contexts. The
+      // source-specific Web Lock still prevents concurrent duplicate ingest.
+      return true
+    }
+  }
+
+  function postBroadcast<T>(post: (payload: T) => void, eventType: string, payload: T, sessionId?: string, turnId?: string) {
+    const prepared = prepareBroadcastTransport(payload)
+    if (prepared.droppedPaths.length) {
+      console.warn('[ContextBridge] Removed non-transport fields from broadcast', {
+        eventType,
+        sessionId,
+        turnId,
+        fields: prepared.droppedPaths,
+      })
+    }
+    if (prepared.cloneFailurePath) {
+      console.warn('[ContextBridge] Broadcast structured-clone probe failed', {
+        eventType,
+        sessionId,
+        turnId,
+        field: prepared.cloneFailurePath,
+      })
+      return false
+    }
+
+    try {
+      post(prepared.payload)
+      return true
+    }
+    catch {
+      // A failed mirror must never fail the source window's local turn.
+      console.warn('[ContextBridge] Broadcast failed after structured-clone probe', {
+        eventType,
+        sessionId,
+        turnId,
+        field: 'payload',
+      })
+      return false
+    }
+  }
+
+  function broadcastContext(context: ScopedContextMessage) {
+    const contextScope = normalizeChatContextScope(context.contextScope)
+    const sessionId = contextScope?.type === 'session' ? contextScope.sessionId : undefined
+    return postBroadcast(postBroadcastContext, 'context:update', context, sessionId, contextScope?.type === 'turn' ? contextScope.turnId : undefined)
+  }
+
+  function broadcastStreamEvent(event: ChatStreamEvent) {
+    return postBroadcast(postBroadcastStreamEvent, event.type, event, event.sessionId, event.context.turn?.turnId)
+  }
+
+  function remoteStreamTurnKey(sessionId: string, turnId?: string) {
+    return turnId ? `${sessionId}:${turnId}` : undefined
+  }
+
+  function rememberCompletedRemoteStreamTurn(turnKey: string | undefined) {
+    if (!turnKey)
+      return
+    completedRemoteStreamTurns.add(turnKey)
+    // Stream mirrors are only short-lived UI events. Retain a bounded replay
+    // fence so a long-running desktop session cannot accumulate every turn.
+    if (completedRemoteStreamTurns.size > 256) {
+      const oldestTurnKey = completedRemoteStreamTurns.values().next().value
+      if (oldestTurnKey)
+        completedRemoteStreamTurns.delete(oldestTurnKey)
+    }
+  }
+
+  function acceptsRemoteStreamEvent(event: ChatStreamEvent) {
+    if (!remoteStreamGuard)
+      return false
+    if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
+      return false
+    if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
+      return false
+    return remoteStreamGuard.turnId === resolveStreamTurnId(event.context)
+  }
 
   async function initialize() {
     await mutex.acquire()
@@ -112,6 +264,7 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
           contextUpdates,
         } = event.data
         const targetSessionId = overrides?.sessionId || chatSession.activeSessionId
+        const sourceUserMessageId = resolveInputSourceUserMessageId(event)
 
         const normalizedContextUpdates = contextUpdates?.flatMap((update) => {
           const id = update.id ?? nanoid()
@@ -172,11 +325,18 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
           // - https://chromestatus.com/feature/6265472244514816
           // - https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
           // - https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
-          navigator.locks.request('context-bridge:event:input:text', async () => {
+          // Receipt updates share a per-session record, so serialize all
+          // inputs for that session while the durable claim is made.
+          const lockName = `context-bridge:event:input:text:${targetSessionId}`
+          navigator.locks.request(lockName, async () => {
             try {
+              if (sourceUserMessageId && !claimInputSourceUserMessage(targetSessionId, sourceUserMessageId))
+                return
+
               await chatOrchestrator.ingest(messageText, {
                 model: activeModel.value,
                 chatProvider,
+                sourceUserMessageId,
                 input: {
                   type: 'input:text',
                   data: {
@@ -367,73 +527,75 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
               await chatOrchestrator.emitAfterMessageComposedHooks(event.message, event.context)
               break
             case 'before-send':
+            {
+              const turnId = resolveStreamTurnId(event.context)
+              const turnKey = remoteStreamTurnKey(event.sessionId, turnId)
+              if (turnKey && completedRemoteStreamTurns.has(turnKey))
+                break
+              if (remoteStreamGuard?.sessionId === event.sessionId
+                && remoteStreamGuard.generation === chatSession.getSessionGenerationValue(event.sessionId)
+                && remoteStreamGuard.turnId === turnId) {
+                break
+              }
               await chatOrchestrator.emitBeforeSendHooks(event.message, event.context)
               remoteStreamGuard = {
                 sessionId: event.sessionId,
                 generation: chatSession.getSessionGenerationValue(event.sessionId),
+                turnId,
               }
               chatOrchestrator.sending = true
               chatStream.beginStream(event.sessionId)
               break
+            }
             case 'after-send':
               await chatOrchestrator.emitAfterSendHooks(event.message, event.context)
               break
             case 'token-literal':
-              if (!remoteStreamGuard)
-                return
-              if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
-                return
-              if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
+              if (!acceptsRemoteStreamEvent(event))
                 return
               chatStream.appendStreamLiteral(event.literal)
               await chatOrchestrator.emitTokenLiteralHooks(event.literal, event.context)
               break
             case 'token-special':
-              if (!remoteStreamGuard)
-                return
-              if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
-                return
-              if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
+              if (!acceptsRemoteStreamEvent(event))
                 return
               await chatOrchestrator.emitTokenSpecialHooks(event.special, event.context)
               break
             case 'stream-end':
-              if (!remoteStreamGuard)
-                break
-              if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
-                break
-              if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
+              if (!acceptsRemoteStreamEvent(event))
                 break
               await chatOrchestrator.emitStreamEndHooks(event.context)
               break
             case 'assistant-end':
-              if (!remoteStreamGuard)
+              if (!acceptsRemoteStreamEvent(event) || !remoteStreamGuard)
                 break
-              if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
+              {
+                const guard = remoteStreamGuard
+                const completedTurnKey = remoteStreamTurnKey(guard.sessionId, guard.turnId)
+                remoteStreamGuard = null
+                rememberCompletedRemoteStreamTurn(completedTurnKey)
+                await chatOrchestrator.emitAssistantResponseEndHooks(event.message, event.context)
+                chatStream.finalizeStream(event.message)
+                chatOrchestrator.sending = false
                 break
-              if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
-                break
-              await chatOrchestrator.emitAssistantResponseEndHooks(event.message, event.context)
-              chatStream.finalizeStream(event.message)
-              chatOrchestrator.sending = false
-              remoteStreamGuard = null
-              break
+              }
             case 'turn-complete':
-              if (!remoteStreamGuard)
+              if (!acceptsRemoteStreamEvent(event) || !remoteStreamGuard)
                 break
-              if (remoteStreamGuard.sessionId !== chatSession.activeSessionId)
+              {
+                const guard = remoteStreamGuard
+                const completedTurnKey = remoteStreamTurnKey(guard.sessionId, guard.turnId)
+                remoteStreamGuard = null
+                rememberCompletedRemoteStreamTurn(completedTurnKey)
+                await chatOrchestrator.emitChatTurnCompleteHooks({
+                  output: event.message,
+                  outputText: event.outputText,
+                  toolCalls: [],
+                }, event.context)
+                chatStream.finalizeStream(event.outputText)
+                chatOrchestrator.sending = false
                 break
-              if (chatSession.getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation)
-                break
-              await chatOrchestrator.emitChatTurnCompleteHooks({
-                output: event.message,
-                outputText: event.outputText,
-                toolCalls: [],
-              }, event.context)
-              chatStream.finalizeStream(event.outputText)
-              chatOrchestrator.sending = false
-              remoteStreamGuard = null
-              break
+              }
           }
         }
         finally {

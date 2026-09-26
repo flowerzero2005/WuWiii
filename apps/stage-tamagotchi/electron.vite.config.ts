@@ -20,7 +20,6 @@ import { DownloadLive2DSDK } from '@proj-airi/unplugin-live2d-sdk'
 import { templateCompilerOptions } from '@tresjs/core'
 import { defineConfig } from 'electron-vite'
 
-import { resolveDesktopUpdatePublishConfig } from './src/main/services/electron/desktop-update-config'
 import { prepareLive2dRuntimeArchive } from './src/main/services/electron/live2d-runtime-archive'
 import { assertDesktopFeatureManifest, createDesktopFeatureManifest } from './src/shared/desktop-feature-manifest'
 
@@ -100,8 +99,7 @@ function resolveDesktopAppEdition(): DesktopAppEdition {
     return edition
   }
 
-  // NOTICE: This repository builds a development client by default, including
-  // when electron-vite performs a production-mode bundle for local packaging.
+  // NOTICE: The isolated repository packages the development edition by default.
   return 'dev'
 }
 
@@ -111,8 +109,8 @@ const desktopBuildMetadataEnabled = shouldEnableDesktopBuildMetadata(process.env
 // and packaged apps. Keep ANGLE selection as an explicit diagnostic override instead
 // of forcing SwiftShader across every Windows consumer window.
 const desktopWindowsAngleBackend = resolveDesktopWindowsAngleBackend(process.env.VITE_WINDOWS_ANGLE_BACKEND)
-const desktopUpdatePublishConfig = resolveDesktopUpdatePublishConfig(process.env)
-const desktopUpdatesEnabled = process.env.NODE_ENV !== 'production' || desktopUpdatePublishConfig !== undefined
+// NOTICE: The development mirror never uses the official update feed.
+const desktopUpdatesEnabled = false
 const isConsumerEditionBuild = desktopAppEdition === 'consumer'
 const isDeveloperEditionBuild = desktopAppEdition === 'dev'
 const shouldInstallVueDevtools = isDeveloperEditionBuild && process.env.VITE_ENABLE_VUE_DEVTOOLS === '1'
@@ -301,7 +299,7 @@ export default defineConfig({
           const define: Record<string, any> = {
             'import.meta.env.VITE_APP_EDITION': JSON.stringify(desktopAppEdition),
             'import.meta.env.VITE_DESKTOP_FEATURE_MANIFEST': JSON.stringify(desktopFeatureManifest),
-            'import.meta.env.VITE_DESKTOP_UPDATE_CHANNEL': JSON.stringify(desktopUpdatePublishConfig?.channel ?? 'latest'),
+            'import.meta.env.VITE_DESKTOP_UPDATE_CHANNEL': JSON.stringify('development'),
             'import.meta.env.RUNTIME_ENVIRONMENT': '\'electron\'',
           }
           if (ctx.mode === 'development') {

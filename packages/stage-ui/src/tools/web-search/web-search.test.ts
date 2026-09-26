@@ -1,8 +1,11 @@
+import type { WebSearchProviderParams, WebSearchProviderResponse } from '../../libs/providers/types'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createSearchExecutionBudget } from './execution-budget'
 import {
   clearWebSearchShortTermCache,
-  createWebSearchCacheKey,
+  createWebSearchCacheDiagnosticKey,
   performWebSearch,
   sanitizeTavilyErrorMessage,
 } from './web-search'
@@ -101,6 +104,36 @@ vi.mock('../../stores/settings/official-capability-consent', () => ({
 }))
 
 describe('performWebSearch', () => {
+  it('rejects a configuration change while resolving the provider before issuing a request', async () => {
+    const webSearch = vi.fn()
+    mockProvidersStore.getProviderInstance.mockImplementationOnce(async () => {
+      mockProvidersStore.apiKey = 'changed-key'
+      return { webSearch }
+    })
+    expect(await performWebSearch({ query: 'changed configuration' })).toMatchObject({ success: false, failureKind: 'budget' })
+    expect(webSearch).not.toHaveBeenCalled()
+  })
+
+  it('rejects changed configuration results and leaves the old cache empty', async () => {
+    const webSearch = vi.fn(async () => {
+      mockProvidersStore.apiKey = 'changed-key'
+      return { results: [{ title: 'Result', url: 'https://example.com', snippet: 'body', source: 'example.com' }] }
+    })
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({ webSearch })
+    expect(await performWebSearch({ query: 'changed result' })).toMatchObject({ success: false, failureKind: 'budget' })
+    mockProvidersStore.apiKey = 'test-key'
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({ webSearch: vi.fn(async () => ({ results: [] })) })
+    expect(await performWebSearch({ query: 'changed result' })).toMatchObject({ success: false, failureKind: 'no-results' })
+  })
+
+  it('serves a cached result after the shared request budget has been exhausted', async () => {
+    const webSearch = vi.fn(async () => ({ results: [{ title: 'Result', url: 'https://example.com', snippet: 'body', source: 'example.com' }] }))
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({ webSearch })
+    const execution = { budget: createSearchExecutionBudget() }
+    expect(await performWebSearch({ query: 'cached budget', execution })).toMatchObject({ success: true })
+    expect(await performWebSearch({ query: 'cached budget', execution })).toMatchObject({ success: true })
+    expect(webSearch).toHaveBeenCalledOnce()
+  })
   beforeEach(() => {
     clearWebSearchShortTermCache()
     mockWebSearchStore.activeProvider = 'tavily'
@@ -140,13 +173,98 @@ describe('performWebSearch', () => {
     expect(firstResult).toMatchObject({ success: true, resultsCount: 1 })
     expect(secondResult).toMatchObject({ success: true, resultsCount: 1 })
     expect(mockWebSearchStore.recordDiagnostic).toHaveBeenLastCalledWith(expect.objectContaining({
-      cacheKey: createWebSearchCacheKey({
+      cacheKey: createWebSearchCacheDiagnosticKey({
+        configRevision: 'cfg-1th0bcs',
+        maxResults: 5,
+        providerId: 'tavily',
         query: 'Latest AIRI news',
         searchDepth: 'basic',
         timeRange: 'past_day',
       }),
+      query: expect.not.stringContaining('Latest AIRI news'),
       status: 'cache-hit',
     }))
+  })
+
+  it('separates cached requests by provider, result count, and provider configuration', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      results: [{
+        content: 'Result body',
+        title: 'Result',
+        url: 'https://example.com/result',
+      }],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await performWebSearch({ maxResults: 2, query: 'AIRI cache scope' })
+    await performWebSearch({ maxResults: 4, query: 'AIRI cache scope' })
+
+    mockWebSearchStore.activeProvider = 'brave-search'
+    mockProvidersStore.configuredProviders = { 'brave-search': true, 'tavily': true }
+    await performWebSearch({ maxResults: 4, query: 'AIRI cache scope' })
+
+    mockWebSearchStore.activeProvider = 'tavily'
+    mockProvidersStore.apiKey = 'updated-test-key'
+    await performWebSearch({ maxResults: 4, query: 'AIRI cache scope' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('propagates caller cancellation to the active provider and does not mark it retryable', async () => {
+    const providerSearch = vi.fn(({ signal }: WebSearchProviderParams) => new Promise<WebSearchProviderResponse>((_, reject) => {
+      signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({ webSearch: providerSearch })
+    const controller = new AbortController()
+
+    const resultPromise = performWebSearch({
+      query: 'cancel this request',
+      signal: controller.signal,
+    })
+    await vi.waitFor(() => expect(providerSearch).toHaveBeenCalledOnce())
+    controller.abort('user-cancelled')
+
+    await expect(resultPromise).resolves.toMatchObject({
+      error: 'Web search was cancelled.',
+      failureKind: 'network',
+      retryable: false,
+      success: false,
+    })
+    expect(providerSearch.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('normalizes duplicate URLs and strips markup from search results before caching', async () => {
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({
+      webSearch: vi.fn(async () => ({
+        results: [
+          {
+            snippet: '<p>First\u0000 result</p>',
+            source: '',
+            title: '<b>First</b>',
+            url: 'https://example.com/article?utm_source=campaign',
+          },
+          {
+            snippet: 'Duplicate',
+            source: 'Example',
+            title: 'Duplicate',
+            url: 'https://example.com/article?utm_medium=email',
+          },
+        ],
+      })),
+    })
+
+    const result = await performWebSearch({ query: 'clean search results' })
+
+    expect(result).toMatchObject({
+      results: [{
+        snippet: 'First result',
+        source: 'example.com',
+        title: 'First',
+        url: 'https://example.com/article',
+      }],
+      resultsCount: 1,
+      success: true,
+    })
   })
 
   it('classifies missing Tavily API key without calling fetch', async () => {
@@ -229,6 +347,29 @@ describe('performWebSearch', () => {
     expect(officialConsentMock.refresh).toHaveBeenCalledOnce()
     expect(officialConsentMock.needsConsent).toHaveBeenCalledWith('user-a', 'web-search', { capability: 'web-search' })
     expect(mockProvidersStore.getProviderInstance).not.toHaveBeenCalled()
+  })
+
+  it('does not let a cached official result bypass a later price acknowledgement', async () => {
+    mockWebSearchStore.activeProvider = 'official-cloud-web-search'
+    mockProvidersStore.configuredProviders = { 'official-cloud-web-search': true }
+    const officialSearch = vi.fn(async () => ({
+      results: [{
+        snippet: 'Official result',
+        source: 'example.com',
+        title: 'Official result',
+        url: 'https://example.com/official-cache',
+      }],
+    }))
+    mockProvidersStore.getProviderInstance.mockResolvedValueOnce({ webSearch: officialSearch })
+
+    await expect(performWebSearch({ query: 'AIRI price acknowledgement' })).resolves.toMatchObject({ success: true })
+    officialConsentMock.needsConsent.mockReturnValue(true)
+
+    await expect(performWebSearch({ query: 'AIRI price acknowledgement' })).resolves.toMatchObject({
+      failureKind: 'unknown',
+      success: false,
+    })
+    expect(officialSearch).toHaveBeenCalledOnce()
   })
 
   it('returns a custom provider failure without switching to official cloud', async () => {

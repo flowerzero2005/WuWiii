@@ -48,6 +48,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { listProviders as listDefinedProviders } from '../libs/providers'
+import { browserConfigurationLock, createProviderConfigurationMigration, normalizeAddedProviders, normalizeProviderConfigurations, parseStoredProviderConfiguration, PROVIDER_CONFIGURATION_KEY } from '../libs/providers/config-normalization'
 import { getProviderValidationIntervalMs } from '../libs/providers/validators/run'
 import { getKokoroWorker } from '../workers/kokoro'
 import { getDefaultKokoroModel, KOKORO_MODELS, kokoroModelsToModelInfo } from '../workers/kokoro/constants'
@@ -229,8 +230,6 @@ const PROVIDER_RUNTIME_VALIDATION_BACKOFF_MAX_MS = 5 * 60 * 1000
 const PROVIDER_RUNTIME_VALIDATION_BACKOFF_FACTOR = 2
 
 export const useProvidersStore = defineStore('providers', () => {
-  const providerCredentials = useLocalStorage<Record<string, Record<string, unknown>>>('settings/credentials/providers', {})
-  const addedProviders = useLocalStorage<Record<string, boolean>>('settings/providers/added', {})
   const providerInstanceCache = ref<Record<string, unknown>>({})
   const { t } = useI18n()
   const baseUrlValidator = computed(() => (baseUrl: unknown) => {
@@ -324,7 +323,7 @@ export const useProvidersStore = defineStore('providers', () => {
           if (!config.baseUrl) {
             return {
               errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at https://www.wuwiii.cn/help/refund.',
+              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at http://127.0.0.1:5173/help/refund.',
               valid: false,
             }
           }
@@ -354,7 +353,7 @@ export const useProvidersStore = defineStore('providers', () => {
           if (!config.baseUrl) {
             return {
               errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at https://www.wuwiii.cn/help/refund.',
+              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at http://127.0.0.1:5173/help/refund.',
               valid: false,
             }
           }
@@ -384,7 +383,7 @@ export const useProvidersStore = defineStore('providers', () => {
           if (!config.baseUrl) {
             return {
               errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at https://www.wuwiii.cn/help/refund.',
+              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at http://127.0.0.1:5173/help/refund.',
               valid: false,
             }
           }
@@ -414,7 +413,7 @@ export const useProvidersStore = defineStore('providers', () => {
           if (!config.baseUrl) {
             return {
               errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at https://www.wuwiii.cn/help/refund.',
+              reason: 'Base URL is required. This is likely a bug; contact Wuwiii support at http://127.0.0.1:5173/help/refund.',
               valid: false,
             }
           }
@@ -1911,6 +1910,35 @@ export const useProvidersStore = defineStore('providers', () => {
     providerMetadata[providerId] = translated
   }
 
+  const providerDefaults = Object.fromEntries(Object.keys(providerMetadata).map(id => [id, getDefaultProviderConfig(id)]))
+  const providerCredentials = useLocalStorage<Record<string, Record<string, unknown>>>(PROVIDER_CONFIGURATION_KEY, normalizeProviderConfigurations(undefined, providerDefaults), {
+    writeDefaults: false,
+    flush: 'sync',
+    serializer: {
+      read: raw => normalizeProviderConfigurations(parseStoredProviderConfiguration(raw), providerDefaults),
+      write: JSON.stringify,
+    },
+  })
+  const addedProviders = useLocalStorage<Record<string, boolean>>('settings/providers/added', {}, {
+    writeDefaults: false,
+    flush: 'sync',
+    serializer: { read: raw => normalizeAddedProviders(parseStoredProviderConfiguration(raw)), write: JSON.stringify },
+  })
+  let initializeConfiguration: ReturnType<typeof createProviderConfigurationMigration> | undefined
+  try {
+    if (typeof window !== 'undefined')
+      initializeConfiguration = createProviderConfigurationMigration(window.localStorage, browserConfigurationLock())
+  }
+  catch {
+    // Storage may be unavailable. The normalized in-memory values stay editable.
+  }
+  async function ensureConfigurationInitialized() {
+    await initializeConfiguration?.(providerDefaults, (providers, added) => {
+      providerCredentials.value = providers
+      addedProviders.value = added
+    })
+  }
+
   // const validatedCredentials = ref<Record<string, string>>({})
   const providerRuntimeState = ref<Record<string, ProviderRuntimeState>>({})
   const providerValidationInFlight = new Map<string, Promise<boolean>>()
@@ -1971,6 +1999,7 @@ export const useProvidersStore = defineStore('providers', () => {
 
   // Configuration validation functions
   async function validateProvider(providerId: string, options: { force?: boolean } = {}): Promise<boolean> {
+    await ensureConfigurationInitialized()
     const metadata = providerMetadata[providerId]
     if (!metadata)
       return false
@@ -2040,15 +2069,12 @@ export const useProvidersStore = defineStore('providers', () => {
 
     return {
       ...defaultOptions,
-      ...(Object.prototype.hasOwnProperty.call(defaultOptions, 'baseUrl') ? {} : { baseUrl: '' }),
+      ...(Object.hasOwn(defaultOptions, 'baseUrl') ? {} : { baseUrl: '' }),
     }
   }
 
   // Initialize provider configurations
   function initializeProvider(providerId: string) {
-    if (!providerCredentials.value[providerId]) {
-      providerCredentials.value[providerId] = getDefaultProviderConfig(providerId)
-    }
     if (!providerRuntimeState.value[providerId]) {
       providerRuntimeState.value[providerId] = {
         isConfigured: false,
@@ -2126,7 +2152,8 @@ export const useProvidersStore = defineStore('providers', () => {
     return task
   }
 
-  function startRuntimeValidation(options: StartRuntimeValidationOptions = {}) {
+  async function startRuntimeValidation(options: StartRuntimeValidationOptions = {}) {
+    await ensureConfigurationInitialized()
     if (!runtimeValidationStarted.value) {
       runtimeValidationStarted.value = true
       startPeriodicRuntimeValidation()
@@ -2194,7 +2221,8 @@ export const useProvidersStore = defineStore('providers', () => {
   }
 
   async function resetProviderSettings() {
-    providerCredentials.value = {}
+    await ensureConfigurationInitialized()
+    providerCredentials.value = normalizeProviderConfigurations(undefined, providerDefaults)
     addedProviders.value = {}
     providerRuntimeState.value = {}
 
@@ -2394,6 +2422,7 @@ export const useProvidersStore = defineStore('providers', () => {
   | TranscriptionProviderWithExtraOptions
   | WebSearchProvider,
   >(providerId: string): Promise<R> {
+    await ensureConfigurationInitialized()
     const cached = providerInstanceCache.value[providerId] as R | undefined
     if (cached)
       return cached

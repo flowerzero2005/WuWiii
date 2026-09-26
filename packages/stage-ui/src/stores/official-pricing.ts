@@ -10,6 +10,8 @@ export interface OfficialCapabilityPrices {
   transcription: { additionalMinutePoints: number, billingMode: 'duration', firstMinutePoints: number, priceVersion: string }
   embedding: { billingMode: 'request', pointsPerRequest: number, priceVersion: string }
   webSearch: { billingMode: 'request', pointsPerRequest: number, priceVersion: string }
+  /** Absent while connected to a server that predates the vision module. */
+  vision?: { billingMode: 'request', pointsPerRequest: number, priceVersion: string }
 }
 export interface OfficialPricingSnapshot { capabilities: OfficialCapabilityPrices, features: OfficialFeaturePrice[], generatedAt: string, models: OfficialModelPrice[] }
 
@@ -30,6 +32,8 @@ export function parseOfficialPricing(input: unknown): OfficialPricingSnapshot | 
     || !validRequest(value.capabilities?.embedding) || !validRequest(value.capabilities?.webSearch)) {
     return
   }
+  if (value.capabilities?.vision !== undefined && !validRequest(value.capabilities.vision))
+    return
   if (!value.models.every((item: any) => typeof item?.id === 'string' && typeof item.name === 'string' && finiteNonNegative(item.pointsPerTokenUnit) && finiteNonNegative(item.tokenUnit) && finiteNonNegative(item.minimumSettlePoints) && finiteNonNegative(item.reserveBasePoints) && typeof item.priceVersion === 'string'))
     return
   if (!value.features.every((item: any) => typeof item?.feature === 'string' && finiteNonNegative(item.multiplier) && typeof item.priceVersion === 'string'))

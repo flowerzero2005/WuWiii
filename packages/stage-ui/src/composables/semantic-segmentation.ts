@@ -33,6 +33,7 @@ const AFTERTHOUGHT_PREFIXES = [
 const BOUNDARY_PUNCTUATION = new Set(['。', '！', '？', '!', '?', '…'])
 const CONTINUATION_PUNCTUATION = new Set(['。', '！', '？', '!', '?', '…', '"', '\'', '”', '’', '」', '』', '）', ')', '】', '》', '~', '～'])
 const MEMORY_CAPTURE_MARKER_RE = /<\|MEMORY_CAPTURE\b[\s\S]*?(?:\|>|$)/gi
+const INCOMPLETE_ACT_MARKER_RE = /<\|\s*ACT\b(?:(?!\|>)[\s\S])*$/gi
 const SPECIAL_MARKER_RE = /<\|[\s\S]*?\|>/g
 const ACT_MARKER_RE = /<\|ACT\b[\s\S]*?\}\s*\|{2,}/gi
 const DISPLAY_MARKER_RE = /<\|(?:DELAY|SEGMENT)\b[\s\S]*?\|{2,}/gi
@@ -74,6 +75,9 @@ export function removeSpecialMarkers(text: string, options?: RemoveSpecialMarker
     // protocol (and potentially a secret) in the final bubble/TTS.
     result = result.replace(MEMORY_CAPTURE_MARKER_RE, '')
       .replace(SPECIAL_MARKER_RE, '')
+      // ACT has the same private-envelope rule. A provider can finish its
+      // stream before closing the marker, so consume it through EOF.
+      .replace(INCOMPLETE_ACT_MARKER_RE, '')
       .replace(ACT_MARKER_RE, '')
       .replace(DISPLAY_MARKER_RE, '')
     iterations++

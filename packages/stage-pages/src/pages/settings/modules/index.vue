@@ -1,11 +1,35 @@
 <script setup lang="ts">
+import type { Module } from '@proj-airi/stage-ui/composables/use-modules-list'
+
 import { RippleGrid } from '@proj-airi/stage-ui/components/layouts'
 import { IconStatusItem } from '@proj-airi/stage-ui/components/menu'
 import { useModulesList } from '@proj-airi/stage-ui/composables/use-modules-list'
 import { useRippleGridState } from '@proj-airi/stage-ui/composables/use-ripple-grid-state'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const { modulesList } = useModulesList()
-const { lastClickedIndex, setLastClickedIndex } = useRippleGridState()
+const primaryModuleIds = ['consciousness', 'speech', 'hearing', 'vision', 'web-search']
+const primaryModules = computed(() => primaryModuleIds
+  .map(id => modulesList.value.find(module => module.id === id))
+  .filter((module): module is Module => !!module))
+const primaryTopRowModules = computed(() => primaryModules.value.slice(0, 2))
+const primaryBottomRowModules = computed(() => primaryModules.value.slice(2))
+const additionalModules = computed(() => modulesList.value.filter(module => !primaryModuleIds.includes(module.id)))
+
+const {
+  lastClickedIndex: primaryTopLastClickedIndex,
+  setLastClickedIndex: setPrimaryTopLastClickedIndex,
+} = useRippleGridState('/settings/modules/primary-top')
+const {
+  lastClickedIndex: primaryBottomLastClickedIndex,
+  setLastClickedIndex: setPrimaryBottomLastClickedIndex,
+} = useRippleGridState('/settings/modules/primary-bottom')
+const {
+  lastClickedIndex: additionalModulesLastClickedIndex,
+  setLastClickedIndex: setAdditionalModulesLastClickedIndex,
+} = useRippleGridState('/settings/modules/additional')
 
 const watermarkClass = [
   'pointer-events-none fixed bottom-0 right--5 top-[calc(100dvh-15rem)] z--1 size-60',
@@ -18,10 +42,10 @@ const watermarkIconClass = 'i-solar:layers-bold-duotone text-60'
 <template>
   <div data-airi-runtime-route="/settings/modules">
     <RippleGrid
-      :items="modulesList"
-      :columns="{ default: 1, sm: 2 }"
-      :origin-index="lastClickedIndex"
-      @item-click="({ globalIndex }) => setLastClickedIndex(globalIndex)"
+      :items="primaryTopRowModules"
+      :columns="{ default: 1, md: 2 }"
+      :origin-index="primaryTopLastClickedIndex"
+      @item-click="({ globalIndex }) => setPrimaryTopLastClickedIndex(globalIndex)"
     >
       <template #item="{ item: module }">
         <IconStatusItem
@@ -32,9 +56,53 @@ const watermarkIconClass = 'i-solar:layers-bold-duotone text-60'
           :icon-image="module.iconImage"
           :to="module.to"
           :configured="module.configured"
+          :class="['h-full min-h-28']"
         />
       </template>
     </RippleGrid>
+    <RippleGrid
+      :items="primaryBottomRowModules"
+      :columns="{ default: 1, md: 3 }"
+      :origin-index="primaryBottomLastClickedIndex"
+      @item-click="({ globalIndex }) => setPrimaryBottomLastClickedIndex(globalIndex)"
+    >
+      <template #item="{ item: module }">
+        <IconStatusItem
+          :title="module.name"
+          :description="module.description"
+          :icon="module.icon"
+          :icon-color="module.iconColor"
+          :icon-image="module.iconImage"
+          :to="module.to"
+          :configured="module.configured"
+          :class="['h-full min-h-28']"
+        />
+      </template>
+    </RippleGrid>
+    <section v-if="additionalModules.length > 0" :class="['mt-2 border-t airi-border-subtle pt-5']">
+      <h2 :class="['mb-3 px-1 text-sm font-medium airi-text']">
+        {{ t('settings.pages.modules.additional-capabilities') }}
+      </h2>
+      <RippleGrid
+        :items="additionalModules"
+        :columns="{ default: 1, sm: 2 }"
+        :origin-index="additionalModulesLastClickedIndex"
+        @item-click="({ globalIndex }) => setAdditionalModulesLastClickedIndex(globalIndex)"
+      >
+        <template #item="{ item: module }">
+          <IconStatusItem
+            :title="module.name"
+            :description="module.description"
+            :icon="module.icon"
+            :icon-color="module.iconColor"
+            :icon-image="module.iconImage"
+            :to="module.to"
+            :configured="module.configured"
+            :class="['h-full min-h-28']"
+          />
+        </template>
+      </RippleGrid>
+    </section>
   </div>
   <div
     v-motion

@@ -18,7 +18,10 @@ const snapshot: OfficialPricingSnapshot = {
     { id: 'airi-default', name: 'Default', pointsPerTokenUnit: 2, tokenUnit: 1000, minimumSettlePoints: 1, reserveBasePoints: 2, priceVersion: 'm1' },
     { id: 'airi-pro', name: 'Pro', pointsPerTokenUnit: 5, tokenUnit: 1000, minimumSettlePoints: 3, reserveBasePoints: 5, priceVersion: 'm2' },
   ],
-  features: [{ feature: 'inner-voice-note', multiplier: 2, priceVersion: 'f1' }],
+  features: [
+    { feature: 'inner-voice-note', multiplier: 2, priceVersion: 'f1' },
+    { feature: 'official-chat', multiplier: 1, priceVersion: 'chat-f1' },
+  ],
   capabilities: {
     speech: { chains: [
       { channel: 'primary', provider: 'hidden-a', pointsPerMinute: 35, minimumBasePoints: 1, priceVersion: 's1', state: 'idle' },
@@ -26,6 +29,7 @@ const snapshot: OfficialPricingSnapshot = {
     ] },
     transcription: { billingMode: 'duration', firstMinutePoints: 25, additionalMinutePoints: 20, priceVersion: 'a1' },
     embedding: { billingMode: 'request', pointsPerRequest: 1, priceVersion: 'e1' },
+    vision: { billingMode: 'request', pointsPerRequest: 5, priceVersion: 'v1' },
     webSearch: { billingMode: 'request', pointsPerRequest: 3, priceVersion: 'w1' },
   },
 }
@@ -52,6 +56,7 @@ describe('official capability consent', () => {
   it('builds stable display terms for every paid capability', () => {
     expect(createOfficialCapabilityConsentQuote(snapshot, 'web-search')?.display).toEqual({ billingMode: 'request', pointsPerRequest: 3 })
     expect(createOfficialCapabilityConsentQuote(snapshot, 'embedding')?.display).toEqual({ billingMode: 'request', pointsPerRequest: 1 })
+    expect(createOfficialCapabilityConsentQuote(snapshot, 'vision')?.display).toEqual({ billingMode: 'request', pointsPerRequest: 5 })
     expect(createOfficialCapabilityConsentQuote(snapshot, 'transcription')?.display).toEqual({ billingMode: 'duration', firstMinutePoints: 25, additionalMinutePoints: 20 })
     expect(createOfficialCapabilityConsentQuote(snapshot, 'inner-voice-note')?.display).toEqual({ billingMode: 'model-usage', modelId: 'airi-default', minimumPoints: 2, pointsPerTokenUnit: 4, tokenUnit: 1000, multiplier: 2 })
     expect(createOfficialCapabilityConsentQuote(snapshot, 'inner-voice-note', { modelId: 'airi-pro' })?.display).toEqual({ billingMode: 'model-usage', modelId: 'airi-pro', minimumPoints: 6, pointsPerTokenUnit: 10, tokenUnit: 1000, multiplier: 2 })
@@ -78,6 +83,21 @@ describe('official capability consent', () => {
     expect(createOfficialCapabilityConsentFingerprint({ ...quote })).toBe(quote.fingerprint)
   })
 
+  it('prices script work using the selected chat model and requires new consent after a model change', () => {
+    const quote = createOfficialCapabilityConsentQuote(snapshot, 'group-script', { modelId: 'airi-pro' })!
+    expect(quote.display).toEqual({ billingMode: 'model-usage', modelId: 'airi-pro', minimumPoints: 3, pointsPerTokenUnit: 5, tokenUnit: 1000, multiplier: 1 })
+    const accepted = { acceptedAt: '2026-09-26T00:00:00Z', quote }
+    const anotherModel = createOfficialCapabilityConsentQuote(snapshot, 'group-script', { modelId: 'airi-default' })!
+    expect(needsOfficialCapabilityConsent(accepted, anotherModel)).toBe(true)
+    const pricing = useOfficialPricingStore()
+    pricing.snapshot = snapshot
+    expect(useOfficialCapabilityConsentStore().accept('user-a', 'group-script', quote)).toBe(true)
+
+    setActivePinia(createPinia())
+    expect(useOfficialCapabilityConsentStore().needsConsent('user-a', 'group-script', quote)).toBe(false)
+    expect(useOfficialCapabilityConsentStore().needsConsent('user-b', 'group-script', quote)).toBe(true)
+  })
+
   it('persists, reloads and revokes accepted terms', () => {
     const pricing = useOfficialPricingStore()
     pricing.snapshot = snapshot
@@ -97,12 +117,33 @@ describe('official capability consent', () => {
     expect(restored.needsConsent('user-a', 'web-search', quote)).toBe(true)
   })
 
+  it('receives remote account consent and revocation without a screenshot scheduler and stops listening on disposal', () => {
+    const addEventListener = vi.fn()
+    const removeEventListener = vi.fn()
+    vi.stubGlobal('window', { addEventListener, removeEventListener })
+    useOfficialPricingStore().snapshot = snapshot
+    const store = useOfficialCapabilityConsentStore()
+    const quote = store.getQuote('vision')!
+    const syncConsent = addEventListener.mock.calls.find(([type]) => type === 'storage')?.[1] as (event: Pick<StorageEvent, 'key' | 'newValue'>) => void
+    syncConsent({
+      key: 'settings/official-capability-consents',
+      newValue: JSON.stringify({ [JSON.stringify(['remote-user', 'vision'])]: { acceptedAt: '2026-09-26T00:00:00Z', quote } }),
+    })
+    expect(store.needsConsent('remote-user', 'vision', quote)).toBe(false)
+    expect(store.needsConsent('another-user', 'vision', quote)).toBe(true)
+    syncConsent({ key: null, newValue: null })
+    expect(store.needsConsent('remote-user', 'vision', quote)).toBe(true)
+    store.$dispose()
+    expect(removeEventListener).toHaveBeenCalledWith('storage', syncConsent)
+  })
+
   it('does not request interactive consent for ordinary speech', () => {
     const pricing = useOfficialPricingStore()
     pricing.snapshot = snapshot
     const store = useOfficialCapabilityConsentStore()
 
     expect(requiresOfficialCapabilityConsent('web-search')).toBe(true)
+    expect(requiresOfficialCapabilityConsent('vision')).toBe(true)
     expect(store.needsConsent('user-a', 'web-search')).toBe(true)
     expect(requiresOfficialCapabilityConsent('speech')).toBe(false)
     expect(store.needsConsent(undefined, 'speech')).toBe(false)

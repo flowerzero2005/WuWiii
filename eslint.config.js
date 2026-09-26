@@ -11,10 +11,22 @@ export default defineConfig({
   vue: true,
 }, {
   ignores: [
+    'cspell.config.yaml',
+    'cspell.config.yml',
+    'crowdin.yaml',
+    'crowdin.yml',
     '**/assets/js/**',
     '**/assets/live2d/models/**',
     'apps/stage-tamagotchi/out/**',
     'apps/stage-tamagotchi/src/bindings/**',
+    'apps/stage-tamagotchi/src-tauri/**',
+    'apps/stage-tamagotchi-electron/out/**',
+    'apps/stage-tamagotchi-electron/src/renderer/bindings/**',
+    'apps/stage-pocket/ios/**',
+    'apps/stage-pocket/android/**',
+    'crates/**',
+    '**/drizzle/**',
+    '**/.astro/**',
   ],
 }, {
   rules: {
@@ -22,6 +34,10 @@ export default defineConfig({
     'pnpm/json-enforce-catalog': 'off',
     'pnpm/yaml-enforce-settings': 'off',
     'antfu/import-dedupe': 'error',
+    // NOTICE: @e18e/eslint-plugin@0.2.0 `lib/rules/prefer-array-fill.js:1-5`
+    // treats every zero-argument factory as constant. Its fix shares mutable
+    // vectors/DP rows and runs Promise factories only once, changing behavior.
+    'e18e/prefer-array-fill': 'off',
     // TODO: remove this
     'depend/ban-dependencies': 'warn',
     'import/order': 'off',

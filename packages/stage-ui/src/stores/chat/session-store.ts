@@ -1,6 +1,7 @@
 import type { ChatHistoryItem } from '../../types/chat'
 import type { ChatRoomParticipantSnapshot, ChatSessionMeta, ChatSessionRecord, ChatSessionsExport, ChatSessionsIndex } from '../../types/chat-session'
 import type { GroupRoomScriptState } from './group-script'
+import type { GroupScriptRuntimeCommand } from './group-script-runtime'
 
 import { nanoid } from 'nanoid'
 import { defineStore, storeToRefs } from 'pinia'
@@ -18,7 +19,9 @@ import { useUserIdentityStore } from '../user-identity'
 import { collectChatSyncCharacterIds, normalizeChatSyncCharacterId } from './chat-sync-members'
 import { GROUP_CHAT_MAX_PARTICIPANTS, GROUP_CHAT_MIN_PARTICIPANTS, normalizeGroupParticipantIds } from './group-chat'
 import { parseGroupRoomScriptState } from './group-script'
+import { reduceGroupScriptRuntimeCommand } from './group-script-runtime'
 import { useAssistantInnerVoiceNoteStore } from './inner-voice-notes'
+import { withSessionRecordLock, withUserSessionIndexLock } from './session-record-lock'
 
 interface DeleteSessionMessageTarget {
   messageId?: string
@@ -364,6 +367,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     return sanitizeSnapshotValue(value) as T
   }
 
+  function enqueueSessionPersist(sessionId: string, task: () => Promise<void>, ownerId = sessionMetas.value[sessionId]?.userId ?? getCurrentUserId()) {
+    return enqueuePersist(() => withSessionRecordLock(sessionId, () => withUserSessionIndexLock(ownerId, task)))
+  }
+
   function isValidRoomScriptRevision(value: unknown): value is number {
     return Number.isSafeInteger(value) && Number(value) >= 0
   }
@@ -562,15 +569,20 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         if (!cachedRecord)
           return cachedRecord
 
-        const normalizedMessages = cachedRecord.messages.map(message => message.id ? message : { ...message, id: nanoid() })
-        if (normalizedMessages.some((message, index) => cachedRecord?.messages[index]?.id !== message.id)) {
-          cachedRecord = {
-            ...cachedRecord,
-            messages: normalizedMessages,
+        await withSessionRecordLock(sessionId, async () => {
+          cachedRecord = await chatSessionsRepo.getSession(sessionId)
+          if (!cachedRecord)
+            return
+          const normalizedMessages = cachedRecord.messages.map(message => message.id ? message : { ...message, id: nanoid() })
+          if (normalizedMessages.some((message, index) => cachedRecord?.messages[index]?.id !== message.id)) {
+            cachedRecord = { ...cachedRecord, messages: normalizedMessages }
+            await chatSessionsRepo.saveSession(sessionId, cachedRecord)
           }
-          await chatSessionsRepo.saveSession(sessionId, cachedRecord)
-        }
+        })
+        if (!cachedRecord)
+          return cachedRecord
 
+        const normalizedMessages = cachedRecord.messages
         const members: Array<
           | { type: 'user', userId: string }
           | { type: 'character', characterId: string }
@@ -736,7 +748,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         if (characterIndex.activeSessionId === sourceSessionId)
           nextActiveSessionId = nextSessionId
 
-        await enqueuePersist(() => chatSessionsRepo.saveSession(nextSessionId, nextRecord))
+        await enqueueSessionPersist(nextSessionId, () => chatSessionsRepo.saveSession(nextSessionId, nextRecord))
       }
 
       const availableSessionIds = Object.keys(nextSessions)
@@ -749,7 +761,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       }
     }
 
-    await enqueuePersist(() => chatSessionsRepo.saveIndex(nextIndex))
+    await enqueuePersist(() => withUserSessionIndexLock(targetUserId, async () => {
+      if (!await chatSessionsRepo.getIndex(targetUserId))
+        await chatSessionsRepo.saveIndex(nextIndex)
+    }))
   }
 
   function normalizeSessionsIndex(stored: ChatSessionsIndex, currentUserId: string): ChatSessionsIndex {
@@ -790,11 +805,129 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     return index.value.characters?.[characterId] ?? null
   }
 
-  async function persistIndex() {
-    if (!index.value)
+  function adoptPersistedIndex(latest: ChatSessionsIndex) {
+    if (index.value?.userId === latest.userId || (!index.value && getCurrentUserId() === latest.userId))
+      index.value = cloneSnapshot(latest)
+  }
+
+  async function latestSessionIndex(ownerId: string) {
+    const stored = await chatSessionsRepo.getIndex(ownerId)
+    return normalizeSessionsIndex(stored ?? { userId: ownerId, characters: {} }, ownerId)
+  }
+
+  function forgetMissingSession(sessionId: string, replacementActiveSessionId = '') {
+    delete sessionMetas.value[sessionId]
+    delete sessionMessages.value[sessionId]
+    roomScriptCache.delete(sessionId)
+    staleRoomScriptSessionIds.delete(sessionId)
+    loadedSessions.delete(sessionId)
+    loadingSessions.delete(sessionId)
+    sessionAccessOrder.delete(sessionId)
+    if (Object.hasOwn(sessionGenerations.value, sessionId))
+      sessionGenerations.value[sessionId] += 1
+    if (activeSessionId.value === sessionId)
+      activeSessionId.value = replacementActiveSessionId
+  }
+
+  /** Called inside the session -> user-index locks. Only insert creates membership. */
+  async function saveSessionWithIndex(record: ChatSessionRecord, options?: { insert?: boolean, setActive?: boolean }) {
+    const meta = record.meta
+    const latest = await latestSessionIndex(meta.userId)
+    const existing = latest.characters[meta.characterId]
+    if (!options?.insert && !existing?.sessions[meta.sessionId]) {
+      adoptPersistedIndex(latest)
+      forgetMissingSession(meta.sessionId, existing?.activeSessionId)
+      return false
+    }
+    const characterIndex = existing ?? { activeSessionId: meta.sessionId, sessions: {} }
+    characterIndex.sessions[meta.sessionId] = cloneSnapshot(meta)
+    if (options?.setActive)
+      characterIndex.activeSessionId = meta.sessionId
+    latest.characters[meta.characterId] = characterIndex
+    await chatSessionsRepo.saveSession(meta.sessionId, record)
+    try {
+      await chatSessionsRepo.saveIndex(latest)
+    }
+    catch (error) {
+      // The record is durable already. Reload it before another script action;
+      // a retry must repair metadata without repeating the durable command.
+      staleRoomScriptSessionIds.add(meta.sessionId)
+      throw error
+    }
+    adoptPersistedIndex(latest)
+    return true
+  }
+
+  async function persistActiveSession(characterId: string, sessionId: string) {
+    const ownerId = index.value?.userId
+    if (!ownerId)
       return
-    const snapshot = cloneSnapshot(index.value) as ChatSessionsIndex
-    await enqueuePersist(() => chatSessionsRepo.saveIndex(snapshot))
+    await enqueuePersist(() => withUserSessionIndexLock(ownerId, async () => {
+      const latest = await latestSessionIndex(ownerId)
+      const character = latest.characters[characterId]
+      if (character?.sessions[sessionId]) {
+        character.activeSessionId = sessionId
+        await chatSessionsRepo.saveIndex(latest)
+      }
+      else {
+        forgetMissingSession(sessionId, character?.activeSessionId)
+      }
+      adoptPersistedIndex(latest)
+    }))
+  }
+
+  async function deleteSessionWithIndex(sessionId: string, ownerId: string) {
+    const latest = await latestSessionIndex(ownerId)
+    for (const [characterId, character] of Object.entries(latest.characters)) {
+      if (!character.sessions[sessionId])
+        continue
+      delete character.sessions[sessionId]
+      if (character.activeSessionId === sessionId)
+        character.activeSessionId = Object.keys(character.sessions)[0] ?? ''
+      if (Object.keys(character.sessions).length === 0)
+        delete latest.characters[characterId]
+    }
+    await chatSessionsRepo.deleteSession(sessionId)
+    try {
+      await chatSessionsRepo.saveIndex(latest)
+    }
+    catch (error) {
+      adoptPersistedIndex(latest)
+      forgetMissingSession(sessionId)
+      throw error
+    }
+    adoptPersistedIndex(latest)
+  }
+
+  /** Repair only existing membership, inside the session -> user-index locks. */
+  async function reconcileSessionIndex(sessionId: string, ownerId: string, record?: ChatSessionRecord) {
+    const latest = await latestSessionIndex(ownerId)
+    let member = false
+    let changed = false
+    for (const [characterId, character] of Object.entries(latest.characters)) {
+      const meta = character.sessions[sessionId]
+      if (!meta)
+        continue
+      if (record?.meta.userId === ownerId && record.meta.characterId === characterId) {
+        member = true
+        if (JSON.stringify(meta) !== JSON.stringify(record.meta)) {
+          character.sessions[sessionId] = cloneSnapshot(record.meta)
+          changed = true
+        }
+      }
+      else {
+        delete character.sessions[sessionId]
+        if (character.activeSessionId === sessionId)
+          character.activeSessionId = Object.keys(character.sessions)[0] ?? ''
+        changed = true
+      }
+    }
+    if (changed)
+      await chatSessionsRepo.saveIndex(latest)
+    adoptPersistedIndex(latest)
+    if (!member)
+      forgetMissingSession(sessionId)
+    return member
   }
 
   async function persistSessionNow(sessionId: string) {
@@ -802,7 +935,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       return
     let savedRecord: ChatSessionRecord | undefined
 
-    await enqueuePersist(async () => {
+    await enqueueSessionPersist(sessionId, async () => {
       // Capture the latest in-memory state when this queued write actually
       // runs. Group speakers stage their bubbles while earlier speech/typing
       // work is still draining; taking a snapshot before entering the
@@ -824,25 +957,33 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         roomScript = validateRecordRoomScript(persisted)
         roomScriptRevision = persisted.meta.roomScriptRevision
       }
+      // A window that has not yet received a chapter transition must retain
+      // its newly committed announcement. Ordinary message deletion keeps its
+      // existing semantics once this window has the current script revision.
+      if (persisted && persistedRevision > requestedRevision) {
+        for (const message of persisted.messages) {
+          if (message.id?.startsWith('script-act:') && !messages.some(item => item.id === message.id))
+            messages.push(message)
+        }
+      }
 
       const updatedMeta = normalizeSessionMeta({
         ...requestedMeta,
         ...(roomScriptRevision === undefined ? {} : { roomScriptRevision }),
         updatedAt: Math.max(Date.now(), requestedMeta.updatedAt, persisted?.meta.updatedAt ?? 0),
       })
-      setSessionMeta(updatedMeta)
-      roomScriptCache.set(sessionId, roomScript ? cloneSnapshot(roomScript) : undefined)
-      staleRoomScriptSessionIds.delete(sessionId)
-
       savedRecord = {
         meta: cloneSnapshot(updatedMeta),
         messages,
         ...(roomScript ? { roomScript: cloneSnapshot(roomScript) } : {}),
       }
-      const indexSnapshot = index.value ? cloneSnapshot(index.value) as ChatSessionsIndex : undefined
-      await chatSessionsRepo.saveSession(sessionId, savedRecord)
-      if (indexSnapshot)
-        await chatSessionsRepo.saveIndex(indexSnapshot)
+      if (!await saveSessionWithIndex(savedRecord)) {
+        savedRecord = undefined
+        return
+      }
+      setSessionMeta(updatedMeta)
+      roomScriptCache.set(sessionId, roomScript ? cloneSnapshot(roomScript) : undefined)
+      staleRoomScriptSessionIds.delete(sessionId)
     })
 
     if (!savedRecord)
@@ -946,8 +1087,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
 
     const loadPromise = (async () => {
       const stored = await chatSessionsRepo.getSession(sessionId)
+      if (!getIndexedSessionMeta(sessionId))
+        return
 
-      if (stored) {
+      if (stored && getIndexedSessionMeta(sessionId)?.userId === stored.meta.userId) {
         const normalizedRecord = normalizeSessionRecord(stored)
         sessionMetas.value[sessionId] = normalizedRecord.meta
         const currentMessages = sessionMessages.value[sessionId] ?? []
@@ -976,27 +1119,37 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     }
 
     let resolved: GroupRoomScriptState | undefined
-    await enqueuePersist(async () => {
+    await enqueueSessionPersist(sessionId, async () => {
       const stored = await chatSessionsRepo.getSession(sessionId)
       if (!stored) {
-        roomScriptCache.set(sessionId, undefined)
-        staleRoomScriptSessionIds.delete(sessionId)
+        await reconcileSessionIndex(sessionId, meta.userId)
         return
       }
 
       const normalizedRecord = normalizeSessionRecord(stored)
+      if (!await reconcileSessionIndex(sessionId, meta.userId, normalizedRecord))
+        return
       const currentMeta = getSessionMeta(sessionId)
       if (!currentMeta || normalizedRecord.meta.updatedAt >= currentMeta.updatedAt
         || getRoomScriptRevision(normalizedRecord.meta) !== getRoomScriptRevision(currentMeta)) {
         setSessionMeta(normalizedRecord.meta)
       }
       resolved = cacheRoomScriptFromRecord(sessionId, normalizedRecord)
+      sessionMessages.value[sessionId] = mergeSessionMessages(normalizedRecord.messages, sessionMessages.value[sessionId] ?? [])
     })
 
     return resolved ? cloneSnapshot(resolved) : undefined
   }
 
-  async function persistGroupRoomScript(sessionId: string, state: GroupRoomScriptState | undefined) {
+  async function persistGroupRoomScript(
+    sessionId: string,
+    state: GroupRoomScriptState | undefined,
+    options?: {
+      expectedRevision: number
+      signal?: AbortSignal
+      mutate?: (current: GroupRoomScriptState, messageIds: string[]) => GroupRoomScriptState
+    },
+  ) {
     const currentMeta = getSessionMeta(sessionId)
     if (currentMeta?.kind !== 'room')
       throw new Error('Group room scripts can only be attached to room sessions.')
@@ -1004,47 +1157,93 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const validatedState = state
       ? parseGroupRoomScriptState(state, getRoomParticipantIds(currentMeta))
       : undefined
-    const messages = snapshotMessages(ensureSessionMessageIds(sessionId))
     let savedRecord: ChatSessionRecord | undefined
 
-    await enqueuePersist(async () => {
+    await enqueueSessionPersist(sessionId, async () => {
+      options?.signal?.throwIfAborted()
       const persistedRaw = await chatSessionsRepo.getSession(sessionId)
       const persisted = persistedRaw ? normalizeSessionRecord(persistedRaw) : undefined
-      const latestMeta = persisted
-        && (persisted.meta.updatedAt > currentMeta.updatedAt
-          || getRoomScriptRevision(persisted.meta) > getRoomScriptRevision(currentMeta))
-        ? persisted.meta
-        : currentMeta
+      const latestMeta = persisted?.meta ?? currentMeta
 
       if (latestMeta.kind !== 'room')
         throw new Error('Group room scripts can only be attached to room sessions.')
 
-      const latestValidatedState = validatedState
-        ? parseGroupRoomScriptState(validatedState, getRoomParticipantIds(latestMeta))
+      if (options && getRoomScriptRevision(persisted?.meta) !== options.expectedRevision)
+        throw new Error('The group script changed. Reload its current revision before trying again.')
+
+      const mergedMessages = persisted
+        ? snapshotMessages(persisted.messages)
+        : snapshotMessages(ensureSessionMessageIds(sessionId))
+      const currentScript = persisted ? validateRecordRoomScript(persisted) : undefined
+      const nextState = options?.mutate && currentScript
+        ? options.mutate(currentScript, mergedMessages.flatMap(message => message.id ? [message.id] : []))
+        : validatedState
+      if (options?.mutate && nextState === currentScript && persisted) {
+        if (!await reconcileSessionIndex(sessionId, latestMeta.userId, persisted))
+          return
+        savedRecord = persisted
+        setSessionMeta(persisted.meta)
+        sessionMessages.value[sessionId] = mergedMessages
+        cacheRoomScriptFromRecord(sessionId, persisted)
+        return
+      }
+
+      const latestValidatedState = nextState
+        ? parseGroupRoomScriptState(nextState, getRoomParticipantIds(latestMeta))
         : undefined
+      if (options?.mutate && !currentScript)
+        throw new Error('The group script is no longer attached to this room.')
+      const roomScriptRevision = nextRoomScriptRevision(latestMeta)
+      if (latestValidatedState?.progress) {
+        latestValidatedState.chapterRuntime = {
+          ...latestValidatedState.chapterRuntime,
+          evaluations: latestValidatedState.chapterRuntime?.evaluations ?? [],
+          narrationEpoch: latestValidatedState.chapterRuntime?.narrationEpoch ?? roomScriptRevision,
+        }
+      }
+      const progress = latestValidatedState?.progress
+      const currentAct = latestValidatedState?.templateSnapshot.acts?.find(act => act.actId === progress?.currentActId)
+      if (latestValidatedState && progress && currentAct
+        && latestValidatedState.chapterSettings?.showActNarration !== false
+        && latestValidatedState.chapterRuntime?.narratedRevision !== progress.revision) {
+        const id = `script-act:${latestValidatedState.templateSnapshot.id}:${latestValidatedState.chapterRuntime!.narrationEpoch}:${progress.revision}`
+        if (!mergedMessages.some(message => message.id === id)) {
+          const text = `${currentAct.number} · ${currentAct.title}${currentAct.narration ? `\n${currentAct.narration}` : ''}`
+          mergedMessages.push({
+            id,
+            createdAt: Date.now(),
+            role: 'assistant',
+            content: text,
+            slices: [{ type: 'text', text }],
+            tool_results: [],
+            metadata: { messageKind: 'narration', typingCompleted: true, scriptAct: { number: currentAct.number, title: currentAct.title } },
+          })
+        }
+        latestValidatedState.chapterRuntime = {
+          ...latestValidatedState.chapterRuntime,
+          evaluations: latestValidatedState.chapterRuntime?.evaluations ?? [],
+          narratedRevision: progress.revision,
+        }
+      }
       const updatedMeta: ChatSessionMeta = {
         ...latestMeta,
-        roomScriptRevision: nextRoomScriptRevision(currentMeta, persisted?.meta),
+        roomScriptRevision,
         updatedAt: Math.max(Date.now(), latestMeta.updatedAt, persisted?.meta.updatedAt ?? 0),
       }
-      const mergedMessages = persisted
-        ? mergeSessionMessages(messages, persisted.messages)
-        : messages
-
+      options?.signal?.throwIfAborted()
       savedRecord = {
         meta: cloneSnapshot(updatedMeta),
         messages: snapshotMessages(mergedMessages),
         ...(latestValidatedState ? { roomScript: cloneSnapshot(latestValidatedState) } : {}),
       }
+      if (!await saveSessionWithIndex(savedRecord)) {
+        savedRecord = undefined
+        return
+      }
       setSessionMeta(updatedMeta)
       sessionMessages.value[sessionId] = mergedMessages
       roomScriptCache.set(sessionId, latestValidatedState ? cloneSnapshot(latestValidatedState) : undefined)
       staleRoomScriptSessionIds.delete(sessionId)
-
-      const indexSnapshot = index.value ? cloneSnapshot(index.value) as ChatSessionsIndex : undefined
-      await chatSessionsRepo.saveSession(sessionId, savedRecord)
-      if (indexSnapshot)
-        await chatSessionsRepo.saveIndex(indexSnapshot)
     })
 
     if (!savedRecord)
@@ -1055,8 +1254,24 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     return savedRecord.roomScript ? cloneSnapshot(savedRecord.roomScript) : undefined
   }
 
-  async function updateGroupRoomScript(sessionId: string, state: GroupRoomScriptState) {
-    return await persistGroupRoomScript(sessionId, state)
+  async function updateGroupRoomScript(sessionId: string, state: GroupRoomScriptState, expectedRevision?: number) {
+    return await persistGroupRoomScript(sessionId, state, expectedRevision === undefined ? undefined : { expectedRevision })
+  }
+
+  async function mutateGroupRoomScript(
+    sessionId: string,
+    expectedRevision: number,
+    mutate: (current: GroupRoomScriptState, messageIds: string[]) => GroupRoomScriptState,
+    signal?: AbortSignal,
+  ) {
+    const saved = await persistGroupRoomScript(sessionId, undefined, { expectedRevision, mutate, signal })
+    if (!saved)
+      throw new Error('The group script is no longer attached to this room.')
+    return saved
+  }
+
+  async function executeGroupScriptCommand(sessionId: string, expectedRevision: number, command: GroupScriptRuntimeCommand, signal?: AbortSignal) {
+    return mutateGroupRoomScript(sessionId, expectedRevision, (current, messageIds) => reduceGroupScriptRuntimeCommand(current, command, messageIds), signal)
   }
 
   async function clearGroupRoomScript(sessionId: string) {
@@ -1067,7 +1282,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const messages = snapshotMessages(ensureSessionMessageIds(sessionId))
     let savedRecord: ChatSessionRecord | undefined
 
-    await enqueuePersist(async () => {
+    await enqueueSessionPersist(sessionId, async () => {
       const persistedRaw = await chatSessionsRepo.getSession(sessionId)
       const persisted = persistedRaw ? normalizeSessionRecord(persistedRaw) : undefined
       const persistedScript = persisted ? validateRecordRoomScript(persisted) : undefined
@@ -1089,15 +1304,14 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         : messages
 
       savedRecord = { meta: cloneSnapshot(updatedMeta), messages: snapshotMessages(mergedMessages) }
+      if (!await saveSessionWithIndex(savedRecord)) {
+        savedRecord = undefined
+        return
+      }
       setSessionMeta(updatedMeta)
       sessionMessages.value[sessionId] = mergedMessages
       roomScriptCache.set(sessionId, undefined)
       staleRoomScriptSessionIds.delete(sessionId)
-
-      const indexSnapshot = index.value ? cloneSnapshot(index.value) as ChatSessionsIndex : undefined
-      await chatSessionsRepo.saveSession(sessionId, savedRecord)
-      if (indexSnapshot)
-        await chatSessionsRepo.saveIndex(indexSnapshot)
     })
 
     if (!savedRecord)
@@ -1134,32 +1348,16 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         ? [generateInitialMessageFromPrompt('Group chat room. The selected character prompt is injected for each reply.')]
         : generateInitialMessages(characterId)
 
+    const record: ChatSessionRecord = { meta, messages: initialMessages }
+    await enqueueSessionPersist(sessionId, async () => {
+      await saveSessionWithIndex(record, { insert: true, setActive: options?.setActive !== false })
+    }, currentUserId)
     sessionMetas.value[sessionId] = meta
     sessionMessages.value[sessionId] = initialMessages
     ensureGeneration(sessionId)
     loadedSessions.add(sessionId)
     touchSessionAccess(sessionId)
     evictInactiveSessions([sessionId])
-
-    if (!index.value) {
-      index.value = { userId: currentUserId, characters: {} }
-    }
-    else if (!index.value.characters) {
-      index.value.characters = {}
-    }
-
-    const characterIndex = index.value.characters?.[characterId] ?? {
-      activeSessionId: sessionId,
-      sessions: {},
-    }
-    characterIndex.sessions[sessionId] = meta
-    if (options?.setActive !== false)
-      characterIndex.activeSessionId = sessionId
-    index.value.characters[characterId] = characterIndex
-
-    const record: ChatSessionRecord = { meta, messages: initialMessages }
-    await enqueuePersist(() => chatSessionsRepo.saveSession(sessionId, record))
-    await persistIndex()
     scheduleSync(sessionId)
 
     if (options?.setActive !== false)
@@ -1424,7 +1622,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const characterIndex = index.value?.characters?.[characterId]
     if (characterIndex) {
       characterIndex.activeSessionId = sessionId
-      void persistIndex()
+      void persistActiveSession(characterId, sessionId)
     }
 
     ensureSessionLoaded(sessionId)
@@ -1466,15 +1664,20 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const characterId = getCurrentCharacterId()
     const sessionIds = new Set<string>()
 
-    if (index.value?.userId === currentUserId) {
-      for (const character of Object.values(index.value.characters ?? {})) {
-        for (const sessionId of Object.keys(character.sessions))
-          sessionIds.add(sessionId)
-      }
+    const latest = await withUserSessionIndexLock(currentUserId, () => latestSessionIndex(currentUserId))
+    for (const character of Object.values(latest.characters)) {
+      for (const sessionId of Object.keys(character.sessions))
+        sessionIds.add(sessionId)
+    }
+    // Invalidate streams before deletion starts, and retain their tombstones.
+    // Clearing generations to zero could make an old captured zero valid again.
+    for (const sessionId of sessionIds) {
+      ensureGeneration(sessionId)
+      sessionGenerations.value[sessionId] += 1
     }
 
     for (const sessionId of sessionIds)
-      await enqueuePersist(() => chatSessionsRepo.deleteSession(sessionId))
+      await enqueueSessionPersist(sessionId, () => deleteSessionWithIndex(sessionId, currentUserId), currentUserId)
 
     for (const [sessionId, scheduled] of scheduledSessionPersists) {
       clearTimeout(scheduled.timer)
@@ -1486,16 +1689,14 @@ export const useChatSessionStore = defineStore('chat-session', () => {
 
     sessionMessages.value = {}
     sessionMetas.value = {}
-    sessionGenerations.value = {}
     roomScriptCache.clear()
     staleRoomScriptSessionIds.clear()
     loadedSessions.clear()
     loadingSessions.clear()
 
-    index.value = {
-      userId: currentUserId,
-      characters: {},
-    }
+    // Reset removes the initial snapshot only. Sessions inserted while those
+    // records were being deleted retain their durable membership.
+    index.value = await withUserSessionIndexLock(currentUserId, () => latestSessionIndex(currentUserId))
 
     // 重置对话初始化状态，确保下次对话会重新初始化
     const { resetConversationInitialization } = await import('./context-providers')
@@ -1512,37 +1713,53 @@ export const useChatSessionStore = defineStore('chat-session', () => {
 
     refreshFromPersistencePromise = (async () => {
       const currentUserId = await resolveCurrentUserId()
-      const storedIndex = await chatSessionsRepo.getIndex(currentUserId)
-      if (!storedIndex || getCurrentUserId() !== currentUserId)
+      const storedIndex = await withUserSessionIndexLock(currentUserId, () => latestSessionIndex(currentUserId))
+      if (getCurrentUserId() !== currentUserId)
         return
 
-      const normalizedStoredIndex = normalizeSessionsIndex(storedIndex, currentUserId)
-      const currentIndex = index.value
-
-      // Persisted metadata is the baseline, while newer in-memory metadata stays
-      // authoritative until its queued write completes.
-      for (const [characterId, currentCharacter] of Object.entries(currentIndex?.characters ?? {})) {
-        const storedCharacter = normalizedStoredIndex.characters[characterId]
-        if (!storedCharacter) {
-          normalizedStoredIndex.characters[characterId] = cloneSnapshot(currentCharacter)
-          continue
-        }
-
-        for (const [sessionId, currentMeta] of Object.entries(currentCharacter.sessions)) {
-          const storedMeta = storedCharacter.sessions[sessionId]
-          if (!storedMeta || currentMeta.updatedAt > storedMeta.updatedAt)
-            storedCharacter.sessions[sessionId] = cloneSnapshot(currentMeta)
+      const sessionsToRefresh = new Set([...loadedSessions, activeSessionId.value].filter(Boolean))
+      const records = new Map<string, ChatSessionRecord>()
+      // Inspect durable members under the same locks as writers. This also
+      // repairs record/index partial failures, including deleted records.
+      for (const character of Object.values(storedIndex.characters)) {
+        for (const sessionId of Object.keys(character.sessions)) {
+          await enqueueSessionPersist(sessionId, async () => {
+            const raw = await chatSessionsRepo.getSession(sessionId)
+            const record = raw ? normalizeSessionRecord(raw) : undefined
+            if (await reconcileSessionIndex(sessionId, currentUserId, record) && record)
+              records.set(sessionId, record)
+          }, currentUserId)
         }
       }
+      if (getCurrentUserId() !== currentUserId)
+        return
 
-      index.value = normalizedStoredIndex
-
-      const sessionsToRefresh = new Set([...loadedSessions, activeSessionId.value].filter(Boolean))
+      const latest = await withUserSessionIndexLock(currentUserId, () => latestSessionIndex(currentUserId))
+      adoptPersistedIndex(latest)
+      const memberIds = new Set(Object.values(latest.characters).flatMap(character => Object.keys(character.sessions)))
+      const knownIds = new Set([...Object.keys(sessionMetas.value), ...Object.keys(sessionMessages.value), ...loadedSessions, ...loadingSessions.keys(), ...roomScriptCache.keys(), ...sessionAccessOrder.keys()])
+      for (const sessionId of knownIds) {
+        if (!memberIds.has(sessionId))
+          forgetMissingSession(sessionId)
+      }
+      if (!memberIds.has(activeSessionId.value)) {
+        const character = latest.characters[getCurrentCharacterId()]
+        activeSessionId.value = character?.sessions[character.activeSessionId]
+          ? character.activeSessionId
+          : Object.keys(character?.sessions ?? {})[0] ?? ''
+      }
+      if (activeSessionId.value)
+        sessionsToRefresh.add(activeSessionId.value)
       for (const sessionId of sessionsToRefresh) {
-        const storedRaw = await chatSessionsRepo.getSession(sessionId)
-        if (!storedRaw || storedRaw.meta.userId !== currentUserId)
+        const stored = records.get(sessionId)
+        if (!memberIds.has(sessionId) || !stored)
           continue
-        const stored = normalizeSessionRecord(storedRaw)
+        const indexedMeta = latest.characters[stored.meta.characterId]?.sessions[sessionId]
+        if (indexedMeta && (indexedMeta.updatedAt > stored.meta.updatedAt
+          || getRoomScriptRevision(indexedMeta) > getRoomScriptRevision(stored.meta))) {
+          staleRoomScriptSessionIds.add(sessionId)
+          continue
+        }
 
         const currentMeta = sessionMetas.value[sessionId]
         const storedRevision = getRoomScriptRevision(stored.meta)
@@ -1589,7 +1806,8 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       scheduled.resolve()
     }
 
-    await enqueuePersist(() => chatSessionsRepo.deleteSession(sessionId))
+    const ownerId = meta.userId
+    await enqueueSessionPersist(sessionId, () => deleteSessionWithIndex(sessionId, ownerId), ownerId)
     delete sessionMessages.value[sessionId]
     delete sessionMetas.value[sessionId]
     delete sessionGenerations.value[sessionId]
@@ -1598,16 +1816,6 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     loadedSessions.delete(sessionId)
     loadingSessions.delete(sessionId)
     sessionAccessOrder.delete(sessionId)
-
-    for (const characterIndex of Object.values(index.value?.characters ?? {})) {
-      if (!characterIndex.sessions[sessionId])
-        continue
-      delete characterIndex.sessions[sessionId]
-      if (characterIndex.activeSessionId === sessionId)
-        characterIndex.activeSessionId = Object.keys(characterIndex.sessions)[0] ?? ''
-    }
-
-    await persistIndex()
 
     if (activeSessionId.value === sessionId) {
       const characterIndex = getCharacterIndex(getCurrentCharacterId())
@@ -1733,11 +1941,13 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       normalizedRecords.push([sessionId, normalizedRecord])
     }
 
+    const replacement = index.value ? cloneSnapshot(index.value) as ChatSessionsIndex : undefined
     await enqueuePersist(async () => {
       for (const [sessionId, record] of normalizedRecords)
-        await chatSessionsRepo.saveSession(sessionId, record)
-      if (index.value)
-        await chatSessionsRepo.saveIndex(cloneSnapshot(index.value) as ChatSessionsIndex)
+        await withSessionRecordLock(sessionId, () => chatSessionsRepo.saveSession(sessionId, record))
+      if (replacement) {
+        await withUserSessionIndexLock(replacement.userId, () => chatSessionsRepo.saveIndex(replacement))
+      }
     })
 
     await ensureActiveSessionForCharacter()
@@ -1790,6 +2000,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     removeGroupParticipant,
     resolveGroupRoomScript,
     updateGroupRoomScript,
+    executeGroupScriptCommand,
     clearGroupRoomScript,
     deleteSession,
     selectOrCreateSessionForCharacter,

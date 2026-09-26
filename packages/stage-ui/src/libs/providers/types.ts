@@ -112,12 +112,16 @@ export type WebSearchProviderFailureKind
     | 'server'
     | 'upstream'
     | 'unknown'
+    | 'budget'
 
 export interface WebSearchProviderParams {
+  headers?: Record<string, string>
+  searchBudget?: { maxRequests: number, maxPoints: number, priceVersion?: string }
   query: string
   maxResults?: number
   timeRange?: string
   searchDepth?: 'basic' | 'advanced'
+  signal?: AbortSignal
 }
 
 export interface WebSearchProviderResult {
@@ -130,6 +134,7 @@ export interface WebSearchProviderResult {
 }
 
 export interface WebSearchProviderResponse {
+  attemptsUsed?: number
   results: WebSearchProviderResult[]
 }
 

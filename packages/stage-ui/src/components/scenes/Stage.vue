@@ -269,6 +269,7 @@ const performanceTimersBySpeechIntent = new Map<string, Set<ReturnType<typeof se
 const streamingPerformanceStateBySpeechIntent = new Map<string, StreamingCharacterPerformanceState>()
 const endedSpeechIntentIds = new Set<string>()
 const recentSemanticActions = new Map<string, number>()
+const dispatchedPerformanceTurns = new Set<string>()
 const latestExpressionTurnIdByScope = new Map<string, string>()
 let currentPerformanceText = ''
 let currentPerformanceBeats: Array<{ actionCardId?: string, emotion?: { name: string, intensity: number }, offset: number }> = []
@@ -929,8 +930,10 @@ function requestAutomaticActionCard(actionCardId: string, options: { personaCard
   const actionKey = `${scopeId}:${options.personaCardId ?? 'default'}:${actionCardId}`
   const now = Date.now()
   const previousAt = recentSemanticActions.get(actionKey)
-  if (!shouldAcceptCharacterPerformanceAction(previousAt, now))
+  if (!shouldAcceptCharacterPerformanceAction(previousAt, now)) {
+    console.warn('[Stage] ACT action skipped by debounce', { actionCardId, scopeId, turnId: options.turnId })
     return
+  }
   recentSemanticActions.set(actionKey, now)
   for (const [key, at] of recentSemanticActions) {
     if (now - at > 15_000)
@@ -940,17 +943,25 @@ function requestAutomaticActionCard(actionCardId: string, options: { personaCard
     pictureOcAction.value = resolvePictureOcSemanticActionId(actionCardId)
     return
   }
-  if (stageModelRenderer.value !== 'live2d')
+  if (stageModelRenderer.value !== 'live2d') {
+    console.warn('[Stage] ACT action skipped: unsupported stage renderer', { actionCardId, renderer: stageModelRenderer.value, turnId: options.turnId })
     return
+  }
 
   const motionResource = live2dAvailableMotions.value.find(motion => (
     createLive2DPerformanceMotionResourceId(motion.motionName, motion.motionIndex) === actionCardId
   ))
   if (motionResource) {
-    live2dStore.requestLive2DAction('persona:semantic-resource', {
+    const binding = {
       motion: { group: motionResource.motionName, index: motionResource.motionIndex },
       priority: 'high',
-    })
+    } as const
+    const request = live2dStore.requestLive2DAction('persona:semantic-resource', binding)
+    if (!request) {
+      console.warn('[Stage] ACT action rejected by Live2D gate; retrying with turn priority', { actionCardId, kind: 'motion', turnId: options.turnId })
+      if (!live2dStore.requestLive2DAction('persona:semantic-resource', { ...binding, priority: 'force' }))
+        console.warn('[Stage] ACT action rejected after turn-priority retry', { actionCardId, kind: 'motion', turnId: options.turnId })
+    }
     return
   }
 
@@ -958,12 +969,18 @@ function requestAutomaticActionCard(actionCardId: string, options: { personaCard
     createLive2DPerformanceExpressionResourceId(expression.expressionName, expression.expressionIndex) === actionCardId
   ))
   if (expressionResource) {
-    live2dStore.requestLive2DAction('persona:semantic-resource', {
+    const binding = {
       cleanupMode: 'auto',
       durationMs: 2400,
       expression: { index: expressionResource.expressionIndex, name: expressionResource.expressionName },
       priority: 'high',
-    })
+    } as const
+    const request = live2dStore.requestLive2DAction('persona:semantic-resource', binding)
+    if (!request) {
+      console.warn('[Stage] ACT action rejected by Live2D gate; retrying with turn priority', { actionCardId, kind: 'expression', turnId: options.turnId })
+      if (!live2dStore.requestLive2DAction('persona:semantic-resource', { ...binding, priority: 'force' }))
+        console.warn('[Stage] ACT action rejected after turn-priority retry', { actionCardId, kind: 'expression', turnId: options.turnId })
+    }
     return
   }
 
@@ -971,17 +988,43 @@ function requestAutomaticActionCard(actionCardId: string, options: { personaCard
     live2dCompositeExpressionPresets.value,
     stageModelSelected.value,
   )[actionCardId]
-  if (!preset)
+  if (!preset) {
+    console.warn('[Stage] ACT action card was not found', { actionCardId, modelId: stageModelSelected.value, turnId: options.turnId })
     return
+  }
 
-  live2dStore.requestLive2DAction('persona:semantic-action', {
+  const binding = {
     cleanupMode: preset.cleanupMode,
     customActionPresetId: preset.id,
     durationMs: preset.durationMs,
     parameterClaims: preset.parameterClaims,
     interruptible: preset.interruptible,
     priority: 'high',
-  })
+  } as const
+  const request = live2dStore.requestLive2DAction('persona:semantic-action', binding)
+  if (!request) {
+    console.warn('[Stage] ACT action rejected by Live2D gate; retrying with turn priority', { actionCardId, kind: 'preset', turnId: options.turnId })
+    if (!live2dStore.requestLive2DAction('persona:semantic-action', { ...binding, priority: 'force' }))
+      console.warn('[Stage] ACT action rejected after turn-priority retry', { actionCardId, kind: 'preset', turnId: options.turnId })
+  }
+}
+
+function dispatchTurnPerformanceAction(turnId: string, scopeId: string, personaCardId: string | undefined, beats: Array<Pick<CharacterPerformanceBeat, 'actionCardId'>>) {
+  // Live2D actions already travel through chat.ts -> live2dStore's ordered
+  // cross-window queue, including text-only turns. Dispatching them again
+  // from the mirrored assistant-end hook would play one ACT twice.
+  if (stageModelRenderer.value === 'live2d')
+    return
+
+  if (dispatchedPerformanceTurns.has(turnId))
+    return
+
+  const actionCardId = beats.find(beat => Boolean(beat.actionCardId))?.actionCardId
+  if (!actionCardId)
+    return
+
+  dispatchedPerformanceTurns.add(turnId)
+  requestAutomaticActionCard(actionCardId, { personaCardId, scopeId, turnId })
 }
 
 function applyCharacterPerformanceBaseline(
@@ -1040,13 +1083,6 @@ function scheduleWholeSpeechPerformance(intentId: string, durationMs: number, te
           profile,
           scopeId: plan.scopeId,
           transitionMs: beat.attackMs,
-          turnId: plan.turnId,
-        })
-      }
-      if (beat.actionCardId) {
-        requestAutomaticActionCard(beat.actionCardId, {
-          personaCardId: performancePersonaBySpeechIntent.get(intentId),
-          scopeId: plan.scopeId,
           turnId: plan.turnId,
         })
       }
@@ -1140,13 +1176,6 @@ function handleSpeechDisplaySyncEvent(event: SpeechDisplaySyncEvent) {
           profile,
           scopeId: performancePlanBySpeechIntent.get(event.intentId)?.scopeId ?? chatSessionStore.activeSessionId,
           transitionMs: streamingDecision.beat.attackMs,
-          turnId: event.intentId,
-        })
-      }
-      if (streamingDecision.beat?.actionCardId) {
-        requestAutomaticActionCard(streamingDecision.beat.actionCardId, {
-          personaCardId: performancePersonaBySpeechIntent.get(event.intentId),
-          scopeId: performancePlanBySpeechIntent.get(event.intentId)?.scopeId,
           turnId: event.intentId,
         })
       }
@@ -2138,6 +2167,12 @@ chatHookCleanups.push(onAssistantResponseEnd(async (_message, context) => {
           : []
       })
     : []
+  dispatchTurnPerformanceAction(
+    turnId,
+    scopeId,
+    context.turn?.persona?.personaCardId ?? context.turn?.speaker?.characterId,
+    currentPerformanceBeats,
+  )
   const speechIntentId = context.speech?.intentId
   const performanceProfile = speechIntentId
     ? performanceProfileBySpeechIntent.get(speechIntentId) ?? createCurrentPerformanceCapabilityProfile()
@@ -2204,6 +2239,7 @@ onUnmounted(() => {
   lipSyncStarted.value = false
   clearSpeakingPlaybackEndTimer()
   clearAllSpeechPerformanceState()
+  dispatchedPerformanceTurns.clear()
   clearLive2DRandomIdleTimer()
 })
 

@@ -1,12 +1,7 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { expect, it } from 'vitest'
 
 import { getBrandingPlan, getBrandingState, getDevRuntimeIdentity } from './prepare-wuwiii-dev-electron.mjs'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const state = {
   electronVersion: '40.6.1',
   baseHash: 'base',
@@ -122,45 +117,4 @@ it('persists the hashes that identify the prepared branded runtime', () => {
   })
 })
 
-it('launchers make electron-vite spawn electron.exe from the icon-versioned runtime cache', () => {
-  const batchLauncher = readFileSync(join(repoRoot, '.internal-start-desktop.cmd'), 'utf8')
-  const powershellLauncher = readFileSync(join(repoRoot, 'start-desktop.ps1'), 'utf8')
-  const hiddenLauncher = readFileSync(join(repoRoot, 'start-wuwiii.vbs'), 'utf8')
-  const brandingScript = readFileSync(join(repoRoot, 'scripts', 'brand', 'prepare-wuwiii-dev-electron.mjs'), 'utf8')
-
-  for (const source of [batchLauncher, powershellLauncher, hiddenLauncher, brandingScript])
-    expect(source).not.toMatch(/wuwiii-electron\.exe/i)
-
-  expect(brandingScript).toContain('\'.cache\', \'wuwiii-dev-electron\', runtimeIdentity')
-  expect(brandingScript).toContain('DEV_RUNTIME_CACHE_VERSION = 2')
-  expect(brandingScript).toContain('const runtimeExecutable = join(runtimeDist, \'electron.exe\')')
-  expect(brandingScript).toMatch(/writeFileSync\(electronPathFile, 'electron\.exe'\)/)
-  expect(brandingScript).toContain('writeFileSync(statePath, `${JSON.stringify(getBrandingState({')
-  expect(hiddenLauncher).toContain('start-desktop.ps1')
-  expect(hiddenLauncher).not.toContain('.internal-start-desktop.cmd')
-  expect(hiddenLauncher).not.toContain('prepare-wuwiii-dev-electron.mjs')
-  expect(hiddenLauncher).not.toContain('AIRI_PRELAUNCH_TARGET_EXE')
-  expect(powershellLauncher.match(/prepare-wuwiii-dev-electron\.mjs/g)).toHaveLength(1)
-  expect(powershellLauncher).toContain('$env:ELECTRON_OVERRIDE_DIST_PATH')
-  expect(powershellLauncher).toContain('$env:ELECTRON_EXEC_PATH = Join-Path $env:ELECTRON_OVERRIDE_DIST_PATH \'electron.exe\'')
-  expect(powershellLauncher).toContain('$env:AIRI_PRELAUNCH_TARGET_EXE = $env:ELECTRON_EXEC_PATH')
-  expect(batchLauncher).toContain('set "ELECTRON_EXEC_PATH=%ELECTRON_OVERRIDE_DIST_PATH%\\electron.exe"')
-  expect(powershellLauncher.indexOf('AIRI_PRELAUNCH_TARGET_EXE')).toBeGreaterThan(
-    powershellLauncher.indexOf('ELECTRON_EXEC_PATH'),
-  )
-  expect(powershellLauncher.indexOf('.internal-starting.ps1')).toBeGreaterThan(
-    powershellLauncher.indexOf('AIRI_PRELAUNCH_TARGET_EXE'),
-  )
-  expect(powershellLauncher.indexOf('pnpm.cmd run dev:tamagotchi')).toBeGreaterThan(
-    powershellLauncher.indexOf('AIRI_PRELAUNCH_TARGET_EXE'),
-  )
-
-  for (const launcher of [batchLauncher, powershellLauncher]) {
-    const prepareIndex = launcher.indexOf('prepare-wuwiii-dev-electron.mjs')
-    const electronExecIndex = launcher.indexOf('ELECTRON_EXEC_PATH')
-    expect(prepareIndex).toBeGreaterThan(launcher.indexOf('5173'))
-    expect(prepareIndex).toBeGreaterThan(launcher.indexOf('6121'))
-    expect(electronExecIndex).toBeGreaterThan(prepareIndex)
-    expect(launcher.indexOf('pnpm.cmd run dev:tamagotchi')).toBeGreaterThan(electronExecIndex)
-  }
-})
+// Launcher checks require the internal launch scripts excluded from this mirror.

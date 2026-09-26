@@ -905,7 +905,7 @@ export const useLive2d = defineStore('live2d', () => {
   // actionCardId 就是 `motion:JSON.stringify([group,index])` /
   // `expression:JSON.stringify([name,index])` 格式，可直接反解析，无需查表；
   // 无前缀的 id 视为 composite expression preset。
-  function resolveLive2DActionCardBinding(actionCardId: string): CrossWindowLive2DActionRequest | undefined {
+  function resolveLive2DActionCardBinding(actionCardId: string, modelId: string): CrossWindowLive2DActionRequest | undefined {
     try {
       // NOTICE: priority 用 'force'（对齐设置页面 previewCompositeExpressionPreset
       // 的已验证路径）。'high' 会被 canRequestLive2DAction 的锁/优先级门静默拒绝
@@ -923,7 +923,9 @@ export const useLive2d = defineStore('live2d', () => {
           return { scene: 'persona:semantic-resource', binding: { cleanupMode: 'auto', durationMs: 2400, expression: { index, name }, priority: 'force' } }
         return undefined
       }
-      const preset = filterLive2DCompositeExpressionPresetsByModel(compositeExpressionPresets.value, activeActionModelId.value)[actionCardId]
+      // Chat windows do not mount a Model, so activeActionModelId is usually
+      // empty there. Resolve the card against the explicitly selected model.
+      const preset = filterLive2DCompositeExpressionPresetsByModel(compositeExpressionPresets.value, modelId)[actionCardId]
       if (!preset)
         return undefined
       return {
@@ -1059,7 +1061,7 @@ export const useLive2d = defineStore('live2d', () => {
       return
     }
     const requests = actionCardIds
-      .map(id => resolveLive2DActionCardBinding(id))
+      .map(id => resolveLive2DActionCardBinding(id, normalizedModelId))
       .filter((request): request is CrossWindowLive2DActionRequest => Boolean(request))
       .slice(0, 4)
     if (requests.length === 0) {

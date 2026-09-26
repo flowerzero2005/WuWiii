@@ -23,6 +23,7 @@ interface ProactiveTopicOwnerLease {
 }
 
 const PROACTIVE_TOPIC_OWNER_STORAGE_KEY = 'airi:character-orchestrator:proactive-topic-owner'
+const PROACTIVE_TOPIC_ACTIVITY_STORAGE_KEY = 'airi:character-orchestrator:proactive-topic-activity'
 const PROACTIVE_TOPIC_OWNER_TTL_MS = 15_000
 const PROACTIVE_TOPIC_OWNER_HEARTBEAT_MS = 4_000
 const PROACTIVE_TOPIC_OWNER_RETRY_MS = 5_000
@@ -76,9 +77,16 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
   let proactiveTopicTimer: ReturnType<typeof setTimeout> | undefined
   let proactiveTopicOwnerHeartbeat: ReturnType<typeof setInterval> | undefined
   let proactiveTopicOwnerRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let proactiveTopicTimerVersion = 0
+  let proactiveTopicWaitIntervalMs: number | undefined
+  let proactiveTopicWaitStartedAt: number | undefined
+  let proactiveTopicGenerationInFlight = false
+  let proactiveTopicRestartRequested = false
+  let proactiveTopicActivityTrackingStarted = false
   let proactiveTopicPriority = 0
   const proactiveTopicOwnerId = `proactive-topic-${Math.random().toString(36).slice(2)}`
   const lastProactiveTopicTime = ref<number>(0)
+  const lastConversationActivityAt = ref(Date.now())
   const memoryAdvancedSettings = useMemoryAdvancedSettingsStore()
   const sparkNotifyAgent = setupAgentSparkNotifyHandler({
     stream,
@@ -117,7 +125,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
   }
 
   function enqueueSparkNotify(event: WebSocketEventOf<'spark:notify'>, options?: { reason?: string, nextRunAt?: number, maxAttempts?: number }) {
-    if (!pendingNotifies.value.find(item => item.data.id === event.data.id)) {
+    if (!pendingNotifies.value.some(item => item.data.id === event.data.id)) {
       pendingNotifies.value = [...pendingNotifies.value, event]
     }
 
@@ -196,6 +204,38 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
       // Handle overnight range (e.g., 22:00 - 9:00)
       return currentHour >= start || currentHour < end
     }
+  }
+
+  function readLastConversationActivityAt() {
+    const storage = getLocalStorage()
+    const stored = storage ? Number(storage.getItem(PROACTIVE_TOPIC_ACTIVITY_STORAGE_KEY)) : Number.NaN
+    return Number.isFinite(stored) && stored >= 0
+      ? Math.max(lastConversationActivityAt.value, stored)
+      : lastConversationActivityAt.value
+  }
+
+  function writeLastConversationActivityAt(at: number) {
+    const activityAt = Math.max(lastConversationActivityAt.value, at)
+    lastConversationActivityAt.value = activityAt
+
+    try {
+      getLocalStorage()?.setItem(PROACTIVE_TOPIC_ACTIVITY_STORAGE_KEY, String(activityAt))
+    }
+    catch {
+      // A timer still works in private browsing or when storage is unavailable.
+    }
+  }
+
+  function getProactiveTopicIntervalMs() {
+    if (memoryAdvancedSettings.settings.proactiveRandomInterval) {
+      const first = memoryAdvancedSettings.settings.proactiveMinInterval
+      const second = memoryAdvancedSettings.settings.proactiveMaxInterval
+      const min = Math.min(first, second)
+      const max = Math.max(first, second)
+      return (min + (Math.random() * (max - min))) * 60 * 1000
+    }
+
+    return memoryAdvancedSettings.settings.proactiveCheckInterval * 60 * 1000
   }
 
   function readProactiveTopicOwnerLease(): ProactiveTopicOwnerLease | null {
@@ -326,16 +366,16 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
 
   async function generateProactiveTopic(now: number) {
     if (!memoryAdvancedSettings.settings.enableProactiveTopic)
-      return
+      return false
 
     if (!isWithinAllowedTimeRange(now)) {
-      return
+      return false
     }
 
     const activeProviderId = activeProvider.value
     const activeModelId = activeModel.value
     if (!activeProviderId || !activeModelId)
-      return
+      return false
 
     const prompt = createProactiveTopicPrompt(now)
     const chatProvider = await providersStore.getProviderInstance<ChatProvider>(activeProviderId)
@@ -357,6 +397,9 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
         },
       },
     })
+
+    recordConversationActivity(Date.now())
+    return true
   }
 
   async function tick() {
@@ -408,12 +451,143 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     tickTimer = undefined
   }
 
+  function scheduleProactiveTopicTimer(version = proactiveTopicTimerVersion) {
+    if (proactiveTopicTimer || proactiveTopicGenerationInFlight)
+      return
+
+    if (!memoryAdvancedSettings.settings.enableProactiveTopic || !ownsProactiveTopicLease())
+      return
+
+    const activityAt = readLastConversationActivityAt()
+    const waitStartedAt = Math.max(activityAt, proactiveTopicWaitStartedAt ?? 0)
+    proactiveTopicWaitStartedAt = waitStartedAt
+    const intervalMs = proactiveTopicWaitIntervalMs ?? getProactiveTopicIntervalMs()
+    proactiveTopicWaitIntervalMs = intervalMs
+    const delayMs = Math.max(0, waitStartedAt + intervalMs - Date.now())
+
+    proactiveTopicTimer = setTimeout(() => {
+      proactiveTopicTimer = undefined
+      if (version !== proactiveTopicTimerVersion)
+        return
+
+      if (!tryAcquireProactiveTopicLease()) {
+        stopProactiveTopicOwnerHeartbeat()
+        scheduleProactiveTopicOwnerRetry()
+        return
+      }
+
+      const now = Date.now()
+      const activityAt = readLastConversationActivityAt()
+      if (activityAt > waitStartedAt) {
+        proactiveTopicWaitStartedAt = activityAt
+        proactiveTopicWaitIntervalMs = undefined
+        scheduleProactiveTopicTimer(version)
+        return
+      }
+
+      if (now < waitStartedAt + intervalMs) {
+        scheduleProactiveTopicTimer(version)
+        return
+      }
+
+      proactiveTopicGenerationInFlight = true
+      void generateProactiveTopic(now)
+        .then((generated) => {
+          if (!generated && version === proactiveTopicTimerVersion)
+            proactiveTopicWaitStartedAt = Date.now()
+        })
+        .catch(error => console.warn('[Proactive Topic] Failed to generate proactive topic:', error))
+        .finally(() => {
+          proactiveTopicGenerationInFlight = false
+          if (version !== proactiveTopicTimerVersion) {
+            if (proactiveTopicRestartRequested) {
+              proactiveTopicRestartRequested = false
+              startProactiveTopicTimer()
+            }
+            return
+          }
+
+          proactiveTopicWaitIntervalMs = undefined
+          scheduleProactiveTopicTimer(version)
+        })
+    }, delayMs)
+  }
+
+  function rescheduleProactiveTopicWait() {
+    proactiveTopicTimerVersion += 1
+    if (proactiveTopicTimer) {
+      clearTimeout(proactiveTopicTimer)
+      proactiveTopicTimer = undefined
+    }
+
+    proactiveTopicWaitIntervalMs = undefined
+    scheduleProactiveTopicTimer()
+  }
+
+  function resetProactiveTopicWait(at = Date.now()) {
+    writeLastConversationActivityAt(at)
+    proactiveTopicWaitStartedAt = at
+    rescheduleProactiveTopicWait()
+  }
+
+  function recordConversationActivity(at = Date.now()) {
+    if (proactiveTopicGenerationInFlight) {
+      proactiveTopicWaitIntervalMs = undefined
+      proactiveTopicWaitStartedAt = at
+      writeLastConversationActivityAt(at)
+      return
+    }
+
+    resetProactiveTopicWait(at)
+  }
+
+  function startConversationActivityTracking() {
+    if (proactiveTopicActivityTrackingStarted)
+      return
+
+    proactiveTopicActivityTrackingStarted = true
+    chatOrchestrator.onBeforeSend(async (_message, context) => {
+      if (!context.internal?.hiddenUserMessage)
+        recordConversationActivity()
+    })
+    chatOrchestrator.onChatTurnComplete(async (chat, context) => {
+      if (!chat.outputText.trim())
+        return
+
+      if (!context.internal?.hiddenUserMessage || context.internal.proactiveTopic)
+        recordConversationActivity()
+    })
+
+    globalThis.addEventListener?.('storage', ((event: StorageEvent) => {
+      if (event.key !== PROACTIVE_TOPIC_ACTIVITY_STORAGE_KEY)
+        return
+
+      const activityAt = Number(event.newValue)
+      if (!Number.isFinite(activityAt) || activityAt < lastConversationActivityAt.value)
+        return
+
+      lastConversationActivityAt.value = activityAt
+      if (proactiveTopicGenerationInFlight) {
+        proactiveTopicWaitIntervalMs = undefined
+        proactiveTopicWaitStartedAt = activityAt
+        return
+      }
+
+      rescheduleProactiveTopicWait()
+    }) as EventListener)
+  }
+
   function startProactiveTopicTimer() {
     if (proactiveTopicTimer)
       return
 
     if (!memoryAdvancedSettings.settings.enableProactiveTopic)
       return
+
+    if (proactiveTopicGenerationInFlight) {
+      proactiveTopicRestartRequested = true
+      return
+    }
 
     if (!tryAcquireProactiveTopicLease()) {
       scheduleProactiveTopicOwnerRetry()
@@ -422,49 +596,20 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
 
     stopProactiveTopicOwnerRetry()
     startProactiveTopicOwnerHeartbeat()
-
-    const getNextInterval = () => {
-      if (memoryAdvancedSettings.settings.proactiveRandomInterval) {
-        const min = memoryAdvancedSettings.settings.proactiveMinInterval
-        const max = memoryAdvancedSettings.settings.proactiveMaxInterval
-        const randomMinutes = Math.random() * (max - min) + min
-        return randomMinutes * 60 * 1000
-      }
-      else {
-        return memoryAdvancedSettings.settings.proactiveCheckInterval * 60 * 1000
-      }
-    }
-
-    const scheduleNext = () => {
-      if (!memoryAdvancedSettings.settings.enableProactiveTopic || !ownsProactiveTopicLease())
-        return
-
-      const intervalMs = getNextInterval()
-
-      proactiveTopicTimer = setTimeout(() => {
-        const now = Date.now()
-        proactiveTopicTimer = undefined
-        if (!tryAcquireProactiveTopicLease()) {
-          stopProactiveTopicOwnerHeartbeat()
-          scheduleProactiveTopicOwnerRetry()
-          return
-        }
-
-        void generateProactiveTopic(now)
-          .catch(error => console.warn('[Proactive Topic] Failed to generate proactive topic:', error))
-          .finally(scheduleNext)
-      }, intervalMs)
-    }
-
-    scheduleNext()
+    scheduleProactiveTopicTimer()
   }
 
   function stopProactiveTopicTimer() {
+    proactiveTopicTimerVersion += 1
+    proactiveTopicRestartRequested = false
     if (proactiveTopicTimer) {
       clearTimeout(proactiveTopicTimer)
       proactiveTopicTimer = undefined
     }
 
+    proactiveTopicWaitIntervalMs = undefined
+    proactiveTopicWaitStartedAt = undefined
+    writeLastConversationActivityAt(Date.now())
     stopProactiveTopicOwnerRetry()
     stopProactiveTopicOwnerHeartbeat()
     releaseProactiveTopicLease()
@@ -475,6 +620,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     () => memoryAdvancedSettings.settings.enableProactiveTopic,
     (enabled) => {
       if (enabled) {
+        resetProactiveTopicWait()
         startProactiveTopicTimer()
       }
       else {
@@ -505,6 +651,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
 
   function initialize(options?: { proactiveTopicPriority?: number }) {
     proactiveTopicPriority = options?.proactiveTopicPriority ?? 0
+    startConversationActivityTracking()
 
     modsServerChannelStore.onEvent('spark:notify', async (event) => {
       try {
@@ -534,6 +681,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     scheduledNotifies,
     attentionConfig,
     lastProactiveTopicTime,
+    lastConversationActivityAt,
 
     initialize,
     startTicker,

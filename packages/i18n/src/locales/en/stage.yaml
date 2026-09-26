@@ -1,4 +1,24 @@
 chat:
+  composer:
+    title: Detached composer
+    description: Edit here; the original conversation performs the send and any image consent.
+    detach: Detach input
+    return: Return input
+    recover: Recover this conversation draft
+    view-recovery: View saved draft
+    orphaned: The original conversation changed or closed. Return to that conversation to recover this draft.
+    uncertain: The original send outcome is unknown. This draft is saved in memory and cannot be resubmitted until the source confirms its outcome.
+    sync-failed: Draft sync failed. Closing is blocked to keep your latest input here. Retry sync before returning.
+    source-failed: Could not detach or return. Finish the current send, or return any other detached input first.
+    send-failed: The source could not send this draft. Check the original conversation.
+    wait-send: Wait for the current send to finish before closing.
+    image: Attached image
+    remove-image: Remove image
+    add-image: Add image
+    image-failed: Use up to 4 PNG, JPEG, WebP or GIF images, each at most 10 MB.
+    syncing: Syncing draft…
+    synced: Draft synced
+    retry-sync: Retry sync
   actions:
     clear-messages: Clear current conversation
     close-personas: Close character list
@@ -12,6 +32,19 @@ chat:
     hide-additional-capabilities: Hide additional chat capabilities
     open-personas: Choose chat character
     show-additional-capabilities: Show additional chat capabilities
+  vision:
+    disabled: Image understanding is disabled. Enable the Vision module in Settings first.
+    failed-text-only: The image could not be understood. This turn will send only the text.
+    upload: Upload image
+    screen-capture: Capture screen or window
+    screen-select: Choose a source and preview it before attaching. The image is sent only when you send the message.
+    screen-preview: Selected source preview
+    screen-attach: Attach screenshot
+    screen-loading: Loading preview…
+    screen-failed: Could not capture this source. Select an available screen or window again.
+    screen-no-sources: No screens or windows are available.
+    image-limit: 'Send up to {count} images at once.'
+    image-too-large: Each image must be smaller than 10 MB.
   capability-consent:
     action: Enable
     approval-required: Enable and confirm this official capability from the chat controls first.
@@ -23,15 +56,19 @@ chat:
     prices:
       embedding: '{points} points per semantic lookup'
       inner-voice: 'Uses the official inner-note model; at least {points} points per generation'
+      group-script: 'Uses the selected official chat model; at least {points} points per story evaluation or next act draft'
       speech: '{points} points per minute, with a minimum charge of {minimum} points'
       transcription: '{first} points for the first minute, then {additional} points for each additional started minute'
+      vision: '{points} points per image understanding request'
       web-search: '{points} points per search'
     title: Enable {capability}?
   capabilities:
     inner-voice: Inner notes
+    group-script: Story progression
     semantic-memory: Semantic memory
     speech: Speech output
     transcription: Voice input
+    vision: Image understanding
     web-search: Web search
   group:
     minimum-members: A group chat must keep at least two characters.

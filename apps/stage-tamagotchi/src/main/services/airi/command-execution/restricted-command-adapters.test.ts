@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGitDiffArgs,
   buildGitStatusArgs,
+  buildLintCommand,
   buildTypecheckCommand,
   parseGitDiffChangedFiles,
   parseGitStatusOutput,
@@ -189,6 +190,22 @@ describe('restricted command adapters', () => {
       severity: 'error',
       code: 'TS2322',
     })
+  })
+
+  it('builds a fixed pnpm lint command from a whitelist target', () => {
+    const result = buildLintCommand({
+      target: 'stage-web',
+    })
+
+    expect(result.packageName).toBe('@proj-airi/stage-web')
+    expect(result.packageRoot).toBe('apps/stage-web')
+    expect(result.args).toEqual([
+      '-F',
+      '@proj-airi/stage-web',
+      'run',
+      'lint',
+    ])
+    expect(result.commandText).toContain('@proj-airi/stage-web')
   })
 
   it('parses eslint stylish diagnostics into file summaries', () => {

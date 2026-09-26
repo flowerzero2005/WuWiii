@@ -6,9 +6,9 @@
   "description": "A desktop digital companion with customizable characters, voice interaction, and local tools.",
   "author": {
     "name": "Wuwiii",
-    "url": "https://www.wuwiii.cn/"
+    "url": "http://127.0.0.1:5173/"
   },
-  "homepage": "https://www.wuwiii.cn/",
+  "homepage": "http://127.0.0.1:5173/",
   "main": "./out/main/index.js",
   "scripts": {
     "predev": "pnpm -F @proj-airi/electron-vueuse build",

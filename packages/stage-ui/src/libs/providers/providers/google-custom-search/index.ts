@@ -57,6 +57,7 @@ function createGoogleCustomSearchProvider(config: GoogleCustomSearchConfig): Web
       query,
       maxResults = 5,
       timeRange,
+      signal,
     }: WebSearchProviderParams): Promise<WebSearchProviderResponse> {
       const apiKey = requireApiKey(config.apiKey, PROVIDER_ID, PROVIDER_NAME)
       const searchEngineId = requireStringField(config.searchEngineId, 'Search Engine ID', PROVIDER_ID, PROVIDER_NAME)
@@ -76,6 +77,7 @@ function createGoogleCustomSearchProvider(config: GoogleCustomSearchConfig): Web
           Accept: 'application/json',
         },
         method: 'GET',
+        signal,
       })
 
       const rawText = await readResponseText(response)

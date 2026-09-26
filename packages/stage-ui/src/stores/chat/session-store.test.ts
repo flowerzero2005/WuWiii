@@ -4,7 +4,26 @@ import type { GroupRoomScriptState } from './group-script'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DEFAULT_GROUP_SCRIPT_CHAPTER_SETTINGS, parseGroupRoomScriptState } from './group-script'
 import { useChatSessionStore } from './session-store'
+
+vi.mock('./session-record-lock', () => {
+  const queues = new Map<string, Promise<unknown>>()
+  const lock = (key: string, task: () => Promise<unknown>) => {
+    const result = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task)
+    const settled = result.catch(() => undefined)
+    queues.set(key, settled)
+    void settled.then(() => {
+      if (queues.get(key) === settled)
+        queues.delete(key)
+    })
+    return result
+  }
+  return {
+    withSessionRecordLock: (sessionId: string, task: () => Promise<unknown>) => lock(`session:${sessionId}`, task),
+    withUserSessionIndexLock: (userId: string, task: () => Promise<unknown>) => lock(`index:${userId}`, task),
+  }
+})
 
 const mocks = vi.hoisted(() => ({
   getIndex: vi.fn(),
@@ -14,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   postSync: vi.fn(),
   saveIndex: vi.fn(),
   saveSession: vi.fn(),
+  deleteSession: vi.fn(),
+  indexes: new Map<string, ChatSessionsIndex>(),
   waitUntilReady: vi.fn(async () => undefined),
 }))
 
@@ -31,7 +52,7 @@ vi.mock('../../composables/api', () => ({
 
 vi.mock('../../database/repos/chat-sessions.repo', () => ({
   chatSessionsRepo: {
-    deleteSession: vi.fn(),
+    deleteSession: mocks.deleteSession,
     getIndex: mocks.getIndex,
     getSession: mocks.getSession,
     saveIndex: mocks.saveIndex,
@@ -67,6 +88,8 @@ vi.mock('../modules/airi-card', async () => {
 vi.mock('../modules/persona-package', () => ({
   getPersonaCardInitialGreeting: vi.fn(),
 }))
+
+vi.mock('./context-providers', () => ({ resetConversationInitialization: vi.fn() }))
 
 vi.mock('../settings/memory-advanced', async () => {
   const { defineStore } = await import('pinia')
@@ -105,14 +128,18 @@ describe('chat session sync conflicts', () => {
     mocks.isAuthenticated = false
     mocks.waitUntilReady.mockResolvedValue(undefined)
 
-    mocks.getIndex.mockResolvedValue(null)
+    mocks.indexes.clear()
+    mocks.getIndex.mockImplementation(async (userId: string) => structuredClone(mocks.indexes.get(userId) ?? null))
     mocks.getCardRuntime.mockImplementation((characterId: string) => ({
       characterId,
       displayName: characterId,
       systemPrompt: `${characterId} private prompt`,
     }))
     mocks.getSession.mockImplementation(async (sessionId: string) => records.get(sessionId) ?? null)
-    mocks.saveIndex.mockResolvedValue(undefined)
+    mocks.saveIndex.mockImplementation(async (value: ChatSessionsIndex) => {
+      mocks.indexes.set(value.userId, structuredClone(value))
+    })
+    mocks.deleteSession.mockImplementation(async (sessionId: string) => records.delete(sessionId))
     mocks.saveSession.mockImplementation(async (sessionId: string, record: ChatSessionRecord) => {
       records.set(sessionId, structuredClone(record))
     })
@@ -306,14 +333,18 @@ describe('group room script persistence', () => {
     vi.clearAllMocks()
     mocks.isAuthenticated = false
     mocks.waitUntilReady.mockResolvedValue(undefined)
-    mocks.getIndex.mockResolvedValue(null)
+    mocks.indexes.clear()
+    mocks.getIndex.mockImplementation(async (userId: string) => structuredClone(mocks.indexes.get(userId) ?? null))
     mocks.getCardRuntime.mockImplementation((characterId: string) => ({
       characterId,
       displayName: characterId,
       systemPrompt: `${characterId} private prompt`,
     }))
     mocks.getSession.mockImplementation(async (sessionId: string) => records.get(sessionId) ?? null)
-    mocks.saveIndex.mockResolvedValue(undefined)
+    mocks.saveIndex.mockImplementation(async (value: ChatSessionsIndex) => {
+      mocks.indexes.set(value.userId, structuredClone(value))
+    })
+    mocks.deleteSession.mockImplementation(async (sessionId: string) => records.delete(sessionId))
     mocks.saveSession.mockImplementation(async (sessionId: string, record: ChatSessionRecord) => {
       records.set(sessionId, structuredClone(record))
     })
@@ -333,6 +364,290 @@ describe('group room script persistence', () => {
     ], 'Room')
     return { sessionId, store }
   }
+
+  it('preserves revisions from concurrent different-session writes in independent windows', async () => {
+    const first = await createRoom()
+    const second = await createRoom()
+    await first.store.updateGroupRoomScript(first.sessionId, chapterState())
+    await second.store.updateGroupRoomScript(second.sessionId, chapterState())
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(second.sessionId)
+    await Promise.all([
+      first.store.updateGroupRoomScript(first.sessionId, chapterState(), 1),
+      otherWindow.updateGroupRoomScript(second.sessionId, chapterState(), 1),
+    ])
+    const durable = mocks.indexes.get('user-1')!
+    expect(durable.characters.group.sessions[first.sessionId].roomScriptRevision).toBe(2)
+    expect(durable.characters.group.sessions[second.sessionId].roomScriptRevision).toBe(2)
+  })
+
+  it('retains explicit inserts from two stale independently initialized windows', async () => {
+    const first = useChatSessionStore()
+    await first.initialize()
+    const second = useChatSessionStore(createPinia())
+    await second.initialize()
+    const participants = [{ characterId: 'character-1', displayName: 'One' }]
+    const [left, right] = await Promise.all([first.createGroupSession(participants, 'Left'), second.createGroupSession(participants, 'Right')])
+    expect(Object.keys(mocks.indexes.get('user-1')!.characters.group.sessions).sort()).toEqual([left, right].sort())
+  })
+
+  it('does not resurrect a deleted session or active selection through an old window save', async () => {
+    const { sessionId, store } = await createRoom()
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(sessionId)
+    await store.deleteSession(sessionId)
+    otherWindow.setActiveSession(sessionId)
+    otherWindow.getSessionMessages(sessionId).push({ id: 'stale-message', role: 'user', content: 'old draft' })
+    await otherWindow.persistSessionMessages(sessionId, { immediate: true })
+    expect(mocks.indexes.get('user-1')!.characters.group?.sessions[sessionId]).toBeUndefined()
+    expect(mocks.indexes.get('user-1')!.characters.group?.activeSessionId).not.toBe(sessionId)
+    expect(records.has(sessionId)).toBe(false)
+    expect(otherWindow.getSessionMeta(sessionId)).toBeUndefined()
+    expect(otherWindow.activeSessionId).not.toBe(sessionId)
+  })
+
+  it('removes stale navigation metadata when an old window selects a deleted session without saving messages', async () => {
+    const { sessionId, store } = await createRoom()
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(sessionId)
+    await store.deleteSession(sessionId)
+    otherWindow.setActiveSession(sessionId)
+    await vi.waitFor(() => expect(otherWindow.getSessionMeta(sessionId)).toBeUndefined())
+    expect(otherWindow.groupSessions.some(session => session.sessionId === sessionId)).toBe(false)
+    expect(otherWindow.activeSessionId).not.toBe(sessionId)
+  })
+
+  it('reloads a partially saved chapter and repairs its index without repeating narration', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    const messagesBefore = structuredClone(store.getSessionMessages(sessionId).map(message => ({ id: message.id, content: message.content })))
+    mocks.saveIndex.mockRejectedValueOnce(new Error('index unavailable'))
+    await expect(store.executeGroupScriptCommand(sessionId, 1, { type: 'restart', operationId: 'index-failed', at: Date.now() })).rejects.toThrow('index unavailable')
+    expect(store.getSessionMeta(sessionId)!.roomScriptRevision).toBe(1)
+    expect(store.getSessionMessages(sessionId).map(message => ({ id: message.id, content: message.content }))).toEqual(messagesBefore)
+    const recovered = await store.resolveGroupRoomScript(sessionId)
+    expect(recovered!.progress!.revision).toBe(1)
+    expect(store.getSessionMeta(sessionId)!.roomScriptRevision).toBe(2)
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId].roomScriptRevision).toBe(2)
+    const recordBefore = structuredClone(records.get(sessionId))
+    await store.executeGroupScriptCommand(sessionId, 2, { type: 'restart', operationId: 'index-failed', at: Date.now() })
+    expect(records.get(sessionId)).toEqual(recordBefore)
+    expect(store.getSessionMessages(sessionId).filter(message => message.id?.startsWith('script-act:'))).toHaveLength(2)
+  })
+
+  it('repairs index metadata and local state through an idempotent command retry', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    const command = { type: 'restart' as const, operationId: 'retry-index', at: Date.now() }
+    mocks.saveIndex.mockRejectedValueOnce(new Error('index unavailable'))
+    await expect(store.executeGroupScriptCommand(sessionId, 1, command)).rejects.toThrow('index unavailable')
+    const writes = mocks.saveSession.mock.calls.length
+    await store.executeGroupScriptCommand(sessionId, 2, command)
+    expect(mocks.saveSession).toHaveBeenCalledTimes(writes)
+    expect(store.getSessionMeta(sessionId)!.roomScriptRevision).toBe(2)
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId].roomScriptRevision).toBe(2)
+    expect(store.getSessionMessages(sessionId).filter(message => message.id?.startsWith('script-act:'))).toHaveLength(2)
+  })
+
+  it('recovers a durable paid-turn claim after index failure and refuses a second claim', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    const job = { kind: 'evaluation' as const, turnId: 'paid-turn', requestId: 'paid-request', operationId: 'paid-operation', expiresAt: Date.now() + 60_000, progressRevision: 0 }
+    mocks.saveIndex.mockRejectedValueOnce(new Error('index unavailable'))
+    await expect(store.executeGroupScriptCommand(sessionId, 1, { type: 'claim', job })).rejects.toThrow('index unavailable')
+    expect((await store.resolveGroupRoomScript(sessionId))!.chapterRuntime!.pendingJob).toEqual(job)
+    await expect(store.executeGroupScriptCommand(sessionId, 2, { type: 'claim', job })).rejects.toThrow()
+    expect(records.get(sessionId)!.meta.roomScriptRevision).toBe(2)
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId].roomScriptRevision).toBe(2)
+  })
+
+  it('refreshes durable membership and clears deleted sessions from stale window caches', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(sessionId)
+    otherWindow.setActiveSession(sessionId)
+    await vi.waitFor(() => expect(mocks.indexes.get('user-1')!.characters.group.activeSessionId).toBe(sessionId))
+    await store.deleteSession(sessionId)
+    await otherWindow.refreshFromPersistence()
+    expect(otherWindow.getSessionMeta(sessionId)).toBeUndefined()
+    expect(otherWindow.groupSessions.some(session => session.sessionId === sessionId)).toBe(false)
+    expect(otherWindow.getAllSessions()).not.toHaveProperty(sessionId)
+    expect(otherWindow.activeSessionId).not.toBe(sessionId)
+    expect(await otherWindow.resolveGroupRoomScript(sessionId)).toBeUndefined()
+  })
+
+  it('prunes a missing record after deletion succeeded but index persistence failed', async () => {
+    const { sessionId, store } = await createRoom()
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    mocks.saveIndex.mockRejectedValueOnce(new Error('index unavailable'))
+    await expect(store.deleteSession(sessionId)).rejects.toThrow('index unavailable')
+    expect(records.has(sessionId)).toBe(false)
+    expect(store.getSessionMeta(sessionId)).toBeUndefined()
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId]).toBeDefined()
+    await otherWindow.refreshFromPersistence()
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId]).toBeUndefined()
+    expect(otherWindow.getSessionMeta(sessionId)).toBeUndefined()
+  })
+
+  it('keeps explicit import replacement semantics instead of unioning old sessions', async () => {
+    const { sessionId, store } = await createRoom()
+    const payload = await store.exportSessions()
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    const removedByImport = await otherWindow.createGroupSession([{ characterId: 'character-1', displayName: 'One' }], 'Other window')
+    await store.importSessions(payload)
+    const durable = mocks.indexes.get('user-1')!
+    expect(durable.characters.group.sessions[sessionId]).toBeDefined()
+    expect(durable.characters.group.sessions[removedByImport]).toBeUndefined()
+  })
+
+  it('resets the latest user index explicitly and prevents stale windows from restoring removed entries', async () => {
+    const { sessionId, store } = await createRoom()
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(sessionId)
+    const remoteSessionId = await otherWindow.createGroupSession([{ characterId: 'character-1', displayName: 'One' }], 'Remote room')
+    await store.resetAllSessions()
+    expect(mocks.indexes.get('user-1')!.characters.group).toBeUndefined()
+    expect(records.has(sessionId)).toBe(false)
+    expect(records.has(remoteSessionId)).toBe(false)
+    await otherWindow.persistSessionMessages(remoteSessionId, { immediate: true })
+    expect(mocks.indexes.get('user-1')!.characters.group).toBeUndefined()
+    expect(records.has(remoteSessionId)).toBe(false)
+  })
+
+  it('retains a session inserted by another window while reset deletes its initial snapshot', async () => {
+    const { sessionId, store } = await createRoom()
+    const oldGeneration = store.getSessionGeneration(sessionId)
+    const otherWindow = useChatSessionStore(createPinia())
+    await otherWindow.initialize()
+    let releaseDelete!: () => void
+    let startedDelete!: () => void
+    const started = new Promise<void>((resolve) => {
+      startedDelete = resolve
+    })
+    const release = new Promise<void>((resolve) => {
+      releaseDelete = resolve
+    })
+    mocks.deleteSession.mockImplementationOnce(async (id: string) => {
+      startedDelete()
+      await release
+      records.delete(id)
+    })
+    mocks.saveSession.mockImplementation(async (id: string, record: ChatSessionRecord) => {
+      if (record.meta.title === 'During reset')
+        expect(records.has(sessionId)).toBe(true)
+      records.set(id, structuredClone(record))
+    })
+    const resetting = store.resetAllSessions()
+    await started
+    expect(store.getSessionGeneration(sessionId)).toBeGreaterThan(oldGeneration)
+    const inserting = otherWindow.createGroupSession([{ characterId: 'character-1', displayName: 'One' }], 'During reset')
+    // Let the other window enqueue its user-index lock while deletion holds it.
+    for (let turn = 0; turn < 20; turn++)
+      await Promise.resolve()
+    releaseDelete()
+    const inserted = await inserting
+    await resetting
+    expect(store.getSessionGeneration(sessionId)).toBeGreaterThan(oldGeneration)
+    expect(records.has(sessionId)).toBe(false)
+    expect(records.has(inserted)).toBe(true)
+    expect(mocks.indexes.get('user-1')!.characters.group.sessions[inserted]).toBeDefined()
+    expect(store.groupSessions.some(session => session.sessionId === inserted)).toBe(true)
+  })
+
+  function chapterState() {
+    const base = createRoomScriptState()
+    return parseGroupRoomScriptState({
+      ...base,
+      templateSnapshot: { ...base.templateSnapshot, acts: [
+        { actId: 'first', number: 1, title: 'First act', narration: 'The watch begins.', unlockConditions: [{ conditionId: 'explained', description: 'An arrival has been explained.' }] },
+        { actId: 'second', number: 2, title: 'Second act', unlockConditions: [{ conditionId: 'resolved', description: 'The situation is resolved.' }] },
+      ] },
+      chapterSettings: { ...DEFAULT_GROUP_SCRIPT_CHAPTER_SETTINGS, automaticEvaluationEnabled: true },
+    }, ['character-1', 'character-2'])
+  }
+
+  it('uses the fresh durable message list for chapter evidence and never resurrects a deleted message', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    store.getSessionMessages(sessionId).push({ id: 'removed-evidence', role: 'user', content: 'The guest explained their arrival.' })
+    await store.persistSessionMessages(sessionId, { immediate: true })
+    const record = records.get(sessionId)!
+    records.set(sessionId, { ...record, messages: record.messages.filter(message => message.id !== 'removed-evidence') })
+    const now = Date.now()
+    await store.executeGroupScriptCommand(sessionId, 1, {
+      type: 'claim',
+      job: { kind: 'evaluation', turnId: 'turn-1', requestId: 'request-1', operationId: 'eval-1', expiresAt: now + 60_000, progressRevision: 0 },
+    })
+    expect(records.get(sessionId)!.messages.some(message => message.id === 'removed-evidence')).toBe(false)
+    await expect(store.executeGroupScriptCommand(sessionId, 2, {
+      type: 'evaluate',
+      requestId: 'request-1',
+      evaluation: {
+        actId: 'first',
+        operationId: 'eval-1',
+        evaluationTurnId: 'turn-1',
+        evaluatedAt: now,
+        conditions: [{ conditionId: 'explained', satisfied: true, confidence: 0.9, messageIds: ['removed-evidence'] }],
+      },
+    })).rejects.toThrow('unavailable message')
+    expect(records.get(sessionId)!.roomScript!.progress!.revision).toBe(0)
+    await expect(store.executeGroupScriptCommand(sessionId, 1, { type: 'restart', operationId: 'restart-old', at: now })).rejects.toThrow('changed')
+  })
+
+  it('lets only one independently hydrated window claim a paid chapter turn', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    const savedIndex = structuredClone(mocks.saveIndex.mock.calls.at(-1)![0])
+    setActivePinia(createPinia())
+    const airiCardStore = (await import('../modules/airi-card')).useAiriCardStore()
+    airiCardStore.activeCardId = 'group'
+    mocks.getIndex.mockResolvedValue(savedIndex)
+    const otherWindow = useChatSessionStore()
+    await otherWindow.initialize()
+    await otherWindow.resolveGroupRoomScript(sessionId)
+    const now = Date.now()
+    const job = { kind: 'evaluation' as const, turnId: 'shared-turn', operationId: 'first-window', requestId: 'first-window', expiresAt: now + 60_000, progressRevision: 0 }
+    const results = await Promise.allSettled([
+      store.executeGroupScriptCommand(sessionId, 1, { type: 'claim', job }),
+      otherWindow.executeGroupScriptCommand(sessionId, 1, { type: 'claim', job: { ...job, operationId: 'other-window', requestId: 'other-window' } }),
+    ])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    expect(records.get(sessionId)!.meta.roomScriptRevision).toBe(2)
+    expect(records.get(sessionId)!.roomScript!.chapterRuntime!.pendingJob!.requestId).toBe('first-window')
+  })
+
+  it('does not publish an advanced chapter when its durable write fails', async () => {
+    const { sessionId, store } = await createRoom()
+    const initial = await store.updateGroupRoomScript(sessionId, chapterState())
+    mocks.saveSession.mockRejectedValueOnce(new Error('storage unavailable'))
+    await expect(store.executeGroupScriptCommand(sessionId, 1, { type: 'restart', operationId: 'restart-failed', at: Date.now() })).rejects.toThrow('storage unavailable')
+    expect(store.getSessionMeta(sessionId)!.roomScriptRevision).toBe(1)
+    expect(await store.resolveGroupRoomScript(sessionId)).toEqual(initial)
+    expect(records.get(sessionId)!.roomScript!.progress!.revision).toBe(0)
+  })
+
+  it('announces each attachment generation once and gives an explicit restart its own announcement', async () => {
+    const { sessionId, store } = await createRoom()
+    await store.updateGroupRoomScript(sessionId, chapterState())
+    await store.clearGroupRoomScript(sessionId)
+    const attachedAgain = await store.updateGroupRoomScript(sessionId, chapterState())
+    await store.updateGroupRoomScript(sessionId, attachedAgain!, 3)
+    const announcements = () => records.get(sessionId)!.messages.filter(message => message.id?.startsWith('script-act:'))
+    expect(announcements()).toHaveLength(2)
+    expect(new Set(announcements().map(message => message.id)).size).toBe(2)
+    await store.executeGroupScriptCommand(sessionId, 4, { type: 'restart', operationId: 'restart-current', at: Date.now() })
+    expect(announcements()).toHaveLength(3)
+    expect(records.get(sessionId)!.roomScript!.progress!.revision).toBe(1)
+  })
 
   it('supports a one-character group while keeping its final member', async () => {
     const store = useChatSessionStore()

@@ -659,6 +659,10 @@ const typecheckTargetPackages: Record<ElectronCommandExecutionTypecheckTarget, {
     packageName: '@proj-airi/stage-tamagotchi',
     packageRoot: 'apps/stage-tamagotchi',
   },
+  'stage-web': {
+    packageName: '@proj-airi/stage-web',
+    packageRoot: 'apps/stage-web',
+  },
   'stage-ui': {
     packageName: '@proj-airi/stage-ui',
     packageRoot: 'packages/stage-ui',
@@ -725,6 +729,10 @@ const lintTargetPackages: Record<ElectronCommandExecutionLintTarget, {
   'stage-tamagotchi': {
     packageName: '@proj-airi/stage-tamagotchi',
     packageRoot: 'apps/stage-tamagotchi',
+  },
+  'stage-web': {
+    packageName: '@proj-airi/stage-web',
+    packageRoot: 'apps/stage-web',
   },
 }
 

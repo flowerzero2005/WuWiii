@@ -17,6 +17,7 @@ import ChatResponsePart from './response-part.vue'
 import { useAuthStore } from '../../../stores/auth'
 import { useChatOrchestratorStore } from '../../../stores/chat'
 import { useAssistantInnerVoiceNoteStore } from '../../../stores/chat/inner-voice-notes'
+import { resolvePersonaLanguagePolicy } from '../../../stores/chat/persona-language-policy'
 import { useSpeechStore } from '../../../stores/modules/speech'
 import { resolveChatBubblePresentation, useChatAppearanceSettingsStore } from '../../../stores/settings/chat-appearance'
 import { useMemoryAdvancedSettingsStore } from '../../../stores/settings/memory-advanced'
@@ -736,11 +737,16 @@ async function toggleInnerVoiceNote() {
   innerVoiceNoteFailureVisible.value = false
   innerVoiceNoteUserError.value = ''
   try {
+    const userMessage = props.previousUserMessage ? extractTextFromChatContent(props.previousUserMessage.content) : ''
     const note = await innerVoiceNotes.ensureNoteForMessage({
       sessionId: props.sessionId ?? '',
       messageId: innerVoiceMessageId.value ?? '',
-      userMessage: props.previousUserMessage ? extractTextFromChatContent(props.previousUserMessage.content) : '',
+      userMessage,
       assistantText: innerVoiceAssistantText.value,
+      language: resolvePersonaLanguagePolicy({
+        message: userMessage,
+        uiLocale: globalThis.navigator?.language,
+      }).targetLanguage,
       requestOfficialUsageConsent: requestOfficialInnerVoiceConsent,
       requireNote: true,
     })

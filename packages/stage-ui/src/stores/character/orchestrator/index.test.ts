@@ -14,19 +14,85 @@ import { createTestingPinia } from '@pinia/testing'
 import { tool } from '@xsai/tool'
 import { nanoid } from 'nanoid'
 import { setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import { sparkCommandSchema, useCharacterOrchestratorStore } from '.'
 import { useCharacterStore } from '..'
+import { useChatOrchestratorStore } from '../../chat'
 import { useLLM } from '../../llm'
 import { useAiriCardStore, useConsciousnessStore } from '../../modules'
 import { useProvidersStore } from '../../providers'
+import { useMemoryAdvancedSettingsStore } from '../../settings/memory-advanced'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
   }),
 }))
+
+vi.mock('@proj-airi/stage-ui-live2d', () => ({
+  useLive2d: () => ({}),
+}))
+
+vi.mock('@proj-airi/stage-ui-live2d/stores/live2d', () => ({
+  createLive2DPerformanceExpressionResourceId: () => '',
+  createLive2DPerformanceMotionResourceId: () => '',
+  filterLive2DCompositeExpressionPresetsByModel: () => [],
+  useLive2d: () => ({
+    activeActionModelId: undefined,
+    broadcastLive2DActionRequest: vi.fn(),
+    capabilitiesByModel: {},
+    compositeExpressionPresets: {},
+    performanceResourceMetadataByModel: {},
+    setActiveActionModel: vi.fn(),
+    waitForCapabilities: vi.fn().mockResolvedValue(false),
+  }),
+}))
+
+vi.mock('@proj-airi/stage-ui-live2d/utils/action-debug', () => ({
+  logLive2DActionEvent: vi.fn(),
+  warnLive2DActionEvent: vi.fn(),
+}))
+
+vi.mock('../../chat', async () => {
+  const { defineStore } = await import('pinia')
+  return {
+    useChatOrchestratorStore: defineStore('chat-orchestrator-test', () => {
+      const beforeSendHandlers: Array<(message: unknown, context: unknown) => unknown> = []
+      const turnCompleteHandlers: Array<(chat: unknown, context: unknown) => unknown> = []
+      return {
+        ingest: vi.fn().mockResolvedValue(undefined),
+        onBeforeSend: (handler: (message: unknown, context: unknown) => unknown) => {
+          beforeSendHandlers.push(handler)
+          return () => undefined
+        },
+        onChatTurnComplete: (handler: (chat: unknown, context: unknown) => unknown) => {
+          turnCompleteHandlers.push(handler)
+          return () => undefined
+        },
+        emitBeforeSendHooks: async (message: unknown, context: unknown) => {
+          for (const handler of beforeSendHandlers)
+            await handler(message, context)
+        },
+        emitChatTurnCompleteHooks: async (chat: unknown, context: unknown) => {
+          for (const handler of turnCompleteHandlers)
+            await handler(chat, context)
+        },
+      }
+    }),
+  }
+})
+
+vi.mock('../../mods/api/channel-server', async () => {
+  const { defineStore } = await import('pinia')
+  return {
+    useModsServerChannelStore: defineStore('mods-server-channel', () => ({
+      onEvent: vi.fn(),
+      send: vi.fn(),
+    })),
+  }
+})
 
 function mockedStore<TStoreDef extends () => unknown>(
   useStore: TStoreDef,
@@ -103,6 +169,15 @@ describe('sparkCommandSchema', () => {
 
 describe('store character-orchestrator', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 26, 10))
+    const storage = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    })
+
     const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false })
     setActivePinia(pinia)
 
@@ -138,6 +213,12 @@ describe('store character-orchestrator', () => {
         },
       },
     } satisfies AiriCard
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('handles immediate spark:notify with reaction and commands', async () => {
@@ -196,5 +277,114 @@ describe('store character-orchestrator', () => {
 
     expect(mockOnSparkNotifyReactionStreamEvent).toBeCalledWith(event.data.id, 'Ahhh, got hit by zombie!')
     expect(mockOnSparkNotifyReactionStreamEnd).toBeCalledTimes(1)
+  })
+
+  it('restarts the proactive wait after user activity and a normal assistant reply', async () => {
+    const memorySettings = useMemoryAdvancedSettingsStore()
+    memorySettings.settings.enableProactiveTopic = true
+    memorySettings.settings.proactiveCheckInterval = 1
+    const ingest = vi.fn().mockResolvedValue(undefined)
+    mockedStore(useChatOrchestratorStore).ingest = ingest
+
+    const store = useCharacterOrchestratorStore()
+    store.initialize()
+    const chat = useChatOrchestratorStore()
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    await chat.emitBeforeSendHooks('hello', { internal: {} } as any)
+    expect(store.lastConversationActivityAt).toBe(Date.now())
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(ingest).not.toHaveBeenCalled()
+
+    await chat.emitChatTurnCompleteHooks({
+      output: {} as any,
+      outputText: 'A normal reply.',
+      toolCalls: [],
+    }, { internal: {} } as any)
+
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(ingest).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ingest).toHaveBeenCalledTimes(1)
+  })
+
+  it('restarts the proactive wait after its own completed turn', async () => {
+    const memorySettings = useMemoryAdvancedSettingsStore()
+    memorySettings.settings.enableProactiveTopic = true
+    memorySettings.settings.proactiveCheckInterval = 1
+    const ingest = vi.fn().mockResolvedValue(undefined)
+    mockedStore(useChatOrchestratorStore).ingest = ingest
+
+    const store = useCharacterOrchestratorStore()
+    store.initialize()
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(ingest).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(ingest).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ingest).toHaveBeenCalledTimes(2)
+  })
+
+  it('samples a random proactive interval once for each wait', async () => {
+    const memorySettings = useMemoryAdvancedSettingsStore()
+    memorySettings.settings.enableProactiveTopic = true
+    memorySettings.settings.proactiveRandomInterval = true
+    memorySettings.settings.proactiveMinInterval = 1
+    memorySettings.settings.proactiveMaxInterval = 3
+    const store = useCharacterOrchestratorStore()
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+
+    store.initialize()
+    await nextTick()
+    expect(random).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(random).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts a fresh wait after a pause and proactive setting change', async () => {
+    const memorySettings = useMemoryAdvancedSettingsStore()
+    memorySettings.settings.enableProactiveTopic = true
+    memorySettings.settings.proactiveCheckInterval = 1
+    const ingest = vi.fn().mockResolvedValue(undefined)
+    mockedStore(useChatOrchestratorStore).ingest = ingest
+
+    const store = useCharacterOrchestratorStore()
+    store.initialize()
+    await vi.advanceTimersByTimeAsync(30_000)
+    store.stopProactiveTopicTimer()
+    store.startProactiveTopicTimer()
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(ingest).not.toHaveBeenCalled()
+
+    memorySettings.settings.proactiveCheckInterval = 2
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(ingest).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(ingest).toHaveBeenCalledTimes(1)
+  })
+
+  it('defers to the existing proactive-topic lease owner', async () => {
+    const memorySettings = useMemoryAdvancedSettingsStore()
+    memorySettings.settings.enableProactiveTopic = true
+    memorySettings.settings.proactiveCheckInterval = 1
+    localStorage.setItem('airi:character-orchestrator:proactive-topic-owner', JSON.stringify({
+      ownerId: 'another-window',
+      priority: 0,
+      expiresAt: Date.now() + 60_000,
+      updatedAt: Date.now(),
+    }))
+    const ingest = vi.fn().mockResolvedValue(undefined)
+    mockedStore(useChatOrchestratorStore).ingest = ingest
+
+    const store = useCharacterOrchestratorStore()
+    store.initialize()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(ingest).not.toHaveBeenCalled()
   })
 })

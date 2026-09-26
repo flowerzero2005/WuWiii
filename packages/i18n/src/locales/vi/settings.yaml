@@ -396,7 +396,7 @@ pages:
             search_voices_results: Tìm thấy {count}/{total} giọng nói
             unsupported_voice_warning_title: No supported voices
             unsupported_voice_warning_content: >-
-              Try a different model or provider. For support, visit https://www.wuwiii.cn/help/refund.
+              Try a different model or provider. For support, visit http://127.0.0.1:5173/help/refund.
             show_less: Ẩn bớt
             show_more: Hiện thêm
             title: Nhà cung cấp

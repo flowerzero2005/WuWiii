@@ -1211,6 +1211,9 @@ watch(profile, () => {
             <div :class="['mt-1 text-xs airi-text-muted']">
               {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.web-search'), points: officialPriceSummary.capabilities.webSearch.pointsPerRequest }) }}
             </div>
+            <div v-if="officialPriceSummary.capabilities.vision" :class="['mt-1 text-xs airi-text-muted']">
+              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.vision'), points: officialPriceSummary.capabilities.vision.pointsPerRequest }) }}
+            </div>
           </div>
           <div :class="['rounded-md border p-3 airi-border-subtle airi-surface-muted md:col-span-2 xl:col-span-3']">
             <div :class="['text-xs font-semibold airi-text']">

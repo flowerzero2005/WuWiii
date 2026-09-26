@@ -17,20 +17,32 @@ describe('context bridge stream session isolation', () => {
   })
 
   it('still registers an inactive group turn speaker selection with the speech host', () => {
-    expect(source).toContain("const needsGroupSpeechRegistration = event.type === 'before-compose'")
-    expect(source).toContain("&& event.context.internal?.groupChat === true")
+    expect(source).toContain('const needsGroupSpeechRegistration = event.type === \'before-compose\'')
+    expect(source).toContain('&& event.context.internal?.groupChat === true')
     expect(source).toContain('event.sessionId !== chatSession.activeSessionId && !needsGroupSpeechRegistration')
   })
 
   it('drops stale special-token mirrors from an older turn', () => {
-    const tokenSpecial = source.slice(source.indexOf("case 'token-special':"), source.indexOf("case 'stream-end':"))
-    expect(tokenSpecial).toContain('if (!remoteStreamGuard)')
-    expect(tokenSpecial).toContain('remoteStreamGuard.sessionId !== chatSession.activeSessionId')
-    expect(tokenSpecial).toContain('getSessionGenerationValue(remoteStreamGuard.sessionId) !== remoteStreamGuard.generation')
+    const tokenSpecial = source.slice(source.indexOf('case \'token-special\':'), source.indexOf('case \'stream-end\':'))
+    expect(tokenSpecial).toContain('if (!acceptsRemoteStreamEvent(event))')
+    expect(source).toContain('remoteStreamGuard.turnId === resolveStreamTurnId(event.context)')
+  })
+
+  it('does not reopen or finalize an already-completed mirrored turn', () => {
+    expect(source).toContain('completedRemoteStreamTurns.has(turnKey)')
+    expect(source).toContain('rememberCompletedRemoteStreamTurn(completedTurnKey)')
   })
 
   it('transports the frozen turn snapshot for speaker-specific speech playback', () => {
     const minimalContext = source.slice(source.indexOf('function createMinimalContext'), source.indexOf('function cloneContextsForTransport'))
     expect(minimalContext).toContain('turn: context.turn ? toRaw(context.turn) : undefined')
+    expect(minimalContext).toContain('groupSpeechSynthesisBarrier and groupSpeechPlaybackBarrier are')
+  })
+
+  it('passes the input event identity through a session-scoped lock and ingest', () => {
+    expect(source).toContain('resolveInputSourceUserMessageId(event)')
+    expect(source).toContain('context-bridge:event:input:text:')
+    expect(source).toContain('claimInputSourceUserMessage(targetSessionId, sourceUserMessageId)')
+    expect(source).toContain('sourceUserMessageId,')
   })
 })

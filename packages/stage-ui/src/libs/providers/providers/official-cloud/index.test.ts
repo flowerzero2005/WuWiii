@@ -251,6 +251,39 @@ describe('providerOfficialCloud', () => {
     fetchAccountStateMock.mockClear()
   })
 
+  it.each(['group-script-evaluation', 'group-script-sequel'])('preserves hidden script stage %s without requesting delivery acknowledgement', async (stage) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.has('x-airi-delivery-ack')).toBe(false)
+      expect(headers.get('x-airi-request-stage')).toBe(stage)
+      expect(headers.get('x-airi-parent-request-id')).toBe('parent-a')
+      expect(headers.get('x-airi-group-turn-id')).toBe('group-a')
+      return new Response('{}')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await officialCloudFetch('http://127.0.0.1:3000/api/model-gateway/v1/chat/completions', { method: 'POST', headers: { 'x-airi-request-stage': stage, 'x-airi-parent-request-id': 'parent-a', 'x-airi-group-turn-id': 'group-a' } })
+    await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalled())
+    fetchAccountStateMock.mockClear()
+  })
+
+  it('sends search budget and trace whitelist and retains actual attempt count', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ results: [], attemptsUsed: 2 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const provider = providerOfficialCloudWebSearch.createProvider({}) as any
+    const searchBudget = { maxRequests: 2, maxPoints: 6, priceVersion: 'v1' }
+    expect(await provider.webSearch({ query: 'AIRI', searchBudget, headers: { 'x-airi-parent-request-id': 'parent', 'x-airi-group-turn-id': 'group', 'x-airi-request-stage': 'tool-conclusion', 'Authorization': 'Bearer untrusted', 'x-untrusted': 'value' } })).toMatchObject({ attemptsUsed: 2 })
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string).searchBudget).toEqual(searchBudget)
+    const headers = new Headers(init.headers)
+    expect(headers.get('x-airi-parent-request-id')).toBe('parent')
+    expect(headers.get('x-airi-group-turn-id')).toBe('group')
+    expect(headers.get('x-airi-request-stage')).toBe('tool-conclusion')
+    expect(headers.has('x-untrusted')).toBe(false)
+    expect(headers.get('authorization')).not.toBe('Bearer untrusted')
+    await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalled())
+    fetchAccountStateMock.mockClear()
+  })
+
   it('reports a completed reply by its stable parent turn correlation', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input)
@@ -549,7 +582,7 @@ describe('providerOfficialCloud', () => {
           sampleTextEn: 'Hello.',
           chain: 'secondary',
           chainStatus: 'recovering',
-          previewUrl: 'https://cdn.wuwiii.cn/voices/gentle.mp3',
+          previewUrl: 'https://fixtures.example.invalid/voices/gentle.mp3',
         },
         {
           voiceId: 'airi-bright',
@@ -588,7 +621,7 @@ describe('providerOfficialCloud', () => {
         priceVersion: 'voice-gentle-v2',
         officialChannel: 'secondary',
         officialChannelStatus: 'recovering',
-        previewURL: 'https://cdn.wuwiii.cn/voices/gentle.mp3',
+        previewURL: 'https://fixtures.example.invalid/voices/gentle.mp3',
         sampleText: '你好。',
         languages: [{ code: 'zh-CN', title: 'zh-CN' }, { code: 'en-US', title: 'en-US' }],
       }),
@@ -659,7 +692,8 @@ describe('providerOfficialCloud', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const provider = providerOfficialCloudWebSearch.createProvider({}) as any
-    await expect(provider.webSearch({ query: 'AIRI', maxResults: 3 })).resolves.toEqual({
+    const controller = new AbortController()
+    await expect(provider.webSearch({ query: 'AIRI', maxResults: 3, searchDepth: 'advanced', timeRange: 'past_week', signal: controller.signal })).resolves.toEqual({
       results: [{
         title: 'AIRI update',
         snippet: 'Current release notes',
@@ -674,8 +708,24 @@ describe('providerOfficialCloud', () => {
       expect.objectContaining({
         credentials: 'include',
         method: 'POST',
+        signal: controller.signal,
+        body: JSON.stringify({ maxResults: 3, query: 'AIRI', searchDepth: 'advanced', timeRange: 'past_week' }),
       }),
     )
+  })
+
+  it('preserves cancellation instead of converting it into an official network error', async () => {
+    const controller = new AbortController()
+    const cancellation = new DOMException('Cancelled', 'AbortError')
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      controller.abort(cancellation)
+      throw cancellation
+    }))
+
+    await expect(officialCloudFetch('http://127.0.0.1:3000/api/model-gateway/v1/web-search', {
+      method: 'POST',
+      signal: controller.signal,
+    })).rejects.toBe(cancellation)
   })
 
   it('uses the shared cookie fetch for speech, transcription and embedding requests', () => {

@@ -51,6 +51,7 @@ function createExaWebSearchProvider(config: ExaConfig): WebSearchProvider {
       maxResults = 5,
       searchDepth = 'basic',
       timeRange,
+      signal,
     }: WebSearchProviderParams): Promise<WebSearchProviderResponse> {
       const apiKey = requireApiKey(config.apiKey, PROVIDER_ID, PROVIDER_NAME)
       const resultCount = clampSearchResultsCount(maxResults, { max: 10 })
@@ -73,6 +74,7 @@ function createExaWebSearchProvider(config: ExaConfig): WebSearchProvider {
           'x-api-key': apiKey,
         },
         method: 'POST',
+        signal,
       })
 
       if (!response.ok)

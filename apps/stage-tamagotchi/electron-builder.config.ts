@@ -2,11 +2,6 @@
 
 import type { Configuration } from 'electron-builder'
 
-import { env } from 'node:process'
-
-import { resolveDesktopUpdatePublishConfig } from './src/main/services/electron/desktop-update-config'
-
-const desktopUpdatePublishConfig = resolveDesktopUpdatePublishConfig(env)
 const allowedPackageIncludes = [
   'out/**',
   'resources/icon-512.png',
@@ -106,7 +101,7 @@ const config = {
     name: 'cn.wuwiii.desktop.development',
     main: 'out/main/index.js',
     description: 'A desktop digital companion with customizable characters, voice interaction, and local tools.',
-    homepage: 'https://wuwiii.cn/',
+    homepage: 'http://127.0.0.1:5173/',
     license: 'MIT',
   },
   win: {
@@ -172,7 +167,7 @@ const config = {
   },
   npmRebuild: false,
   // No repository fallback: unconfigured packages must not poll the upstream project.
-  publish: desktopUpdatePublishConfig ? [desktopUpdatePublishConfig] : [],
+  publish: [],
 } as Configuration
 
 // Keep runtime user data and developer-imported assets outside every packaged application.

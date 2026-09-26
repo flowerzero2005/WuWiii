@@ -40,12 +40,12 @@ describe('windows login item settings', () => {
     const { setWindowsLoginItemSettings } = await import('./windows-login-item')
     const electronApp = createAppMock(true)
 
-    setWindowsLoginItemSettings('cn.wuwiii.desktop.development', true, electronApp as never, true)
+    setWindowsLoginItemSettings('ai.moeru.airi', true, electronApp as never, true)
 
     expect(electronApp.setLoginItemSettings).toHaveBeenCalledWith({
       args: [],
       enabled: true,
-      name: 'cn.wuwiii.desktop.development',
+      name: 'ai.moeru.airi',
       openAtLogin: true,
       path: 'C:\\Wuwiii\\Wuwiii.exe',
     })
@@ -58,7 +58,7 @@ describe('windows login item settings', () => {
       launchItems: [{
         args: [],
         enabled: false,
-        name: 'cn.wuwiii.desktop.development',
+        name: 'ai.moeru.airi',
         path: 'C:\\Wuwiii\\Wuwiii.exe',
         scope: 'user',
       }],
@@ -68,10 +68,35 @@ describe('windows login item settings', () => {
     expect(getWindowsLoginItemSettings(electronApp as never, true)).toEqual({ enabled: false })
   })
 
-  it('does nothing outside Windows', async () => {
-    const { getWindowsLoginItemSettings, setWindowsLoginItemSettings } = await import('./windows-login-item')
+  it('does not disable the packaged login item selected by the user', async () => {
+    const { disableRetiredWindowsLoginItems } = await import('./windows-login-item')
+    const electronApp = createAppMock(true)
+
+    disableRetiredWindowsLoginItems('ai.moeru.airi', electronApp as never, true)
+
+    expect(electronApp.setLoginItemSettings).not.toHaveBeenCalled()
+  })
+
+  it('disables the retired static login item in development', async () => {
+    const { disableRetiredWindowsLoginItems } = await import('./windows-login-item')
     const electronApp = createAppMock()
 
+    disableRetiredWindowsLoginItems('cn.wuwiii.desktop.dev.electron-v2-test', electronApp as never, true)
+
+    expect(electronApp.setLoginItemSettings).toHaveBeenCalledWith({
+      args: ['D:\\Ai\\airi', '--start-in-tray'],
+      enabled: false,
+      name: 'ai.moeru.airi',
+      openAtLogin: false,
+      path: 'C:\\Wuwiii\\Wuwiii.exe',
+    })
+  })
+
+  it('does nothing outside Windows', async () => {
+    const { disableRetiredWindowsLoginItems, getWindowsLoginItemSettings, setWindowsLoginItemSettings } = await import('./windows-login-item')
+    const electronApp = createAppMock()
+
+    disableRetiredWindowsLoginItems('cn.wuwiii.desktop.dev.electron-v2-test', electronApp as never, false)
     expect(getWindowsLoginItemSettings(electronApp as never, false)).toEqual({ enabled: false })
     expect(setWindowsLoginItemSettings('cn.wuwiii.desktop.dev.electron-v2-test', true, electronApp as never, false)).toEqual({ enabled: false })
 

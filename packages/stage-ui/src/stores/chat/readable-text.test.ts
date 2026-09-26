@@ -22,4 +22,10 @@ describe('createReadableFinalText', () => {
     expect(createReadableFinalText(text)).toBe('打开管家球 -> 更多 -> 工作台。')
     expect(createReadableSpeechText(text)).toBe('打开管家球 -> 更多 -> 工作台。')
   })
+
+  it('never exposes an incomplete ACT envelope to display or speech', () => {
+    const text = '我在这。<|ACT {"actionCardId":"small-wave"'
+    expect(createReadableFinalText(text)).toBe('我在这。')
+    expect(createReadableSpeechText(text)).toBe('我在这。')
+  })
 })

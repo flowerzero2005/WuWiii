@@ -1,4 +1,24 @@
 chat:
+  composer:
+    title: 独立输入窗口
+    description: 在这里编辑，由原会话执行唯一发送及图片费用确认。
+    detach: 拆出输入
+    return: 收回输入
+    recover: 恢复本会话草稿
+    view-recovery: 查看保留的草稿
+    orphaned: 原会话已切换或关闭。请回到原会话后恢复这份草稿。
+    uncertain: 原发送结果尚未确认。这份草稿保留在内存中，只有原会话确认结果后才能再次提交。
+    sync-failed: 草稿同步失败，已阻止关闭以保留最新输入。请重试同步后再收回。
+    source-failed: 拆出或收回失败。请先结束当前发送，或收回另一个已拆出的输入窗口。
+    send-failed: 原会话未能发送这份草稿，请检查原会话。
+    wait-send: 请等待当前发送结束后再关闭。
+    image: 已附加图片
+    remove-image: 移除图片
+    add-image: 添加图片
+    image-failed: 最多添加 4 张 PNG、JPEG、WebP 或 GIF 图片，每张不超过 10 MB。
+    syncing: 正在同步草稿…
+    synced: 草稿已同步
+    retry-sync: 重试同步
   actions:
     clear-messages: 清除当前对话
     close-personas: 关闭角色列表
@@ -12,6 +32,19 @@ chat:
     hide-additional-capabilities: 收起更多聊天能力
     open-personas: 选择聊天角色
     show-additional-capabilities: 展开更多聊天能力
+  vision:
+    disabled: 图片理解已关闭。请先在设置中开启视觉模块。
+    failed-text-only: 图片未能理解，本轮将只发送文字。
+    upload: 上传图片
+    screen-capture: 截取屏幕或窗口
+    screen-select: 选择来源并预览后添加。发送消息时才会将图片发送给视觉服务。
+    screen-preview: 所选来源预览
+    screen-attach: 添加截图
+    screen-loading: 正在加载预览…
+    screen-failed: 无法截取此来源，请重新选择可用的屏幕或窗口。
+    screen-no-sources: 暂无可用的屏幕或窗口。
+    image-limit: '一次最多发送 {count} 张图片。'
+    image-too-large: 每张图片必须小于 10 MB。
   capability-consent:
     action: 确认启用
     approval-required: 请先在聊天栏开启并确认这项官方能力。
@@ -23,15 +56,19 @@ chat:
     prices:
       embedding: 每次语义检索 {points} 点
       inner-voice: 按官方内心札记模型结算，每次生成最低 {points} 点
+      group-script: 剧本评估和后幕生成按所选官方聊天模型结算，每次最低 {points} 点
       speech: 每分钟 {points} 点，最低扣除 {minimum} 点
       transcription: 首分钟 {first} 点，之后每开始一分钟 {additional} 点
+      vision: 每次图片理解 {points} 点
       web-search: 每次搜索 {points} 点
     title: 启用{capability}？
   capabilities:
     inner-voice: 内心札记
+    group-script: 剧本推进
     semantic-memory: 语义记忆
     speech: 语音播报
     transcription: 语音输入
+    vision: 图片理解
     web-search: 联网搜索
   group:
     minimum-members: 群聊至少保留两名角色，当前无法移除。

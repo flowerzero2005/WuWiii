@@ -13,6 +13,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
+import ChapterEditor from './chapter-editor.vue'
+import ChapterSettings from './chapter-settings.vue'
+
 import {
   createEmptyGroupScript,
   createRoomScriptFromTemplate,
@@ -69,6 +72,12 @@ const roomTitleSaving = ref(false)
 const status = ref<PageStatus>()
 const importInput = ref<HTMLInputElement>()
 let roomLoadRevision = 0
+let loadedRoomSessionId = ''
+const loadedRoomScriptRevision = ref(0)
+const templateActs = computed({
+  get: () => templateDraft.value.acts ?? [],
+  set: value => templateDraft.value.acts = value,
+})
 
 const selectedRoom = computed(() => groupSessions.value.find(room => room.sessionId === selectedRoomId.value))
 const selectedRoomParticipants = computed(() => selectedRoom.value?.participants ?? [])
@@ -290,18 +299,24 @@ function removeRelationship(index: number) {
 async function loadSelectedRoomScript() {
   const sessionId = selectedRoomId.value
   const revision = ++roomLoadRevision
-  roomScriptDraft.value = undefined
+  const refreshingCurrentRoom = loadedRoomSessionId === sessionId && !!roomScriptDraft.value
+  if (!refreshingCurrentRoom)
+    roomScriptDraft.value = undefined
   if (!sessionId) {
     roomLoading.value = false
     return
   }
 
-  roomLoading.value = true
+  // A lease claim changes the record revision. Keep the chapter runner mounted
+  // during same-room refreshes so its own claim cannot dispose/cancel the job.
+  roomLoading.value = !refreshingCurrentRoom
   try {
     const loaded = await chatSession.resolveGroupRoomScript(sessionId)
     if (revision !== roomLoadRevision || sessionId !== selectedRoomId.value)
       return
     roomScriptDraft.value = loaded ? structuredClone(loaded) : undefined
+    loadedRoomSessionId = sessionId
+    loadedRoomScriptRevision.value = chatSession.getSessionMeta(sessionId)?.roomScriptRevision ?? 0
   }
   catch {
     if (revision === roomLoadRevision)
@@ -325,9 +340,12 @@ async function applyTemplateToRoom() {
       participantIds: room.participants?.map(participant => participant.characterId) ?? [],
       narrationSettings: roomScriptDraft.value?.narrationSettings,
     })
-    const saved = await chatSession.updateGroupRoomScript(room.sessionId, next)
-    if (room.sessionId === selectedRoomId.value)
+    const saved = await chatSession.updateGroupRoomScript(room.sessionId, next, loadedRoomScriptRevision.value)
+    if (room.sessionId === selectedRoomId.value) {
       roomScriptDraft.value = structuredClone(saved)
+      loadedRoomSessionId = room.sessionId
+      loadedRoomScriptRevision.value = chatSession.getSessionMeta(room.sessionId)?.roomScriptRevision ?? 0
+    }
     setStatus('success', 'settings.pages.group-scripts.status.template-applied', { room: room.title ?? '' })
   }
   catch (error) {
@@ -353,9 +371,11 @@ async function saveRoomScript() {
       draft,
       room.participants?.map(participant => participant.characterId) ?? [],
     )
-    const saved = await chatSession.updateGroupRoomScript(room.sessionId, next)
-    if (room.sessionId === selectedRoomId.value)
+    const saved = await chatSession.updateGroupRoomScript(room.sessionId, next, loadedRoomScriptRevision.value)
+    if (room.sessionId === selectedRoomId.value) {
       roomScriptDraft.value = structuredClone(saved)
+      loadedRoomScriptRevision.value = chatSession.getSessionMeta(room.sessionId)?.roomScriptRevision ?? 0
+    }
     setStatus('success', 'settings.pages.group-scripts.status.room-saved')
   }
   catch (error) {
@@ -863,6 +883,8 @@ onMounted(async () => {
           </div>
         </section>
 
+        <ChapterEditor v-show="activeEditorTab === 'template'" v-model="templateActs" />
+
         <section v-show="activeEditorTab === 'room'" :class="['airi-surface-panel rounded-xl p-4 sm:p-5', 'flex flex-col gap-4']">
           <div>
             <p :class="['m-0 text-[11px] font-semibold tracking-[0.14em] uppercase', 'text-[var(--airi-text-soft)]']">
@@ -932,6 +954,7 @@ onMounted(async () => {
             />
           </div>
           <template v-else>
+            <ChapterSettings :session-id="selectedRoomId" :state="roomScriptDraft" :revision="loadedRoomScriptRevision" @updated="loadSelectedRoomScript" />
             <div :class="['relative flex flex-col gap-3 pl-5']">
               <div :class="['pointer-events-none absolute bottom-4 left-2 top-4 w-px', 'bg-[var(--airi-border-accent)]']" />
               <article

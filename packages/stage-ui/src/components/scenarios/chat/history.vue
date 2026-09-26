@@ -552,6 +552,7 @@ watch(assistantInnerVoiceHydrationKey, () => {
         @contextmenu="openMessageContextMenu($event, message, index)"
       >
         <ChatAssistantItem
+          v-if="!message.metadata?.scriptAct"
           :message="message"
           :previous-user-message="findPreviousUserMessage(index)"
           :label="getAssistantLabel(message)"
@@ -564,6 +565,14 @@ watch(assistantInnerVoiceHydrationKey, () => {
           @delivery-visible="handleDeliveryVisible"
           @typing-complete="handleTypingComplete"
         />
+        <div v-else :class="['airi-card mx-auto max-w-[36rem] rounded-xl px-4 py-3']">
+          <p :class="['airi-text m-0 text-sm font-semibold']">
+            {{ t('settings.pages.group-scripts.chapters.current', message.metadata.scriptAct) }}
+          </p>
+          <p :class="['airi-text-muted m-0 mt-2 whitespace-pre-wrap text-sm leading-6']">
+            {{ typeof message.content === 'string' ? message.content.split('\n').slice(1).join('\n') : '' }}
+          </p>
+        </div>
       </div>
 
       <div

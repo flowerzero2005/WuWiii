@@ -11,7 +11,7 @@ const show = ref(false)
 const buildInfo = useBuildInfo()
 
 const aboutLinks = [
-  { label: 'Wuwiii Home', href: 'https://www.wuwiii.cn/', icon: 'i-solar:home-smile-outline' },
+  { label: 'Wuwiii Home', href: 'http://127.0.0.1:5173/', icon: 'i-solar:home-smile-outline' },
   { label: 'Project AIRI source', href: 'https://github.com/moeru-ai/airi', icon: 'i-simple-icons:github' },
 ]
 

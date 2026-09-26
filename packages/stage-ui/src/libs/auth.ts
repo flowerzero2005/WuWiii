@@ -23,8 +23,16 @@ interface AuthClientErrorResult {
   error?: {
     code?: string
     message?: string
+    status?: number
     statusText?: string
   } | null
+}
+
+export class AuthSessionRefreshError extends Error {
+  constructor(public readonly status?: number) {
+    super('Unable to refresh the authentication session.')
+    this.name = 'AuthSessionRefreshError'
+  }
 }
 
 export class VerificationCodeRateLimitError extends Error {
@@ -118,7 +126,7 @@ async function readAuthResponse(response: Response, fallbackMessage: string) {
 
 export async function fetchSession(options: { broadcast?: boolean } = {}) {
   const refreshVersion = sessionRefreshVersion
-  const { data } = await authClient.getSession()
+  const { data, error } = await authClient.getSession()
   // A response sent before another window signed out must not restore that
   // renderer's old identity after the shared cookie has been revoked.
   if (refreshVersion !== sessionRefreshVersion)
@@ -133,9 +141,16 @@ export async function fetchSession(options: { broadcast?: boolean } = {}) {
     return true
   }
 
+  // The client reports a received non-2xx response as data: null with an
+  // error. Only a confirmed 401 may revoke the local session; a failed
+  // network request or a transient server response must preserve it.
+  if (error && error.status !== 401)
+    throw new AuthSessionRefreshError(error.status)
+
+  const wasAuthenticated = useAuthStore().isAuthenticated
   invalidateAuthSession()
-  if (options.broadcast)
-    broadcastAuthStateChanged()
+  if (wasAuthenticated || options.broadcast)
+    broadcastAuthStateChanged('sign-out')
   return false
 }
 
@@ -157,7 +172,7 @@ export async function signOut() {
   assertAuthSuccess(result, '退出登录失败，请重试。')
 
   invalidateAuthSession()
-  broadcastAuthStateChanged()
+  broadcastAuthStateChanged('sign-out')
 }
 
 export async function signInWithEmailPassword(credentials: EmailPasswordCredentials) {

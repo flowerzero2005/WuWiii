@@ -8,8 +8,11 @@ export type CommerceRequestPurpose
     | 'recommended-replies'
     | 'group-narration'
     | 'group-narration-speech'
+    | 'group-script-evaluation'
+    | 'group-script-sequel'
     | 'speech'
     | 'web-search'
+    | 'vision'
     | 'unknown'
 
 export type CommerceRequestSurface
@@ -18,6 +21,7 @@ export type CommerceRequestSurface
     | 'quick-chat'
     | 'chat'
     | 'proactive'
+    | 'automatic-screenshot'
     | 'unknown'
 
 export type UsageRequestStatus = 'pending' | 'succeeded' | 'failed' | 'cancelled'

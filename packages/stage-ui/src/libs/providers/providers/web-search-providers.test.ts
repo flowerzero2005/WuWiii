@@ -8,6 +8,7 @@ import { providerGoogleCustomSearch } from './google-custom-search'
 import { listProviders } from './registry'
 import { providerSerpApi } from './serpapi'
 import { providerSerper } from './serper'
+import { providerTavily } from './tavily'
 
 import './index'
 
@@ -44,6 +45,16 @@ describe('standalone web search providers', () => {
 
     expect(result.valid).toBe(false)
     expect(result.reason).toContain('Search Engine ID')
+  })
+
+  it('does not spend provider quota during runtime validation', async () => {
+    const genericValidator = providerExa.validators!.validateProvider![0]({ t })
+    const tavilyValidator = providerTavily.validators!.validateProvider![0]({ t })
+    const provider = { webSearch: vi.fn() }
+
+    await expect(genericValidator.validator({ apiKey: 'exa-key' }, provider as any, {}, { t })).resolves.toMatchObject({ valid: true })
+    await expect(tavilyValidator.validator({ apiKey: 'tavily-key' }, provider as any, {}, { t })).resolves.toMatchObject({ valid: true })
+    expect(provider.webSearch).not.toHaveBeenCalled()
   })
 
   it('maps Exa search responses into unified web-search results', async () => {

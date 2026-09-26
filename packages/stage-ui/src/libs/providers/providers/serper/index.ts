@@ -51,6 +51,7 @@ function createSerperProvider(config: SerperConfig): WebSearchProvider {
       query,
       maxResults = 5,
       timeRange,
+      signal,
     }: WebSearchProviderParams): Promise<WebSearchProviderResponse> {
       const apiKey = requireApiKey(config.apiKey, PROVIDER_ID, PROVIDER_NAME)
       const resultCount = clampSearchResultsCount(maxResults, { max: 20 })
@@ -67,6 +68,7 @@ function createSerperProvider(config: SerperConfig): WebSearchProvider {
           'X-API-KEY': apiKey,
         },
         method: 'POST',
+        signal,
       })
 
       if (!response.ok)

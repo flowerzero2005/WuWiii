@@ -118,6 +118,25 @@ describe('live2d model-scoped performance configuration', () => {
     setActivePinia(createPinia())
   })
 
+  it('resolves a composite card from the requested model in a chat-only window', async () => {
+    const store = useLive2d()
+    store.setCompositeExpressionPreset({
+      expressions: [{ index: 0, name: 'Smile' }],
+      id: 'model-a-smile',
+      modelId: 'model-a',
+      name: 'Model A Smile',
+    })
+
+    expect(store.activeActionModelId).toBeUndefined()
+    store.retainModelConsumer()
+    store.broadcastLive2DActionRequest('model-a', ['model-a-smile'])
+
+    // The requested model is used for preset lookup even when the sender has
+    // no active model id of its own.
+    await vi.waitFor(() => expect(store.actionRequest?.customActionPresetId).toBe('model-a-smile'))
+    store.releaseModelConsumer()
+  })
+
   it('normalizes multi-tag metadata and advanced AI descriptions', () => {
     const store = useLive2d()
     store.setCompositeExpressionPreset({

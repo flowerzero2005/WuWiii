@@ -4,7 +4,6 @@ import type {
   WebSearchProviderResponse,
 } from '../../types'
 
-import { errorMessageFrom } from '@moeru/std'
 import { z } from 'zod'
 
 import {
@@ -116,6 +115,7 @@ function createTavilyWebSearchProvider(config: TavilyConfig): WebSearchProvider 
       maxResults = 5,
       timeRange,
       searchDepth = 'basic',
+      signal,
     }: WebSearchProviderParams): Promise<WebSearchProviderResponse> {
       const apiKey = config.apiKey?.trim()
       if (!apiKey) {
@@ -140,6 +140,7 @@ function createTavilyWebSearchProvider(config: TavilyConfig): WebSearchProvider 
           'Content-Type': 'application/json',
         },
         method: 'POST',
+        signal,
       })
 
       if (!response.ok)
@@ -218,23 +219,13 @@ export const providerTavily = defineProvider<TavilyConfig>({
             }
           }
 
-          try {
-            await provider.webSearch({ maxResults: 1, query: 'test', searchDepth: 'basic' })
-            return {
-              errors: [],
-              reason: '',
-              reasonKey: '',
-              valid: true,
-            }
-          }
-          catch (error) {
-            const reason = errorMessageFrom(error) || 'Tavily search check failed.'
-            return {
-              errors: [{ error }],
-              reason,
-              reasonKey: '',
-              valid: false,
-            }
+          // Search endpoints can bill per request, so validation only checks
+          // that the configured provider was created successfully.
+          return {
+            errors: [],
+            reason: '',
+            reasonKey: '',
+            valid: true,
           }
         },
       }),

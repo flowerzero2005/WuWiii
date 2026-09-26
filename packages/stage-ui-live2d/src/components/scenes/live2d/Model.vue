@@ -3,7 +3,7 @@
 import type { Application } from '@pixi/app'
 
 import type { PixiLive2DInternalModel } from '../../../composables/live2d'
-import type { Live2DActionRequest, Live2DAvailableExpression, Live2DAvailableMotion, Live2DCompositeExpressionItem, Live2DCompositeExpressionPreset, Live2DEmotionTransitionRequest, Live2DExpressionRef, Live2DMotionRef } from '../../../stores/live2d'
+import type { Live2DActionBinding, Live2DActionRequest, Live2DAvailableExpression, Live2DAvailableMotion, Live2DCompositeExpressionItem, Live2DCompositeExpressionPreset, Live2DEmotionTransitionRequest, Live2DExpressionRef, Live2DMotionRef } from '../../../stores/live2d'
 import type { Live2DCoreStateSnapshot, Live2DCoreStateTransition } from '../../../utils/core-state-transition'
 import type { Live2DParameterTransformMap } from '../../../utils/emotion-transition'
 import type { Live2DIdleRotationMode } from '../../../utils/idle-motion-scheduler'
@@ -1694,6 +1694,52 @@ async function previewMotion(motionName: string, index?: number) {
   scheduleMotionTimeout(token, Math.max(5000, (durationMs ?? 0) + 2000))
 }
 
+/**
+ * Plays a settings-only composite action in the preview renderer.
+ *
+ * Preview models deliberately do not consume the shared action queue. Keeping
+ * this path local prevents a settings page click from being rejected by the
+ * stage-only automatic takeover gate or from changing the live stage model.
+ */
+async function previewAction(action: Pick<Live2DActionBinding, 'motion' | 'expression' | 'durationMs'>) {
+  if (!model.value) {
+    console.warn('Cannot preview action: model not loaded')
+    return false
+  }
+
+  const resolvedMotion = resolveActionMotion(action.motion)
+  const resolvedExpression = resolveActionExpression(action.expression)
+  if (!resolvedMotion && resolvedExpression == null)
+    return false
+
+  if (resolvedMotion) {
+    const token = beginMotionPlayback('preview', undefined, resolvedMotion)
+    const started = await setMotion(resolvedMotion.group, resolvedMotion.index, MotionPriority.FORCE)
+    if (!started || !activeMotionPlayback?.started || activeMotionPlayback.token !== token) {
+      if (activeMotionPlayback?.token === token)
+        finishMotionPlayback(token, 'failed')
+      return false
+    }
+
+    if (resolvedExpression != null) {
+      // Composite presets normally have a finite duration. Use the same
+      // fallback as expression preview so a zero duration cannot leave the
+      // preview expression stuck on the model.
+      const expressionDurationMs = action.durationMs && action.durationMs > 0 ? action.durationMs : 2400
+      await setExpression(resolvedExpression, expressionDurationMs)
+    }
+
+    const durationMs = action.durationMs && action.durationMs > 0
+      ? action.durationMs
+      : resolveLoadedMotionDurationMs(resolvedMotion.group, resolvedMotion.index)
+    scheduleMotionTimeout(token, Math.max(5000, (durationMs ?? 0) + 2000))
+    return true
+  }
+
+  await setExpression(resolvedExpression!, action.durationMs && action.durationMs > 0 ? action.durationMs : 2400)
+  return true
+}
+
 async function setCompositeExpression(expressionKey: string, durationMs: number | undefined, requestId: number) {
   const presetId = parseLive2DCompositeExpressionKey(expressionKey)
   const preset = presetId ? currentModelCompositeExpressionPresets.value[presetId] : undefined
@@ -2513,6 +2559,7 @@ defineExpose({
   listExpressions,
   setMotion,
   previewMotion,
+  previewAction,
   setExpression,
   resetExpression,
   listMotionGroups,

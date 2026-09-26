@@ -437,6 +437,9 @@ export async function officialCloudFetch(input: RequestInfo | URL, init?: Reques
     if (isOfficialCloudUsageRequest(input))
       refreshCommerceAccountState()
 
+    if (init?.signal?.aborted)
+      throw init.signal.reason ?? error
+
     const officialCloudError = new Error('Unable to connect to the official cloud service. Please check the network or try again later.')
     officialCloudError.cause = error
     throw officialCloudError
@@ -831,18 +834,24 @@ function createOfficialCloudWebSearchProvider(): WebSearchProvider {
       const maxResults = clampSearchResultsCount(params.maxResults)
       const response = await officialCloudFetch(`${getOfficialCloudBaseUrl()}/web-search`, {
         body: JSON.stringify({
-          max_results: maxResults,
+          maxResults,
           query: params.query,
-          search_depth: params.searchDepth,
-          time_range: params.timeRange,
+          searchDepth: params.searchDepth,
+          timeRange: params.timeRange,
+          searchBudget: params.searchBudget,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...Object.fromEntries(Object.entries(params.headers ?? {}).filter(([name]) => ['x-airi-request-id', 'x-airi-request-stage', 'x-airi-parent-request-id', 'x-airi-turn-id', 'x-airi-group-turn-id', 'x-airi-source-surface', 'x-airi-character-name', 'x-airi-room-name'].includes(name.toLowerCase()))),
+          'Content-Type': 'application/json',
+        },
         method: 'POST',
+        signal: params.signal,
       })
-      const body = await response.json() as { results?: unknown }
+      const body = await response.json() as { results?: unknown, attemptsUsed?: number }
       const results = Array.isArray(body.results) ? body.results : []
 
       return {
+        attemptsUsed: body.attemptsUsed,
         results: results.flatMap((item): WebSearchProviderResponse['results'] => {
           if (!item || typeof item !== 'object')
             return []

@@ -52,6 +52,7 @@ export type WebSearchFailureKind
     | 'server'
     | 'upstream'
     | 'unknown'
+    | 'budget'
 
 export type WebSearchDiagnosticStatus = 'success' | 'cache-hit' | 'failure'
 
@@ -111,6 +112,19 @@ function clampProfileValue(value: number) {
 
 function boostProfileValue(value: number, amount: number) {
   return clampProfileValue(value + amount)
+}
+
+function fingerprintDiagnosticQuery(query: string) {
+  if (/^q-[a-z0-9]+:\d+$/.test(query))
+    return query
+
+  const normalized = query.replace(/\s+/g, ' ').trim().toLowerCase()
+  let hash = 2166136261
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `q-${(hash >>> 0).toString(36)}:${normalized.length}`
 }
 
 function cloneCharacterProfile(profile: CharacterProfile): CharacterProfile {
@@ -196,6 +210,9 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
 
   // Enable/disable intelligent web search
   const enabled = useLocalStorageManualReset<boolean>('settings/web-search/enabled', false)
+  const maxRequestsPerTurn = useLocalStorageManualReset<number>('settings/web-search/max-requests-per-turn', 1)
+  // Zero means the published per-request quote times the explicit request limit.
+  const maxOfficialPointsPerTurn = useLocalStorageManualReset<number>('settings/web-search/max-official-points-per-turn', 0)
 
   const activeProvider = useLocalStorageManualReset<string>('settings/web-search/active-provider', 'tavily')
 
@@ -359,6 +376,7 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
       createdAt: entry.createdAt ?? Date.now(),
       id: entry.id ?? `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       personaCardId: entry.personaCardId ?? airiCardStore.activeCardId ?? 'default',
+      query: fingerprintDiagnosticQuery(entry.query),
     }
 
     diagnostics.value = [
@@ -372,6 +390,8 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
   }
 
   function resetToDefaults() {
+    maxRequestsPerTurn.reset()
+    maxOfficialPointsPerTurn.reset()
     enabled.reset()
     activeProvider.reset()
     tavilyApiKey.value = ''
@@ -465,5 +485,7 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
     recordDiagnostic,
     clearDiagnostics,
     resetToDefaults,
+    maxRequestsPerTurn,
+    maxOfficialPointsPerTurn,
   }
 })

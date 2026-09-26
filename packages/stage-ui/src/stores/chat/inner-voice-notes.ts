@@ -38,6 +38,8 @@ interface EnsureAssistantInnerVoiceNoteInput {
   personaCardId?: string
   userMessage?: string
   assistantText: string
+  /** Language resolved for the visible chat turn. */
+  language?: string
   stream?: AiriInnerVoiceNoteGenerationInput['stream']
   model?: string
   chatProvider?: ChatProvider
@@ -450,6 +452,7 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
           abortSignal: linkedAbort.signal,
           userMessage: input.userMessage ?? '',
           assistantText: input.assistantText,
+          language: input.language,
           sceneMode: runtime.sceneMode,
           personaState: runtime.personaState,
           relationshipState: runtime.relationshipState,

@@ -1,6 +1,7 @@
 import type { Rectangle } from 'electron'
 import type { InferOutput } from 'valibot'
 
+import type { DesktopRendererCapabilities } from '../../../shared/desktop-capabilities'
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { McpStdioManager } from '../../services/airi/mcp-servers'
@@ -56,6 +57,7 @@ export async function setupMainWindow(params: {
   onRendererRuntimeReady?: () => Promise<void> | void
   openDesktopDiagnostics?: () => void
   exportDesktopDiagnostics?: () => Promise<boolean>
+  reportRendererCapabilities?: (report: DesktopRendererCapabilities) => boolean
   serverChannel: ServerChannel
   mcpStdioManager: McpStdioManager
   i18n: I18n
@@ -247,6 +249,7 @@ export async function setupMainWindow(params: {
     onRendererRuntimeReady: params.onRendererRuntimeReady,
     openDesktopDiagnostics: params.openDesktopDiagnostics,
     exportDesktopDiagnostics: params.exportDesktopDiagnostics,
+    reportRendererCapabilities: params.reportRendererCapabilities,
     serverChannel: params.serverChannel,
     mcpStdioManager: params.mcpStdioManager,
     i18n: params.i18n,

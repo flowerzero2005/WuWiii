@@ -2,11 +2,19 @@ import type { App, BrowserWindow, Details, RenderProcessGoneDetails } from 'elec
 
 import { Buffer } from 'node:buffer'
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, statSync, truncateSync } from 'node:fs'
+import { release } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import { platform } from 'node:process'
+import { arch, platform, versions } from 'node:process'
+
+import { normalizeDesktopRendererCapabilities } from '../../../shared/desktop-capabilities'
 
 const MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 const MAX_TEXT_LENGTH = 2000
+const REGEXP_META_RE = /[.*+?^${}()|[\]\\]/g
+const BEARER_RE = /\bbearer\s+[\w.~+/=-]+/gi
+const SECRET_VALUE_RE = /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|password|secret)(\s*[=:]\s*)([^\s,;]+)/gi
+const SECRET_KEY_RE = /^(?:authorization|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|password|secret)$/i
+const NATIVE_RENDERER_FAILURE_RE = /^(?:Uncaught|Failed to load resource)/i
 
 export interface DesktopDiagnosticEntry {
   at: string
@@ -18,10 +26,11 @@ export interface DesktopDiagnostics {
   logFile: string
   exportCopy: (destination: string) => boolean
   record: (event: string, details?: Record<string, unknown>) => void
+  recordRendererCapabilities: (value: unknown) => boolean
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return value.replace(REGEXP_META_RE, '\\$&')
 }
 
 export function redactDesktopDiagnosticText(value: string, privateRoots: string[] = []) {
@@ -32,14 +41,14 @@ export function redactDesktopDiagnosticText(value: string, privateRoots: string[
   }
 
   redacted = redacted
-    .replace(/\bbearer\s+[\w.~+/=-]+/gi, 'Bearer <redacted>')
-    .replace(/\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|password|secret)(\s*[=:]\s*)([^\s,;]+)/gi, '$1$2<redacted>')
+    .replace(BEARER_RE, 'Bearer <redacted>')
+    .replace(SECRET_VALUE_RE, '$1$2<redacted>')
 
   return redacted.slice(0, MAX_TEXT_LENGTH)
 }
 
 function sanitizeDesktopDiagnosticValue(value: unknown, privateRoots: string[], key?: string): unknown {
-  if (key && /^(?:authorization|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|password|secret)$/i.test(key))
+  if (key && SECRET_KEY_RE.test(key))
     return '<redacted>'
   if (typeof value === 'string')
     return redactDesktopDiagnosticText(value, privateRoots)
@@ -132,7 +141,7 @@ function attachWindowDiagnostics(window: BrowserWindow, record: DesktopDiagnosti
   window.webContents.on('console-message', (details) => {
     // Only persist native uncaught/load failures. General console errors can
     // contain user chat or provider payloads and must stay out of this log.
-    if (firstRendererErrorRecorded || details.level !== 'error' || !/^(?:Uncaught|Failed to load resource)/i.test(details.message))
+    if (firstRendererErrorRecorded || details.level !== 'error' || !NATIVE_RENDERER_FAILURE_RE.test(details.message))
       return
 
     firstRendererErrorRecorded = true
@@ -176,6 +185,10 @@ export function setupDesktopDiagnostics(electronApp: App, options?: { angleBacke
     appVersion: electronApp.getVersion(),
     packaged: electronApp.isPackaged,
     platform,
+    architecture: arch,
+    osRelease: release(),
+    electronVersion: versions.electron ?? 'unavailable',
+    chromiumVersion: versions.chrome ?? 'unavailable',
   })
   electronApp.on('browser-window-created', (_event, window) => attachWindowDiagnostics(window, record))
   electronApp.on('child-process-gone', (_event, details: Details) => {
@@ -206,5 +219,13 @@ export function setupDesktopDiagnostics(electronApp: App, options?: { angleBacke
     return true
   }
 
-  return { exportCopy, logFile, record }
+  const recordRendererCapabilities = (value: unknown) => {
+    const capabilities = normalizeDesktopRendererCapabilities(value)
+    if (!capabilities)
+      return false
+    record('renderer-capabilities', { ...capabilities })
+    return true
+  }
+
+  return { exportCopy, logFile, record, recordRendererCapabilities }
 }

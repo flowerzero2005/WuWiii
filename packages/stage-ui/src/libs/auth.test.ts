@@ -153,6 +153,34 @@ describe('email/password auth helpers', () => {
     expect(store.isAuthenticated).toBe(false)
   })
 
+  it('clears stale auth state when the server explicitly returns 401', async () => {
+    const store = useAuthStore()
+    store.user = user
+    store.session = session
+    authClientMock.getSession.mockResolvedValue({
+      data: null,
+      error: { status: 401, statusText: 'Unauthorized' },
+    })
+
+    await expect(fetchSession()).resolves.toBe(false)
+
+    expect(store.isAuthenticated).toBe(false)
+  })
+
+  it('keeps the current auth state when refreshing receives a transient server error', async () => {
+    const store = useAuthStore()
+    store.user = user
+    store.session = session
+    authClientMock.getSession.mockResolvedValue({
+      data: null,
+      error: { status: 503, statusText: 'Service Unavailable' },
+    })
+
+    await expect(fetchSession()).rejects.toMatchObject({ name: 'AuthSessionRefreshError', status: 503 })
+
+    expect(store.isAuthenticated).toBe(true)
+  })
+
   it('does not restore a session response that was already in flight when signing out', async () => {
     const store = useAuthStore()
     store.user = user

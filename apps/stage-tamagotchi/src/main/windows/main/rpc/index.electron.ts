@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron'
 
+import type { DesktopRendererCapabilities } from '../../../../shared/desktop-capabilities'
 import type { I18n } from '../../../libs/i18n'
 import type { ServerChannel } from '../../../services/airi/channel-server'
 import type { McpStdioManager } from '../../../services/airi/mcp-servers'
@@ -11,7 +12,7 @@ import type { WidgetsWindowManager } from '../../widgets'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 
-import { butlerOpenWindow, electronExportDesktopDiagnostics, electronMainRendererBootstrapVisible, electronMainRendererRuntimeReady, electronOpenChat, electronOpenDesktopDiagnostics, electronOpenMainDevtools, electronOpenSettings, electronOpenWorkbench, noticeWindowEventa, quickChatOpenWindow } from '../../../../shared/eventa'
+import { butlerOpenWindow, electronExportDesktopDiagnostics, electronMainRendererBootstrapVisible, electronMainRendererRuntimeReady, electronOpenChat, electronOpenDesktopDiagnostics, electronOpenMainDevtools, electronOpenSettings, electronOpenWorkbench, electronReportDesktopCapabilities, noticeWindowEventa, quickChatOpenWindow } from '../../../../shared/eventa'
 import { createMcpServersService } from '../../../services/airi/mcp-servers'
 import { createWidgetsService } from '../../../services/airi/widgets'
 import { createAutoUpdaterService } from '../../../services/electron'
@@ -39,6 +40,7 @@ export async function setupMainWindowElectronInvokes(params: {
   onRendererRuntimeReady?: () => Promise<void> | void
   openDesktopDiagnostics?: () => void
   exportDesktopDiagnostics?: () => Promise<boolean>
+  reportRendererCapabilities?: (report: DesktopRendererCapabilities) => boolean
 }) {
   const { context } = createWindowEventaContext(params.window)
 
@@ -66,6 +68,11 @@ export async function setupMainWindowElectronInvokes(params: {
       return false
 
     return await params.exportDesktopDiagnostics?.() ?? false
+  })
+  defineInvokeHandler(context, electronReportDesktopCapabilities, (report, options) => {
+    if (!isIpcEventFromWindow(params.window, options))
+      return false
+    return params.reportRendererCapabilities?.(report) ?? false
   })
   createWidgetsService({ context, widgetsManager: params.widgetsManager, window: params.window })
   createAutoUpdaterService({ context, window: params.window, service: params.autoUpdater })

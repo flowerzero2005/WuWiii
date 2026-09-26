@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Live2DActionBinding } from '../../stores/live2d'
 import type { Live2DIdleRotationMode } from '../../utils/idle-motion-scheduler'
 
 import { Screen } from '@proj-airi/ui'
@@ -137,6 +138,10 @@ async function previewMotion(motionName: string, index?: number) {
   await live2dModelRef.value?.previewMotion(motionName, index)
 }
 
+async function previewAction(action: Pick<Live2DActionBinding, 'motion' | 'expression' | 'durationMs'>) {
+  return await live2dModelRef.value?.previewAction(action)
+}
+
 async function setExpression(expression: number | string, durationMs?: number) {
   await live2dModelRef.value?.setExpression(expression, durationMs)
 }
@@ -156,6 +161,7 @@ defineExpose({
   listMotionGroups,
   setMotion,
   previewMotion,
+  previewAction,
   setExpression,
   resetExpression,
 })

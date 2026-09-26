@@ -95,6 +95,7 @@ export interface ChatTurnSnapshot {
 }
 
 export interface ChatAssistantMessageMetadata {
+  scriptAct?: { number: number, title: string }
   messageKind?: 'assistant' | 'narration' | 'status'
   narration?: {
     groupTurnId: string

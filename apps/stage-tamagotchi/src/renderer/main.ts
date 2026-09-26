@@ -5,6 +5,7 @@ import NProgress from 'nprogress'
 
 import { autoAnimatePlugin } from '@formkit/auto-animate/vue'
 import { getStageProductEdition, isProductAudienceVisible } from '@proj-airi/stage-shared'
+import { initializeNewModuleConfigurationStorage } from '@proj-airi/stage-ui/libs/providers/config-normalization'
 import { MotionPlugin } from '@vueuse/motion'
 import { createPinia } from 'pinia'
 import { setupLayouts } from 'virtual:generated-layouts'
@@ -75,7 +76,7 @@ function enforceTransparentRootSurface() {
 enforceTransparentRootSurface()
 
 function shouldInstallStageOnlyPlugins() {
-  const hashRoute = window.location.hash.replace(/^#/, '') || '/'
+  const hashRoute = (window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash) || '/'
   return hashRoute === '/' || hashRoute.startsWith('/?')
 }
 
@@ -205,18 +206,8 @@ router.beforeEach((to) => {
   }
 })
 
-router.beforeResolve((to) => {
-  if (!to.path.startsWith('/settings'))
-    return
-
-})
-
-router.afterEach((to) => {
+router.afterEach(() => {
   finishSettingsRouteProgress()
-
-  if (!to.path.startsWith('/settings'))
-    return
-
 })
 
 router.onError(() => {
@@ -224,6 +215,13 @@ router.onError(() => {
 })
 
 async function bootstrap() {
+  // Normalize newly introduced settings before any routed store is created.
+  // A storage failure keeps the settings UI available for repair and never
+  // marks the migration complete.
+  const configurationStatus = await initializeNewModuleConfigurationStorage()
+  if (configurationStatus !== 'ready')
+    console.warn('[App] Module configuration migration status:', configurationStatus)
+
   const app = createApp(App)
 
   installDevErrorLogging(app)

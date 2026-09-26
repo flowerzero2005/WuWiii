@@ -25,6 +25,8 @@ export function setupChatWindowReusableFunc(params: {
       title: 'Chat',
       width: 600.0,
       height: 800.0,
+      minWidth: 360,
+      minHeight: 420,
       maximizable: true,
       show: false,
       icon,

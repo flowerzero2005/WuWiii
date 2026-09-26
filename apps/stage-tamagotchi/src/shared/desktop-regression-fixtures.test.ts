@@ -65,7 +65,7 @@ describe('desktop regression loopback fixture service', () => {
         method: 'OPTIONS',
       }),
       fetch(`${serviceBaseUrl}/api/not-allowed`, { headers: { origin: rendererOrigin }, method: 'POST' }),
-      fetch(`${serviceBaseUrl}/api/model-gateway/v1/pricing`, { headers: { origin: 'https://api.wuwiii.cn' } }),
+      fetch(`${serviceBaseUrl}/api/model-gateway/v1/pricing`, { headers: { origin: 'http://127.0.0.1:3000' } }),
       fetch(`${serviceBaseUrl}/api/auth/get-session`),
     ])
 

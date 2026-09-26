@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  advanceGroupScriptAct,
   buildGroupScriptRoomMembers,
   buildGroupScriptRoomRelationships,
   buildGroupScriptSpeakerContext,
+  createInitialGroupScriptProgress,
   decodeGroupScript,
   encodeGroupScript,
   GROUP_SCRIPT_FORMAT,
   parseGroupRoomScriptState,
   parseGroupScript,
+  restartGroupScriptAct,
+  rollbackGroupScriptAct,
 } from './group-script'
 
 function template(overrides: Record<string, unknown> = {}) {
@@ -26,6 +30,54 @@ function template(overrides: Record<string, unknown> = {}) {
     createdAt: 1,
     updatedAt: 2,
     ...overrides,
+  }
+}
+
+function chapterTemplate(overrides: Record<string, unknown> = {}) {
+  return template({
+    acts: [
+      {
+        actId: 'arrival',
+        number: 1,
+        title: 'Arrival',
+        narration: 'The night shift begins.',
+        goal: 'Learn why the guest arrived late.',
+        visibility: 'visible',
+        unlockConditions: [{ conditionId: 'guest-explains', description: 'The guest explains why they arrived late.', minConfidence: 0.8 }],
+      },
+      {
+        actId: 'investigation',
+        number: 2,
+        title: 'Investigation',
+        narration: 'A missing record changes the tone.',
+        goal: 'Find the missing record.',
+        visibility: 'visible',
+        unlockConditions: [{ conditionId: 'record-found', description: 'The group has located the missing record.', minEvidenceCount: 2 }],
+      },
+      {
+        actId: 'resolution',
+        number: 3,
+        title: 'Resolution',
+        unlockConditions: [{ conditionId: 'truth-shared', description: 'The group shares the full truth.' }],
+      },
+    ],
+    ...overrides,
+  })
+}
+
+function advanceInput(actId: string, operationId: string, evaluationTurnId: string, conditionId: string, messageIds: string[], evaluatedAt = 10) {
+  return {
+    actId,
+    operationId,
+    evaluationTurnId,
+    evaluatedAt,
+    conditions: [{
+      conditionId,
+      satisfied: true,
+      confidence: 0.9,
+      messageIds,
+      summary: 'Conversation evidence supports the condition.',
+    }],
   }
 }
 
@@ -56,6 +108,155 @@ describe('group script contract', () => {
   it('rejects JSON above 64 KiB before parsing', () => {
     const oversized = `{"${'x'.repeat(70_000)}"` // Deliberately malformed as well.
     expect(() => decodeGroupScript(oversized)).toThrow('64 KiB')
+  })
+
+  it('keeps legacy room snapshots readable and migrates chapter rooms to a deterministic initial revision', () => {
+    const legacy = parseGroupRoomScriptState({
+      templateSnapshot: template(),
+      roleBindings: { guard: 'character-a', guest: 'character-b' },
+      narrationSettings: { enabled: false, speechEnabled: false },
+    }, ['character-a', 'character-b'])
+    expect(legacy).not.toHaveProperty('progress')
+
+    const chapters = parseGroupScript(chapterTemplate())
+    const migrated = parseGroupRoomScriptState({
+      templateSnapshot: chapters,
+      roleBindings: { guard: 'character-a', guest: 'character-b' },
+      narrationSettings: { enabled: false, speechEnabled: false },
+    }, ['character-a', 'character-b'])
+    expect(migrated.progress).toEqual({
+      revision: 0,
+      currentActId: 'arrival',
+      unlockedActIds: ['arrival'],
+      completedActIds: [],
+      evidence: [],
+      isComplete: false,
+      history: [{
+        revision: 0,
+        action: 'initialize',
+        operationId: undefined,
+        changedAt: 2,
+        currentActId: 'arrival',
+        unlockedActIds: ['arrival'],
+        completedActIds: [],
+        evidence: [],
+        isComplete: false,
+      }],
+    })
+
+    expect(createInitialGroupScriptProgress(chapters)).toMatchObject({
+      currentActId: 'arrival',
+      unlockedActIds: ['arrival'],
+      completedActIds: [],
+      revision: 0,
+    })
+    expect(() => parseGroupScript(chapterTemplate({
+      acts: [{ actId: 'arrival', number: 2, title: 'Arrival', unlockConditions: [{ conditionId: 'one', description: 'A fact.' }] }],
+    }))).toThrow('consecutive')
+  })
+
+  it('advances only in order with complete, message-backed semantic evidence and ignores repeated evaluations', () => {
+    const script = parseGroupScript(chapterTemplate())
+    const initial = createInitialGroupScriptProgress(script)
+    const advanced = advanceGroupScriptAct(
+      script,
+      initial,
+      advanceInput('arrival', 'advance-arrival', 'turn-1', 'guest-explains', ['message-1']),
+      ['message-1'],
+    )
+
+    expect(advanced).toMatchObject({
+      revision: 1,
+      currentActId: 'investigation',
+      unlockedActIds: ['arrival', 'investigation'],
+      completedActIds: ['arrival'],
+      evidence: [{ actId: 'arrival', evaluationTurnId: 'turn-1' }],
+    })
+    expect(advanced.history).toHaveLength(2)
+    expect(advanceGroupScriptAct(
+      script,
+      advanced,
+      advanceInput('arrival', 'advance-arrival', 'turn-1', 'guest-explains', ['message-1']),
+      ['message-1'],
+    )).toBe(advanced)
+    expect(() => advanceGroupScriptAct(
+      script,
+      advanced,
+      advanceInput('investigation', 'missing-source', 'turn-2', 'record-found', ['missing-message', 'other-missing-message']),
+      ['message-1'],
+    )).toThrow('unavailable message')
+    expect(advanceGroupScriptAct(
+      script,
+      advanced,
+      advanceInput('resolution', 'out-of-order', 'turn-3', 'truth-shared', ['message-1']),
+      ['message-1'],
+    )).toBe(advanced)
+  })
+
+  it('creates immutable revisions when restarting or rolling back an unlocked act', () => {
+    const script = parseGroupScript(chapterTemplate())
+    const secondAct = advanceGroupScriptAct(
+      script,
+      createInitialGroupScriptProgress(script),
+      advanceInput('arrival', 'advance-arrival', 'turn-1', 'guest-explains', ['message-1']),
+      ['message-1'],
+    )
+    const thirdAct = advanceGroupScriptAct(
+      script,
+      secondAct,
+      advanceInput('investigation', 'advance-investigation', 'turn-2', 'record-found', ['message-2', 'message-3'], 20),
+      ['message-2', 'message-3'],
+    )
+    const restarted = restartGroupScriptAct(script, thirdAct, {
+      operationId: 'restart-investigation',
+      changedAt: 30,
+      actId: 'investigation',
+    })
+
+    expect(restarted).toMatchObject({
+      revision: 3,
+      currentActId: 'investigation',
+      unlockedActIds: ['arrival', 'investigation'],
+      completedActIds: ['arrival'],
+      evidence: [{ actId: 'arrival' }],
+    })
+    expect(thirdAct.currentActId).toBe('resolution')
+    expect(thirdAct.evidence).toHaveLength(2)
+    expect(restarted.history).toHaveLength(4)
+
+    const rolledBack = rollbackGroupScriptAct(script, thirdAct, {
+      operationId: 'rollback-one-act',
+      changedAt: 40,
+    })
+    expect(rolledBack.currentActId).toBe('investigation')
+    expect(rolledBack.history.at(-1)).toMatchObject({ action: 'rollback', revision: 3 })
+    expect(rollbackGroupScriptAct(script, rolledBack, {
+      operationId: 'rollback-one-act',
+      changedAt: 40,
+    })).toBe(rolledBack)
+  })
+
+  it('round-trips persisted chapter progress without sharing mutable revision arrays', () => {
+    const script = parseGroupScript(chapterTemplate())
+    const progress = advanceGroupScriptAct(
+      script,
+      createInitialGroupScriptProgress(script),
+      advanceInput('arrival', 'advance-arrival', 'turn-1', 'guest-explains', ['message-1']),
+      ['message-1'],
+    )
+    const restored = parseGroupRoomScriptState(JSON.parse(JSON.stringify({
+      templateSnapshot: script,
+      roleBindings: { guard: 'character-a', guest: 'character-b' },
+      narrationSettings: { enabled: false, speechEnabled: false },
+      progress,
+    })), ['character-a', 'character-b'])
+
+    expect(restored.progress).toBeDefined()
+    const restoredProgress = restored.progress!
+    expect(restoredProgress).toEqual(progress)
+    expect(restoredProgress).not.toBe(progress)
+    expect(restoredProgress.history).not.toBe(progress.history)
+    expect(restoredProgress.history[0]).not.toBe(progress.history[0])
   })
 
   it('requires complete one-to-one bindings to current participants', () => {

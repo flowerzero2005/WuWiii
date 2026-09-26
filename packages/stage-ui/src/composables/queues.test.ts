@@ -27,4 +27,12 @@ describe('parseActEmotion', () => {
       ok: true,
     })
   })
+
+  it('keeps an action when the optional emotion is unknown and accepts minor ACT spacing variants', () => {
+    expect(parseActPerformance('<| ACT = {"actionCardId":"small-wave","emotion":"not-real"} |>')).toEqual({
+      actionCardId: 'small-wave',
+      emotion: null,
+      ok: true,
+    })
+  })
 })

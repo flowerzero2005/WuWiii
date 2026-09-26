@@ -39,6 +39,8 @@ export interface AiriInnerVoiceNoteGenerationInput {
   trace?: ChatTraceContext
   userMessage: string
   assistantText: string
+  /** Language resolved for the visible chat turn, kept independent from UI/TTS locale. */
+  language?: string
   sceneMode: AiriSceneModeInference
   personaState: AiriPersonaState
   relationshipState: AiriPersonaRelationshipState
@@ -219,12 +221,15 @@ export function shouldPrewarmAiriInnerVoiceNote(input: {
 }
 
 export function buildAiriInnerVoiceNoteMessages(input: Omit<AiriInnerVoiceNoteGenerationInput, 'stream' | 'model' | 'chatProvider' | 'headers' | 'abortSignal'>): Message[] {
+  const targetLanguage = input.language?.trim() || 'en'
+
   return [
     {
       role: 'system',
       content: [
         'Write one optional private first-person thought for the active character after the latest reply.',
         'This is character-private content the user may open later, not chain-of-thought and not reasoning disclosure.',
+        `Write only in ${targetLanguage}, the language resolved for the current visible chat turn. Do not switch to English because the model or UI uses English.`,
         'Use the user\'s main language. For Chinese, write like natural private chat, not prose, film dialogue, or an essay.',
         'For Chinese, use the grammar of a natural private “我” thought. Do not begin from “他/她/对方…”, turn the user’s message into a camera-observed scene, or describe how a word, glance, or silence “落下来”.',
         'Avoid literary pivots and manufactured afterthoughts joined by an em dash. Avoid stock turns such as “差点没绷住”, “明明是我”, “偏偏”, “原来”, “说不心动是假的”, “谁懂”, or “嘴角压不住”.',
@@ -253,6 +258,7 @@ export function buildAiriInnerVoiceNoteMessages(input: Omit<AiriInnerVoiceNoteGe
       content: JSON.stringify({
         userMessage: truncateText(input.userMessage, 800),
         assistantVisibleReply: truncateText(input.assistantText, 1200),
+        targetLanguage,
         sceneMode: {
           mode: input.sceneMode.mode,
           confidence: input.sceneMode.confidence,
@@ -283,6 +289,7 @@ export async function generateAiriInnerVoiceNote(input: AiriInnerVoiceNoteGenera
 
   let rawText = ''
   const streamOptions: StreamOptions = {
+    targetLanguage: input.language?.trim() || 'en',
     onStreamEvent: (event: StreamEvent) => {
       if (event.type === 'text-delta')
         rawText += event.text

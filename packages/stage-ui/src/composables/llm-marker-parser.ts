@@ -14,6 +14,9 @@ export function removeLeakedToolProtocol(value: string) {
   return normalized
     .replace(/<\|\|DSML\|\|tool_calls>[\s\S]*?<\/\|\|DSML\|\|tool_calls>/gi, '')
     .replace(/<\|\|DSML\|\|tool_calls>[\s\S]*$/gi, '')
+    // An unfinished ACT envelope is private protocol. Keep it out of the
+    // parser's final value as well as literal stream output.
+    .replace(/<\|\s*ACT\b(?:(?!\|>)[\s\S])*$/gi, '')
 }
 
 interface MarkerToken {

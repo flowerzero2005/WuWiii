@@ -11,6 +11,7 @@ import { useWorkbenchSceneSettingsStore } from './workbench'
 // Export sub-stores
 export * from './audio-device'
 export * from './chat-appearance'
+export * from './chat-layout'
 export * from './controls-island'
 export * from './general'
 export * from './live2d'

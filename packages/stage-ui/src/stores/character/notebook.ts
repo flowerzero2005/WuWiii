@@ -1,6 +1,8 @@
+import type { NotebookData } from '../../database/repos/notebook.repo'
+
 import { nanoid } from 'nanoid'
 import { defineStore, storeToRefs } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import { notebookRepo } from '../../database/repos/notebook.repo'
 import { useAiriCardStore } from '../modules/airi-card'
@@ -113,13 +115,22 @@ export interface ScheduledTask {
   metadata?: Record<string, unknown>
 }
 
+export interface NotebookSaveResult {
+  scopeId: string
+  version: number
+  lastSyncedAt?: number
+  succeeded: boolean
+}
+
 export const useCharacterNotebookStore = defineStore('character-notebook', () => {
   const entries = ref<NotebookEntry[]>([])
   const tasks = ref<ScheduledTask[]>([])
   const diaryDrafts = ref<CharacterDiaryDraft[]>([])
+  const deletedDiaryEntryIds = ref<string[]>([])
   const isLoaded = ref(false)
   const isSaving = ref(false)
   const loadedScopeId = ref<string | null>(null)
+  const lastSaveResult = ref<NotebookSaveResult | null>(null)
 
   const airiCardStore = useAiriCardStore()
   const { activeCardId } = storeToRefs(airiCardStore)
@@ -146,6 +157,34 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   let scheduledSaveScopeId: string | null = null
   let isHydrating = false
+  let saveQueue = Promise.resolve()
+  let pendingSaveCount = 0
+  let persistedVersion = 1
+  let persistedRevision = 0
+
+  function createNotebookSnapshot(): NotebookData {
+    return JSON.parse(JSON.stringify({
+      entries: entries.value,
+      tasks: tasks.value,
+      diaryDrafts: diaryDrafts.value,
+      deletedDiaryEntryIds: deletedDiaryEntryIds.value,
+      version: persistedVersion,
+      revision: persistedRevision,
+    })) as NotebookData
+  }
+
+  async function applySavedSnapshot(scopeId: string, snapshot: NotebookData, saved: NotebookData) {
+    if (loadedScopeId.value !== scopeId || JSON.stringify(createNotebookSnapshot()) !== JSON.stringify(snapshot))
+      return
+
+    isHydrating = true
+    entries.value = saved.entries
+    tasks.value = saved.tasks
+    diaryDrafts.value = saved.diaryDrafts ?? []
+    deletedDiaryEntryIds.value = saved.deletedDiaryEntryIds ?? []
+    await nextTick()
+    isHydrating = false
+  }
 
   async function flushScheduledSave() {
     if (!saveTimer) {
@@ -198,29 +237,35 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
           await saveToStorage(previousScopeId)
         }
 
+        if (pendingSaveCount > 0)
+          await saveQueue
+
         isHydrating = true
         const data = await notebookRepo.load(targetScopeId)
         if (data) {
           entries.value = data.entries || []
           tasks.value = data.tasks || []
           diaryDrafts.value = data.diaryDrafts || []
+          deletedDiaryEntryIds.value = data.deletedDiaryEntryIds || []
+          persistedVersion = data.version
+          persistedRevision = data.revision ?? data.version
         }
         else {
           entries.value = []
           tasks.value = []
           diaryDrafts.value = []
+          deletedDiaryEntryIds.value = []
+          persistedVersion = 1
+          persistedRevision = 0
         }
         loadedScopeId.value = targetScopeId
         isLoaded.value = true
       }
       catch (error) {
         console.error('[Notebook] Failed to load from storage:', error)
-        entries.value = []
-        tasks.value = []
-        diaryDrafts.value = []
-        loadedScopeId.value = targetScopeId
-        // 即使加载失败也标记为已加载，避免重复尝试
-        isLoaded.value = true
+        // A failed read is not an empty notebook. Keep the previous scope so
+        // a later debounce cannot overwrite data that was never read.
+        throw error
       }
       finally {
         isHydrating = false
@@ -236,25 +281,44 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
 
   // 保存到 IndexedDB（带防抖）
   async function saveToStorage(scopeId = loadedScopeId.value ?? characterId.value) {
-    if (isSaving.value || !isLoaded.value) {
+    if (!isLoaded.value || loadedScopeId.value !== scopeId) {
       return
     }
 
-    try {
-      isSaving.value = true
-      await notebookRepo.save(scopeId, {
-        entries: entries.value,
-        tasks: tasks.value,
-        diaryDrafts: diaryDrafts.value,
-        version: 1,
-      })
-    }
-    catch (error) {
-      console.error('[Notebook] Failed to save to storage:', error)
-    }
-    finally {
-      isSaving.value = false
-    }
+    const snapshot = createNotebookSnapshot()
+    pendingSaveCount += 1
+    const saveTask = saveQueue.then(async () => {
+      try {
+        isSaving.value = true
+        const saved = await notebookRepo.save(scopeId, snapshot)
+        await applySavedSnapshot(scopeId, snapshot, saved)
+        persistedVersion = saved.version
+        persistedRevision = saved.revision ?? saved.version
+        lastSaveResult.value = {
+          scopeId,
+          version: saved.version,
+          lastSyncedAt: saved.lastSyncedAt,
+          succeeded: true,
+        }
+      }
+      catch (error) {
+        lastSaveResult.value = {
+          scopeId,
+          version: snapshot.version,
+          succeeded: false,
+        }
+        console.error('[Notebook] Failed to save to storage:', error)
+        throw error
+      }
+      finally {
+        isSaving.value = false
+        pendingSaveCount -= 1
+      }
+    })
+    // Keep the queue usable after a failure while still rejecting this save to
+    // callers that need a durable result, such as diary confirmation.
+    saveQueue = saveTask.catch(() => undefined)
+    return saveTask
   }
 
   // 防抖保存函数
@@ -265,7 +329,9 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     }
     scheduledSaveScopeId = targetScopeId
     saveTimer = setTimeout(() => {
-      saveToStorage(targetScopeId)
+      void saveToStorage(targetScopeId).catch((error) => {
+        console.error('[Notebook] Debounced save failed:', error)
+      })
       saveTimer = null
       scheduledSaveScopeId = null
     }, 500) // 500ms 防抖
@@ -287,7 +353,9 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   })
 
   // 立即加载数据（不要用 onMounted，因为 store 不是组件）
-  loadFromStorage()
+  void loadFromStorage().catch((error) => {
+    console.error('[Notebook] Initial storage load failed:', error)
+  })
 
   function resolveCurrentUserId() {
     const advancedSettings = useMemoryAdvancedSettingsStore()
@@ -372,9 +440,9 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
       .filter(entry => entryBelongsToMemoryScope(entry, resolvedScope))
   }
 
-  function addEntry(kind: NotebookEntryKind, text: string, options?: { tags?: string[], metadata?: Record<string, unknown> }) {
+  function addEntry(kind: NotebookEntryKind, text: string, options?: { id?: string, tags?: string[], metadata?: Record<string, unknown> }) {
     const entry: NotebookEntry = {
-      id: nanoid(),
+      id: options?.id ?? nanoid(),
       kind,
       text,
       createdAt: Date.now(),
@@ -391,7 +459,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     return addEntry('note', text, options)
   }
 
-  function addDiaryEntry(text: string, options?: { tags?: string[], metadata?: Record<string, unknown> }) {
+  function addDiaryEntry(text: string, options?: { id?: string, tags?: string[], metadata?: Record<string, unknown> }) {
     return addEntry('diary', text, options)
   }
 
@@ -449,15 +517,19 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   }
 
   async function confirmDiaryDraft(id: string) {
+    await loadFromStorage()
     const draft = diaryDrafts.value.find(item => item.id === id)
     if (!draft || draft.status !== 'draft')
       return
+    const previousUpdatedAt = draft.updatedAt
     draft.status = 'confirmed'
     draft.updatedAt = Date.now()
-    addDiaryEntry(draft.text, {
+    const entry = addDiaryEntry(draft.text, {
+      id: `diary:${draft.id}`,
       tags: ['character-diary'],
       metadata: {
         ...draft.metadata,
+        diaryDraftId: draft.id,
         diaryTitle: draft.title,
         periodStart: draft.periodStart,
         periodEnd: draft.periodEnd,
@@ -467,16 +539,54 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
         emotionalArc: draft.emotionalArc,
       },
     })
-    await flushScheduledSave()
-    await saveToStorage()
+    try {
+      await flushScheduledSave()
+      await saveToStorage()
+    }
+    catch (error) {
+      draft.status = 'draft'
+      draft.updatedAt = previousUpdatedAt
+      entries.value = entries.value.filter(item => item.id !== entry.id)
+      throw error
+    }
   }
 
-  function discardDiaryDraft(id: string) {
+  async function discardDiaryDraft(id: string) {
+    await loadFromStorage()
     const draft = diaryDrafts.value.find(item => item.id === id)
-    if (!draft)
+    if (!draft || draft.status !== 'draft')
       return
+    const previousUpdatedAt = draft.updatedAt
     draft.status = 'discarded'
     draft.updatedAt = Date.now()
+    try {
+      await flushScheduledSave()
+      await saveToStorage()
+    }
+    catch (error) {
+      draft.status = 'draft'
+      draft.updatedAt = previousUpdatedAt
+      throw error
+    }
+  }
+
+  async function removeDiaryEntry(id: string) {
+    await loadFromStorage()
+    const index = entries.value.findIndex(entry => entry.id === id && entry.kind === 'diary')
+    if (index === -1)
+      return
+    const [entry] = entries.value.splice(index, 1)
+    deletedDiaryEntryIds.value.push(id)
+    try {
+      await flushScheduledSave()
+      await saveToStorage()
+    }
+    catch (error) {
+      deletedDiaryEntryIds.value = deletedDiaryEntryIds.value.filter(entryId => entryId !== id)
+      if (entry)
+        entries.value.splice(index, 0, entry)
+      throw error
+    }
   }
 
   function addFocusEntry(text: string, options?: { tags?: string[], metadata?: Record<string, unknown> }) {
@@ -679,6 +789,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     loadedScopeId,
     isLoaded,
     isSaving,
+    lastSaveResult,
     loadFromStorage,
     saveToStorage,
     addNote,
@@ -688,6 +799,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     updateDiaryDraft,
     confirmDiaryDraft,
     discardDiaryDraft,
+    removeDiaryEntry,
     addFocusEntry,
     addMemoryEntryToScope,
     updateMemoryEntryInScope,

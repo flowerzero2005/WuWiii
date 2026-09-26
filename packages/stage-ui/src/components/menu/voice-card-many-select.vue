@@ -52,7 +52,7 @@ const props = withDefaults(defineProps<Props>(), {
   searchNoResultsDescription: 'Try a different search term',
   searchResultsText: '{count} of {total} voices',
   unsupportedVoiceWarningTitle: 'No voices',
-  unsupportedVoiceWarningContent: 'Try a different model or provider. For support, visit https://www.wuwiii.cn/help/refund.',
+  unsupportedVoiceWarningContent: 'Try a different model or provider. For support, visit http://127.0.0.1:5173/help/refund.',
   customInputPlaceholder: 'Enter custom voice name',
   expandButtonText: 'Show more',
   collapseButtonText: 'Show less',
