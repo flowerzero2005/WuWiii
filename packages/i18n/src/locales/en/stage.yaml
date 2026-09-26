@@ -16,12 +16,16 @@ chat:
     image: Attached image
     remove-image: Remove image
     add-image: Add image
+    fee-confirm-in-source: Return to the original chat window to confirm this image understanding fee before sending. The detached window does not bypass that confirmation.
+    fee-quote-loading: Reading the current official image understanding fee…
+    fee-quote-unavailable: The current official image understanding fee is unavailable. Return to the original chat window before sending.
     image-failed: Use up to 4 PNG, JPEG, WebP or GIF images, each at most 10 MB.
     syncing: Syncing draft…
     synced: Draft synced
     retry-sync: Retry sync
     drag-detach: Drag outside this window to detach the input.
     drag-return: Drag this handle onto the original input area to return the draft.
+    return-ready: Release to return the draft to this conversation.
     return-target-unavailable: The original input area is unavailable. Return to that conversation before dragging again.
     checkpoint-failed: Draft could not be saved. Check disk space or explicitly discard an earlier saved draft, then click to retry.
     discard: Discard saved draft

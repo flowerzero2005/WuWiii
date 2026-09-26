@@ -3,8 +3,8 @@ chat:
     title: 独立输入窗口
     description: 在这里编辑，由原会话执行唯一发送及图片费用确认。
     placeholder: 输入消息…
-    detach: 拆出输入
-    return: 收回输入
+    detach: 独立输入窗口
+    return: 放回聊天窗口
     recover: 恢复本会话草稿
     view-recovery: 查看保留的草稿
     orphaned: 原会话已切换或关闭。请回到原会话后恢复这份草稿。
@@ -16,12 +16,16 @@ chat:
     image: 已附加图片
     remove-image: 移除图片
     add-image: 添加图片
+    fee-confirm-in-source: 发送前请回到原聊天窗口确认本次图片理解费用。独立输入窗口不会绕过这项确认。
+    fee-quote-loading: 正在读取当前官方图片理解费用…
+    fee-quote-unavailable: 暂时无法读取当前官方图片理解费用，请回到原聊天窗口后再发送。
     image-failed: 最多添加 4 张 PNG、JPEG、WebP 或 GIF 图片，每张不超过 10 MB。
     syncing: 正在同步草稿…
     synced: 草稿已同步
     retry-sync: 重试同步
     drag-detach: 拖到此窗口外，拆出输入窗口。
     drag-return: 将此处拖到原会话的输入区域，收回草稿。
+    return-ready: 松开即可将草稿收回此会话。
     return-target-unavailable: 原输入区域当前不可用。请先回到原会话，再尝试拖回。
     checkpoint-failed: 草稿未能保存。请检查磁盘空间，或明确丢弃较早的已保存草稿，再点击重试。
     discard: 丢弃已保存草稿

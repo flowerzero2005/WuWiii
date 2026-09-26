@@ -56,9 +56,10 @@ import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings/audio-device'
 import { resolveChatBubblePresentation, useChatAppearanceSettingsStore } from '@proj-airi/stage-ui/stores/settings/chat-appearance'
 import {
-  CHAT_LAYOUT_COMPOSER_MIN_HEIGHT,
   CHAT_LAYOUT_HISTORY_MIN_HEIGHT,
+  CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT,
   CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT,
+  CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT,
   constrainChatHistoryRatioForHeight,
   getChatHistoryRatioBoundsForHeight,
   useSettingsChatLayout,
@@ -135,6 +136,7 @@ interface BasicTextareaExposed {
 }
 const quickChatTextareaRef = ref<BasicTextareaExposed>()
 const mainChatTextareaRef = ref<BasicTextareaExposed>()
+const composerReturnTargetRef = ref<HTMLElement>()
 const lastInputSelection = { start: 0, end: 0 }
 let hasInputSelection = false
 const INPUT_WHITESPACE_RE = /\s/u
@@ -1203,26 +1205,40 @@ const chatLayoutRootHeight = ref(0)
 const activeHistoryRatio = computed(() => isWidgetSurface.value
   ? chatLayoutSettingsStore.widgetHistoryRatio
   : chatLayoutSettingsStore.pageHistoryRatio)
-const hasChatLayoutHandle = computed(() => !isCollapsed.value && !voiceCallSessionActive.value)
-const chatLayoutRatioBounds = computed(() => getChatHistoryRatioBoundsForHeight(chatLayoutRootHeight.value))
+const composerDetached = ref(false)
+const hasChatLayoutHandle = computed(() => !isCollapsed.value && !voiceCallSessionActive.value && !composerDetached.value)
+const composerMinimumHeight = computed(() => isWidgetSurface.value
+  ? CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT
+  : CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)
+const chatLayoutRatioBounds = computed(() => getChatHistoryRatioBoundsForHeight(
+  chatLayoutRootHeight.value,
+  composerMinimumHeight.value,
+))
 const effectiveHistoryRatio = computed(() => constrainChatHistoryRatioForHeight(
   activeHistoryRatio.value,
   chatLayoutRootHeight.value,
+  composerMinimumHeight.value,
 ))
 const chatLayoutGridStyle = computed(() => ({
-  gridTemplateRows: hasChatLayoutHandle.value
-    ? [
-        `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc((100% - ${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px) * ${effectiveHistoryRatio.value / 100}))`,
-        `${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px`,
-        `minmax(${CHAT_LAYOUT_COMPOSER_MIN_HEIGHT}px, 1fr)`,
-      ].join(' ')
-    : [
-        `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc(100% * ${effectiveHistoryRatio.value / 100}))`,
-        `minmax(${CHAT_LAYOUT_COMPOSER_MIN_HEIGHT}px, 1fr)`,
-      ].join(' '),
+  gridTemplateRows: composerDetached.value
+    ? 'minmax(0, 1fr) 32px'
+    : hasChatLayoutHandle.value
+      ? [
+          `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc((100% - ${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px) * ${effectiveHistoryRatio.value / 100}))`,
+          `${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px`,
+          `minmax(${composerMinimumHeight.value}px, 1fr)`,
+        ].join(' ')
+      : [
+          `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc(100% * ${effectiveHistoryRatio.value / 100}))`,
+          `minmax(${composerMinimumHeight.value}px, 1fr)`,
+        ].join(' '),
 }))
 let historyResizePointerId: number | undefined
+let historyResizeTarget: HTMLElement | undefined
 let chatLayoutResizeObserver: ResizeObserver | undefined
+const historyResizeOutsideWindow = ref(false)
+const historyResizeDetachUnavailable = ref(false)
+let detachFromResize: ((point: { x: number, y: number }) => void) | undefined
 
 function updateChatLayoutRootHeight() {
   chatLayoutRootHeight.value = chatLayoutRootRef.value?.clientHeight ?? 0
@@ -1245,17 +1261,38 @@ function handleHistoryResizePointerMove(event: PointerEvent) {
   if (historyResizePointerId === undefined || event.pointerId !== historyResizePointerId)
     return
 
+  const outsideWindow = event.clientX < 0 || event.clientY < 0
+    || event.clientX > window.innerWidth || event.clientY > window.innerHeight
+  historyResizeOutsideWindow.value = outsideWindow
+  // Keep the last in-window ratio when this becomes a detach gesture. That
+  // avoids turning a pull below the window into an accidental 90% input pane.
+  if (historyResizeOutsideWindow.value)
+    return
+
   setHistoryRatioFromPointer(event.clientY)
 }
 
-function stopHistoryResize() {
+function stopHistoryResize(event?: PointerEvent) {
   if (historyResizePointerId === undefined)
     return
 
+  const releasedOutsideWindow = !!event && (event.clientX < 0 || event.clientY < 0
+    || event.clientX > window.innerWidth || event.clientY > window.innerHeight)
+  const shouldDetach = event?.type === 'pointerup'
+    && historyResizeOutsideWindow.value
+    && releasedOutsideWindow
+    && !composerDetached.value
+    && !historyResizeDetachUnavailable.value
   historyResizePointerId = undefined
+  historyResizeOutsideWindow.value = false
   window.removeEventListener('pointermove', handleHistoryResizePointerMove)
   window.removeEventListener('pointerup', stopHistoryResize)
   window.removeEventListener('pointercancel', stopHistoryResize)
+  if (historyResizeTarget?.hasPointerCapture(event?.pointerId ?? -1))
+    historyResizeTarget.releasePointerCapture(event?.pointerId ?? -1)
+  historyResizeTarget = undefined
+  if (shouldDetach && event)
+    detachFromResize?.({ x: event.screenX, y: event.screenY })
 }
 
 function handleHistoryResizeStart(event: PointerEvent) {
@@ -1263,6 +1300,11 @@ function handleHistoryResizeStart(event: PointerEvent) {
     return
 
   historyResizePointerId = event.pointerId
+  historyResizeOutsideWindow.value = false
+  if (event.currentTarget instanceof HTMLElement) {
+    historyResizeTarget = event.currentTarget
+    historyResizeTarget.setPointerCapture(event.pointerId)
+  }
   setHistoryRatioFromPointer(event.clientY)
   window.addEventListener('pointermove', handleHistoryResizePointerMove)
   window.addEventListener('pointerup', stopHistoryResize)
@@ -1472,9 +1514,10 @@ const detachedComposer = useDetachedComposerSource({
   draft: getComposerDraft,
   region: () => {
     const textarea = (props.surface === 'widget' ? quickChatTextareaRef.value : mainChatTextareaRef.value)?.textareaRef
-    if (!textarea)
+    const target = textarea ?? composerReturnTargetRef.value
+    if (!target)
       return undefined
-    const rect = textarea.getBoundingClientRect()
+    const rect = target.getBoundingClientRect()
     return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, viewport: { width: window.innerWidth, height: window.innerHeight } }
   },
   applyDraft: (draft) => {
@@ -1498,6 +1541,9 @@ const detachedComposer = useDetachedComposerSource({
     return { consumed, draft: consumed ? { text: '', images: [] } : remaining }
   },
 })
+watch(detachedComposer.detached, (detached) => {
+  composerDetached.value = detached
+}, { immediate: true, flush: 'sync' })
 watch(detachedComposer.readonly, (readonly) => {
   if (readonly)
     closeScreenPicker()
@@ -1505,6 +1551,10 @@ watch(detachedComposer.readonly, (readonly) => {
 let composerAttachmentEpoch = 0
 watch([activeSessionId, composerUserScope, detachedComposer.readonly], () => composerAttachmentEpoch += 1, { flush: 'sync' })
 const composerDetachUnavailable = computed(composerSourceIsBusy)
+watch(composerDetachUnavailable, (unavailable) => {
+  historyResizeDetachUnavailable.value = unavailable
+}, { immediate: true, flush: 'sync' })
+detachFromResize = point => void detachedComposer.detach(false, point)
 function isComposerReadonly() {
   return detachedComposer.readonly.value
 }
@@ -3441,6 +3491,10 @@ async function handleFilePaste(files: File[]) {
 function openAttachmentPicker() {
   if (detachedComposer.readonly.value)
     return
+  if (!visionEnabled.value) {
+    toast.info(t('stage.chat.vision.disabled'))
+    return
+  }
   attachmentInputRef.value?.click()
 }
 
@@ -5400,19 +5454,30 @@ const chatSurfaceStyle = computed(() => {
 
       <div
         v-if="hasChatLayoutHandle"
-        class="chat-layout-resize-handle [-webkit-app-region:no-drag] relative z-20 h-2 shrink-0 cursor-row-resize touch-none"
+        :class="[
+          'chat-layout-resize-handle [-webkit-app-region:no-drag] relative z-20 h-2 shrink-0 cursor-row-resize touch-none transition-colors',
+          historyResizeOutsideWindow ? 'bg-[var(--airi-accent-surface)]' : '',
+        ]"
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize chat history and input"
+        :aria-label="historyResizeOutsideWindow ? t('stage.chat.composer.drag-detach') : 'Resize chat history and input'"
+        :title="historyResizeOutsideWindow ? t('stage.chat.composer.drag-detach') : undefined"
         :aria-valuemin="chatLayoutRatioBounds.min"
         :aria-valuemax="chatLayoutRatioBounds.max"
         :aria-valuenow="effectiveHistoryRatio"
         tabindex="0"
         data-chat-layout-resize
         @pointerdown.stop.prevent="handleHistoryResizeStart"
+        @lostpointercapture="stopHistoryResize"
         @keydown="handleHistoryResizeKeydown"
       >
-        <span class="pointer-events-none absolute inset-x-1/3 top-1/2 h-0.5 rounded-full bg-[var(--airi-border-subtle)] transition-colors -translate-y-1/2 group-hover:bg-[var(--airi-accent)]" />
+        <span
+          v-if="historyResizeOutsideWindow"
+          class="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 whitespace-nowrap rounded-md bg-[var(--airi-accent)] px-2 py-1 text-[10px] text-white shadow-sm -translate-x-1/2"
+        >
+          {{ t('stage.chat.composer.drag-detach') }}
+        </span>
+        <span :class="['pointer-events-none absolute inset-x-1/3 top-1/2 h-0.5 rounded-full transition-colors -translate-y-1/2 group-hover:bg-[var(--airi-accent)]', historyResizeOutsideWindow ? 'bg-[var(--airi-accent)]' : 'bg-[var(--airi-border-subtle)]']" />
       </div>
 
       <div
@@ -5422,7 +5487,7 @@ const chatSurfaceStyle = computed(() => {
         ]"
       >
         <div
-          v-if="attachments.length > 0 && !isCollapsed"
+          v-if="attachments.length > 0 && !isCollapsed && !composerDetached"
           :class="[
             'max-h-16 flex shrink-0 flex-nowrap gap-2 overflow-x-auto overflow-y-hidden border-t p-2',
             isWidgetSurface ? 'airi-overlay-glass rounded-[18px]' : 'border-[var(--airi-border-accent)]',
@@ -5437,7 +5502,7 @@ const chatSurfaceStyle = computed(() => {
         </div>
 
         <div
-          v-if="isWidgetSurface"
+          v-if="isWidgetSurface && !composerDetached"
           :class="[
             'quick-chat-input-surface relative flex min-h-0 transition-[opacity,transform,background-color,border-color,box-shadow] duration-300 ease-out',
             isCollapsed ? 'quick-chat-collapsed-surface' : 'quick-chat-expanded-surface',
@@ -5491,37 +5556,48 @@ const chatSurfaceStyle = computed(() => {
           >
             <div class="i-lucide:triangle-alert size-4" />
           </button>
-          <BasicTextarea
-            ref="quickChatTextareaRef"
-            v-model="messageInput"
-            :auto-resize="isCollapsed"
-            :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
-            :disabled="!isInitialized"
-            :readonly="detachedComposer.readonly.value"
-            :autofocus="isWidgetSurface && !isCollapsed"
-            :default-height="isCollapsed ? '2.5rem' : undefined"
-            :class="[
-              'quick-chat-textarea [-webkit-app-region:no-drag] relative z-20 ph-no-capture min-w-0 flex-1 resize-none font-medium outline-none transition-all duration-250 ease-out',
-              isCollapsed
-                ? '!h-10 !min-h-10 !max-h-10 overflow-hidden border-none bg-transparent px-1.5 !py-0 text-sm !leading-10 text-[var(--airi-text)] shadow-none placeholder:text-[var(--airi-text-soft)]'
-                : 'order-1 h-full min-h-[3rem] max-h-none w-full flex-1 self-stretch overflow-y-auto airi-overlay-input rounded-[17px] px-4 py-2.5',
-            ]"
-            @compositionstart="isComposing = true"
-            @compositionend="isComposing = false"
-            @focus="rememberMessageInputSelection"
-            @blur="rememberMessageInputSelection"
-            @click="rememberMessageInputSelection"
-            @keyup="rememberMessageInputSelection"
-            @select="rememberMessageInputSelection"
-            @input="rememberMessageInputSelection"
-            @keydown.enter.exact.prevent="handleSend"
-            @paste-file="handleFilePaste"
-          />
+          <div :class="isCollapsed ? 'contents' : 'relative order-1 min-h-[3rem] w-full flex-1 self-stretch'">
+            <BasicTextarea
+              ref="quickChatTextareaRef"
+              v-model="messageInput"
+              :auto-resize="isCollapsed"
+              :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
+              :disabled="!isInitialized"
+              :readonly="detachedComposer.readonly.value"
+              :autofocus="isWidgetSurface && !isCollapsed"
+              :default-height="isCollapsed ? '2.5rem' : undefined"
+              :class="[
+                'quick-chat-textarea [-webkit-app-region:no-drag] relative z-20 ph-no-capture min-w-0 flex-1 resize-none font-medium outline-none transition-all duration-250 ease-out',
+                isCollapsed
+                  ? '!h-10 !min-h-10 !max-h-10 overflow-hidden border-none bg-transparent px-1.5 !py-0 text-sm !leading-10 text-[var(--airi-text)] shadow-none placeholder:text-[var(--airi-text-soft)]'
+                  : 'h-full min-h-[3rem] max-h-none w-full overflow-y-auto airi-overlay-input rounded-[17px] px-4 py-2.5 pr-12',
+              ]"
+              @compositionstart="isComposing = true"
+              @compositionend="isComposing = false"
+              @focus="rememberMessageInputSelection"
+              @blur="rememberMessageInputSelection"
+              @click="rememberMessageInputSelection"
+              @keyup="rememberMessageInputSelection"
+              @select="rememberMessageInputSelection"
+              @input="rememberMessageInputSelection"
+              @keydown.enter.exact.prevent="handleSend"
+              @paste-file="handleFilePaste"
+            />
+            <button
+              v-if="!isCollapsed && !activeGroupMeta"
+              type="button"
+              data-quick-chat-composer-image-picker
+              :title="t('stage.chat.vision.upload')"
+              :aria-label="t('stage.chat.vision.upload')"
+              :disabled="detachedComposer.readonly.value"
+              :class="['[-webkit-app-region:no-drag] absolute bottom-2 right-2 z-30 size-8 grid place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:opacity-50', 'airi-overlay-control-muted']"
+              @click="openAttachmentPicker"
+            >
+              <div class="i-ph:plus-bold size-4" />
+            </button>
+          </div>
           <div v-if="!isCollapsed" class="order-2 w-full flex shrink-0 items-center gap-1 overflow-x-auto">
-            <div data-chat-composer-detach-controls :class="['flex shrink-0 items-center gap-1 text-xs']">
-              <button type="button" :title="t('stage.chat.composer.drag-detach')" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control touch-none rounded-md px-2 py-1 disabled:opacity-50']" @pointerdown="detachedComposer.startDrag" @click="detachedComposer.clickDetach">
-                {{ t(detachedComposer.detached.value ? 'stage.chat.composer.return' : 'stage.chat.composer.detach') }}
-              </button>
+            <div v-if="detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.checkpointFailed.value" data-chat-composer-recovery-controls :class="['flex shrink-0 items-center gap-1 text-xs']">
               <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
                 {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
               </button>
@@ -5649,21 +5725,6 @@ const chatSurfaceStyle = computed(() => {
               <div class="i-solar:login-3-bold-duotone size-4" />
             </button>
             <button
-              v-if="visionEnabled && !activeGroupMeta && !isCollapsed"
-              type="button"
-              :title="t('stage.chat.vision.upload')"
-              :aria-label="t('stage.chat.vision.upload')"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid shrink-0 place-items-center font-medium leading-none outline-none transition-all duration-250 ease-out active:scale-95',
-                'airi-overlay-control-muted order-3 size-8 rounded-xl text-base',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="openAttachmentPicker"
-            >
-              <div class="i-lucide:image-plus size-4" />
-            </button>
-            <button
               v-if="visionEnabled && !activeGroupMeta && screenCapture" type="button"
               :title="t('stage.chat.vision.screen-capture')" :aria-label="t('stage.chat.vision.screen-capture')"
               :class="['[-webkit-app-region:no-drag] size-8 grid shrink-0 place-items-center rounded-xl airi-overlay-control-muted']"
@@ -5762,7 +5823,7 @@ const chatSurfaceStyle = computed(() => {
           </template>
         </div>
 
-        <template v-else>
+        <template v-else-if="!composerDetached">
           <div class="order-2 min-w-0 flex shrink-0 items-center gap-1.5 overflow-x-auto py-1">
             <GroupMentionPicker
               v-if="activeGroupMeta"
@@ -5841,7 +5902,7 @@ const chatSurfaceStyle = computed(() => {
               <div class="i-solar:stop-circle-line-duotone" />
             </button>
             <button
-              v-if="visionEnabled && !activeGroupMeta"
+              v-if="isWidgetSurface && visionEnabled && !activeGroupMeta"
               type="button"
               :title="t('stage.chat.vision.upload')"
               :aria-label="t('stage.chat.vision.upload')"
@@ -5868,10 +5929,7 @@ const chatSurfaceStyle = computed(() => {
               <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" />
             </button>
           </div>
-          <div :class="['order-0 flex items-center gap-3 text-xs']">
-            <button type="button" :title="t('stage.chat.composer.drag-detach')" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control touch-none rounded-md px-2 py-1 disabled:opacity-50']" @pointerdown="detachedComposer.startDrag" @click="detachedComposer.clickDetach">
-              {{ t(detachedComposer.detached.value ? 'stage.chat.composer.return' : 'stage.chat.composer.detach') }}
-            </button>
+          <div v-if="detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.checkpointFailed.value" :class="['order-0 flex items-center gap-3 text-xs']">
             <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
               {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
             </button>
@@ -5890,7 +5948,7 @@ const chatSurfaceStyle = computed(() => {
               :readonly="detachedComposer.readonly.value"
               :autofocus="isWidgetSurface"
               :class="[
-                'ph-no-capture h-full min-h-[3rem] w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-12 font-medium',
+                'ph-no-capture h-full min-h-[3rem] w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-20 font-medium',
                 'airi-overlay-input main-chat-textarea',
               ]"
               @compositionstart="isComposing = true"
@@ -5904,6 +5962,18 @@ const chatSurfaceStyle = computed(() => {
               @keydown.enter.exact.prevent="handleSend"
               @paste-file="handleFilePaste"
             />
+            <button
+              v-if="!activeGroupMeta"
+              type="button"
+              data-chat-composer-image-picker
+              :title="t('stage.chat.vision.upload')"
+              :aria-label="t('stage.chat.vision.upload')"
+              :disabled="detachedComposer.readonly.value"
+              :class="['absolute bottom-2 right-11 size-8 grid place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:opacity-50', 'airi-overlay-control-muted']"
+              @click="openAttachmentPicker"
+            >
+              <div class="i-ph:plus-bold size-4" />
+            </button>
             <button
               type="button"
               :title="requiresOfficialCloudLogin ? t('stage.chat.official-cloud-send-disabled') : t('stage.actions.send')"
@@ -5919,6 +5989,18 @@ const chatSurfaceStyle = computed(() => {
             </button>
           </div>
         </template>
+        <div
+          v-else
+          ref="composerReturnTargetRef"
+          data-chat-composer-return-target
+          :title="t('stage.chat.composer.drag-return')"
+          :aria-label="t('stage.chat.composer.drag-return')"
+          :class="['h-8 shrink-0 border-t border-[var(--airi-accent)]/60 bg-[var(--airi-accent-surface)]/40']"
+        >
+          <span class="pointer-events-none h-full flex items-center justify-center text-[10px] text-[var(--airi-text-soft)]">
+            {{ t('stage.chat.composer.drag-return') }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

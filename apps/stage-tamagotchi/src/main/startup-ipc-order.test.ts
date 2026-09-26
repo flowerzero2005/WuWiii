@@ -30,8 +30,9 @@ describe('desktop startup IPC order', () => {
     expect(mainWindowProvider).toContain('pluginHost')
   })
 
-  it('opens the quick chat and butler surfaces without a fixed startup delay', () => {
-    expect(mainEntrypoint).toContain('await dependsOn.quickChatWindow.openWindow()')
+  it('opens secondary surfaces after the main runtime handshake without holding its IPC response', () => {
+    expect(mainEntrypoint).toContain('void dependsOn.quickChatWindow.openWindow()')
+    expect(mainEntrypoint).not.toContain('await dependsOn.quickChatWindow.openWindow()')
     expect(mainEntrypoint).toContain('void butlerWindow.openWindow()')
     expect(mainEntrypoint).not.toContain('setTimeout(() => {\n        void butlerWindow.openWindow()')
   })

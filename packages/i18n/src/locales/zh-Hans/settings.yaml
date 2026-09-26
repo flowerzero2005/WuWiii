@@ -2368,10 +2368,17 @@ pages:
       last-error: '最近一次视觉请求失败：{error}'
       screenshot:
         desktop-only: 屏幕截图仅在桌面端可用。
-        select-source: 选择或刷新屏幕来源
+        select-source: 查看可选屏幕与窗口
+        refreshing: 正在读取屏幕来源…
+        source-help: 这里只列出桌面端当前可见的屏幕和窗口。在下方选择自动截图目标；仅查看或选择不会截图、上传或扣点，需另行开启自动截图。
         source: 自动截图来源
         no-source: 尚未选择
         source-required: 请先选择屏幕或窗口并确认预览。来源失效后会停止，需重新选择。
+        no-sources-found: 未找到可用的屏幕或窗口。请确认桌面端可以看到目标后再刷新。
+        window-sources-unavailable: 窗口来源未能及时返回，当前只显示屏幕。可刷新后再次尝试读取窗口。
+        source-load-failed: 无法读取屏幕来源。
+        source-load-timeout: 读取超时，请重试；若仍失败，请检查系统的屏幕录制权限。
+        selected-source: '已选择：{name}'
         price: '自动截图每次单独扣除 {points} 点，间隔 {seconds} 秒；不包含聊天费用。'
         heading: 自动截图
         intro: 默认关闭。开启后才会按设置间隔请求桌面截图；不会请求或使用摄像头。
@@ -2382,6 +2389,11 @@ pages:
       test:
         heading: 连接测试
         intro: 测试会使用当前配置发送一张图片，并按所选服务的规则计费。
+        choose-image: 选择图片
+        image-selected: '已选择：{name}'
+        clear-image: 移除图片
+        selection-local: 选择图片只会在这里本地预览；开始测试前不会上传、识别或扣点。
+        fee-required: 请先接受当前官方图片理解费用，再开始测试。选择图片仍是本地操作，不会扣点。
         image-required: 请先选择一张图片。
         prompt: 请简要说明这张图片里有什么。
         disabled: 视觉模块当前未启用。

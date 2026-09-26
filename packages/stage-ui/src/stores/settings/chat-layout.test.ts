@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CHAT_LAYOUT_STORAGE_KEYS,
+  CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT,
+  CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT,
   constrainChatHistoryRatioForHeight,
   DEFAULT_CHAT_LAYOUT_RATIOS,
+  getChatHistoryRatioBoundsForHeight,
   useSettingsChatLayout,
 } from './chat-layout'
 
@@ -46,9 +49,9 @@ describe('chat layout settings store', () => {
     store.setHistoryRatio('page', 999)
     store.setHistoryRatio('widget', 1)
 
-    expect(store.pageHistoryRatio).toBe(85)
+    expect(store.pageHistoryRatio).toBe(90)
     expect(store.widgetHistoryRatio).toBe(30)
-    expect(localStorage.getItem(CHAT_LAYOUT_STORAGE_KEYS.page)).toBe('85')
+    expect(localStorage.getItem(CHAT_LAYOUT_STORAGE_KEYS.page)).toBe('90')
     expect(localStorage.getItem(CHAT_LAYOUT_STORAGE_KEYS.widget)).toBe('30')
   })
 
@@ -63,8 +66,21 @@ describe('chat layout settings store', () => {
     expect(store.widgetHistoryRatio).toBe(46)
   })
 
-  it('keeps enough pixel space for the composer in a short window without changing the saved preference', () => {
-    expect(constrainChatHistoryRatioForHeight(85, 360)).toBe(52)
+  it('keeps each surface compact in a short window without changing the saved preference', () => {
+    expect(getChatHistoryRatioBoundsForHeight(360, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toEqual({ min: 30, max: 65 })
+    expect(getChatHistoryRatioBoundsForHeight(360, CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT)).toEqual({ min: 30, max: 70 })
+    expect(constrainChatHistoryRatioForHeight(90, 360, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toBe(65)
+    expect(constrainChatHistoryRatioForHeight(90, 360, CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT)).toBe(70)
     expect(constrainChatHistoryRatioForHeight(64, 720)).toBe(64)
+  })
+
+  it('keeps previously saved ratios for each surface', () => {
+    localStorage.setItem(CHAT_LAYOUT_STORAGE_KEYS.page, '64')
+    localStorage.setItem(CHAT_LAYOUT_STORAGE_KEYS.widget, '58')
+
+    const store = useSettingsChatLayout()
+
+    expect(store.pageHistoryRatio).toBe(64)
+    expect(store.widgetHistoryRatio).toBe(58)
   })
 })

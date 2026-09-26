@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron'
+import type { BrowserWindow, Rectangle } from 'electron'
 
 import type { ComposerDetach } from '../../../shared/detached-composer'
 import type { ComposerClientRegion, ComposerPoint } from '../../../shared/detached-composer-geometry'
@@ -8,11 +8,14 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow as ElectronWindow, screen } from 'electron'
 
 import { createComposerState, validateComposerScope } from '../../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragDetach, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { composerContainsPoint, composerScreenRegion } from '../../../shared/detached-composer-geometry'
 import { createDetachedComposerWindow } from '../../windows/composer'
 import { createWindowEventaContext, isIpcEventFromWindow } from '../../windows/shared/window'
 import { createComposerPersistence } from './detached-composer-persistence'
+
+const CURSOR_POINT_TOLERANCE_PX = 64
+const RETURN_TARGET_REGION_MAX_AGE_MS = 2_500
 
 /** Register before creating renderer windows; every sender is verified in main. */
 export function createDetachedComposerService(persistence: ComposerPersistence = createComposerPersistence(app.getPath('userData'))) {
@@ -25,6 +28,8 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
   let quitRequested = false
   let persistenceFailure: unknown
   let queue = Promise.resolve()
+  let editorDrag: { leaseId: string, version: number, origin: ComposerPoint, bounds: Rectangle } | undefined
+  let finishedEditorDrag: { leaseId: string, version: number, origin: ComposerPoint, at: number } | undefined
   const bindings = new Map<number, Omit<ComposerDetach, 'draft' | 'recover'>>()
   const regions = new Map<number, { generation: string, region: ComposerClientRegion, at: number }>()
   const sourceCloseAllowed = new Set<number>()
@@ -50,7 +55,10 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
   }
   function verifiedCursor(point: ComposerPoint) {
     const cursor = screen.getCursorScreenPoint()
-    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || Math.hypot(point.x - cursor.x, point.y - cursor.y) > 16)
+    // Renderer and main receive the release through separate queues. The
+    // actual cursor is still checked against the target below, so this only
+    // absorbs hand-off latency rather than accepting an off-target drop.
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || Math.hypot(point.x - cursor.x, point.y - cursor.y) > CURSOR_POINT_TOLERANCE_PX)
       throw new Error('The composer drag no longer owns the cursor position.')
     return cursor
   }
@@ -161,6 +169,10 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (point && composerContainsPoint(window.getContentBounds(), verifiedCursor(point)))
         throw new Error('Drag the composer outside the source window before detaching.')
       const value = await commit(() => state.detach(id, input))
+      editorDrag = undefined
+      // The source can hide its inline editor as soon as ownership is durable.
+      // Loading the separate renderer may take longer than the drag gesture.
+      publish()
       try {
         const editor = await openEditor()
         if (point) {
@@ -188,6 +200,38 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
     defineInvokeHandler(context, composerDragDetach, async (input, options) => {
       if (isIpcEventFromWindow(window, options))
         return detach(input, input.point)
+    })
+    defineInvokeHandler(context, composerDragMove, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireEditor(id)
+      const value = snapshot()
+      if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached' || value.busy)
+        throw new Error('The composer ownership changed during the drag.')
+      if (![input.origin.x, input.origin.y, input.point.x, input.point.y].every(Number.isFinite))
+        throw new Error('Invalid composer drag position.')
+      if (finishedEditorDrag && Date.now() - finishedEditorDrag.at > RETURN_TARGET_REGION_MAX_AGE_MS)
+        finishedEditorDrag = undefined
+      if (finishedEditorDrag?.leaseId === input.leaseId && finishedEditorDrag.version === input.version
+        && finishedEditorDrag.origin.x === input.origin.x && finishedEditorDrag.origin.y === input.origin.y) {
+        return false
+      }
+      if (!editorDrag || editorDrag.leaseId !== input.leaseId || editorDrag.version !== input.version
+        || editorDrag.origin.x !== input.origin.x || editorDrag.origin.y !== input.origin.y) {
+        editorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, bounds: editor!.getBounds() }
+      }
+      const display = screen.getDisplayNearestPoint(input.point).workArea
+      const x = Math.round(Math.max(display.x, Math.min(editorDrag.bounds.x + input.point.x - editorDrag.origin.x, display.x + display.width - editorDrag.bounds.width)))
+      const y = Math.round(Math.max(display.y, Math.min(editorDrag.bounds.y + input.point.y - editorDrag.origin.y, display.y + display.height - editorDrag.bounds.height)))
+      editor!.setPosition(x, y)
+      const source = ElectronWindow.getAllWindows().find(window => window.webContents.id === value.scope.sourceWebContentsId)
+      const region = regions.get(value.scope.sourceWebContentsId)
+      if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized() || !region
+        || region.generation !== value.scope.sourceGeneration || Date.now() - region.at > RETURN_TARGET_REGION_MAX_AGE_MS) {
+        return false
+      }
+      const target = composerScreenRegion(region.region, source.getContentBounds(), source.webContents.getZoomFactor())
+      return composerContainsPoint(target, screen.getCursorScreenPoint())
     })
     defineInvokeHandler(context, composerSourceRead, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -246,10 +290,13 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const value = snapshot()
       if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached' || value.busy)
         throw new Error('The composer ownership changed during the drag.')
+      if (input.origin)
+        finishedEditorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, at: Date.now() }
+      editorDrag = undefined
       const source = ElectronWindow.getAllWindows().find(window => window.webContents.id === value.scope.sourceWebContentsId)
       const region = regions.get(value.scope.sourceWebContentsId)
       if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized() || !region
-        || region.generation !== value.scope.sourceGeneration || Date.now() - region.at > 2500) {
+        || region.generation !== value.scope.sourceGeneration || Date.now() - region.at > RETURN_TARGET_REGION_MAX_AGE_MS) {
         return false
       }
       const target = composerScreenRegion(region.region, source.getContentBounds(), source.webContents.getZoomFactor())
@@ -337,6 +384,8 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return
       requireEditor(id)
       const value = await commit(() => state.release(input))
+      editorDrag = undefined
+      finishedEditorDrag = undefined
       publish()
       allowClose = true
       editor?.close()
@@ -347,6 +396,8 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return
       requireEditor(id)
       const value = await commit(() => state.discard(input))
+      editorDrag = undefined
+      finishedEditorDrag = undefined
       publish()
       for (const [sourceId, binding] of bindings) {
         if (binding.userScope === value.scope.userScope && binding.sessionId === value.scope.sessionId && binding.surface === value.scope.surface)

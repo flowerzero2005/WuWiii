@@ -2,7 +2,7 @@ import type { ComposerDetach, ComposerRecoveryData } from '../../../shared/detac
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { composerDetach, composerDiscard, composerDragDetach, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { createDetachedComposerService } from './detached-composer'
 
 const mocks = vi.hoisted(() => ({
@@ -75,6 +75,25 @@ describe('composer main sender and close guards', () => {
     await expect(invoke(2, composerViewRecovery, input)).rejects.toThrow('conversation window')
     expect(service.read()).toBeUndefined()
     expect(mocks.open).not.toHaveBeenCalled()
+  })
+
+  it('shows the detached source state while the editor window is still loading', async () => {
+    let finishOpen: (() => void) | undefined
+    mocks.open.mockImplementation(onCreated => new Promise((resolve) => {
+      finishOpen = () => {
+        const editor = window(3, '/composer')
+        mocks.windows.push(editor)
+        mocks.appHooks.get('browser-window-created')!(undefined, editor)
+        onCreated(editor)
+        resolve(editor)
+      }
+    }))
+    createService()
+    const result = invoke(1, composerDetach, input)
+    await vi.waitFor(() => expect(mocks.open).toHaveBeenCalledOnce())
+    expect(mocks.contexts.get(1).emit).toHaveBeenCalledWith(composerChanged, expect.objectContaining({ status: 'detached' }))
+    finishOpen?.()
+    await expect(result).resolves.toMatchObject({ status: 'detached' })
   })
 
   it('allows only the active editor to edit, submit or release its owner lease', async () => {
@@ -178,8 +197,36 @@ describe('composer main sender and close guards', () => {
     expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(false)
     mocks.cursor = { x: 300, y: 600 }
     expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(true)
+    expect(await invoke(3, composerDragReturn, { ...version, point: { x: 340, y: 600 } })).toBe(true)
     await expect(invoke(3, composerDragReturn, { ...version, point: { x: 900, y: 600 } })).rejects.toThrow('cursor position')
     await expect(invoke(1, composerDragDetach, { ...input, point: mocks.cursor })).rejects.toThrow('outside the source window')
+  })
+
+  it('moves the detached editor with its drag handle before verifying the drop', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+
+    await invoke(3, composerDragMove, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      origin: { x: 200, y: 200 },
+      point: { x: 600, y: 500 },
+    })
+
+    expect(mocks.windows[2].setPosition).toHaveBeenCalledWith(500, 400)
+    await invoke(3, composerDragReturn, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      origin: { x: 200, y: 200 },
+      point: { x: 600, y: 500 },
+    })
+    await invoke(3, composerDragMove, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      origin: { x: 200, y: 200 },
+      point: { x: 620, y: 520 },
+    })
+    expect(mocks.windows[2].setPosition).toHaveBeenCalledTimes(1)
   })
 
   it('keeps corrupt storage unavailable without replacing it or opening an editor', async () => {

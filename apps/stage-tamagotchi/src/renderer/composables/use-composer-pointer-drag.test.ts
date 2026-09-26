@@ -32,7 +32,7 @@ describe('composer drag handle', () => {
     target.dispatchEvent(pointer('pointermove', 500, 400))
     expect(drag.dragging.value).toBe(true)
     target.dispatchEvent(pointer('pointerup', 500, 400))
-    expect(drop).toHaveBeenCalledWith({ x: 500, y: 400 })
+    expect(drop).toHaveBeenCalledWith({ x: 500, y: 400 }, { x: 100, y: 100 })
     expect(target.captured).toBe(false)
     expect(drag.consumeClick()).toBe(true)
     expect(drag.consumeClick()).toBe(false)

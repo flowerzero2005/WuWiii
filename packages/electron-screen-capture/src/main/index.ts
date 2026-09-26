@@ -184,13 +184,19 @@ export function initScreenCaptureForWindow(window: BrowserWindow, options?: Init
 
   initializedWindows.add(window)
 
-  const { context } = createContext(ipcMain, window, { onlySameWindow: true })
+  const { context, dispose } = createContext(ipcMain, window, { onlySameWindow: true })
+  window.webContents.once('destroyed', dispose)
   const session = sessionModule.defaultSession
 
   defineInvokeHandler(context, screenCapture.checkMacOSPermission, async () => checkMacOSScreenCapturePermission())
   defineInvokeHandler(context, screenCapture.requestMacOSPermission, async () => requestMacOSScreenCapturePermission())
 
-  defineInvokeHandler(context, screenCapture.getSources, async (sourcesOptions) => {
+  defineInvokeHandler(context, screenCapture.getSources, async (sourcesOptions, eventaOptions) => {
+    // Every window context receives the shared IPC channel. Only the caller
+    // should run desktopCapturer, or one refresh enumerates sources repeatedly.
+    if (window.webContents.id !== eventaOptions?.raw.ipcMainEvent.sender.id)
+      return
+
     // NOTICE(@nekomeowww): In probability of 9/10, the window thumbnail is purely empty or black, sources printed and
     // nothing is returned from the desktopCapturer API.
     // NOTICE(@sumimakito): Not only thumbnail is empty, the appIcon could be empty as well with nothing returned.

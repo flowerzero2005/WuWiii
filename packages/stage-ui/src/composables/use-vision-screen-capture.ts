@@ -13,6 +13,8 @@ export interface VisionScreenSource {
 export interface VisionScreenCapture {
   listSources: () => Promise<VisionScreenSource[]>
   capture: (sourceId: string) => Promise<VisionAttachment>
+  /** True only when the latest source listing fell back from screens + windows to screens. */
+  wasLastSourceListFallback?: () => boolean
 }
 
 export class VisionScreenSourceUnavailableError extends Error {

@@ -18,10 +18,16 @@ export async function createDetachedComposerWindow(onCreated: (window: BrowserWi
     webPreferences: { preload: join(getElectronMainDirname(), '../preload/index.mjs'), sandbox: false },
   })
   onCreated(window)
+  // Chat and quick-chat live above ordinary application windows. Keep the
+  // detached editor in the same family so its drag handle remains usable.
+  window.setAlwaysOnTop(true, 'screen-saver', 2)
+  window.setFullScreenable(false)
+  window.setVisibleOnAllWorkspaces(true)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   try {
     await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/composer'))
     window.show()
+    window.moveTop()
     return window
   }
   catch (error) {

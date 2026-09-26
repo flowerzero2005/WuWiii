@@ -94,6 +94,7 @@ const LEGACY_DEVTOOLS_CONTAINER_SELECTORS = [
 const isStageRoute = computed(() => route.path === '/')
 const isSettingsRoute = computed(() => route.path.startsWith('/settings'))
 const isChatRoute = computed(() => route.path === '/chat')
+const isComposerRoute = computed(() => route.path === '/composer')
 const isQuickChatRoute = computed(() => route.path === '/quick-chat')
 const isWorkbenchRoute = computed(() => route.path === '/workbench')
 const isQuickChatDialogueOverlayRoute = computed(() => route.path === '/quick-chat-dialogue-overlay')
@@ -825,11 +826,11 @@ onUnmounted(() => {
       'h-full w-full transition-opacity duration-300',
       shouldShowRuntimeBootstrap ? 'pointer-events-none opacity-0' : 'opacity-100',
     ]"
-    :style="isChatRoute || isQuickChatRoute ? chatSurfaceStyle : isWorkbenchRoute ? workbenchSurfaceStyle : undefined"
+    :style="isChatRoute || isComposerRoute || isQuickChatRoute ? chatSurfaceStyle : isWorkbenchRoute ? workbenchSurfaceStyle : undefined"
     :aria-hidden="shouldShowRuntimeBootstrap"
   >
     <BackgroundProvider
-      v-if="(isChatRoute || isSettingsRoute || isWorkbenchRoute) && selectedBackground"
+      v-if="(isChatRoute || isComposerRoute || isSettingsRoute || isWorkbenchRoute) && selectedBackground"
       :background="selectedBackground"
       class="h-full min-h-0"
     >

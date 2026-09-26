@@ -5,11 +5,14 @@ import { describe, expect, it } from 'vitest'
 const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
 
 describe('settings window startup order', () => {
-  it('registers renderer IPC before loading the production document', () => {
+  it('registers renderer IPC and screen capture before loading the production document', () => {
     const setupIndex = source.indexOf('await setupSettingsWindowInvokes({')
+    const screenCaptureIndex = source.indexOf('initScreenCaptureForWindow(window)')
     const loadIndex = source.indexOf('await load(window,')
 
     expect(setupIndex).toBeGreaterThan(-1)
     expect(loadIndex).toBeGreaterThan(setupIndex)
+    expect(screenCaptureIndex).toBeGreaterThan(setupIndex)
+    expect(loadIndex).toBeGreaterThan(screenCaptureIndex)
   })
 })

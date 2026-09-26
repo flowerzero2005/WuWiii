@@ -2,7 +2,7 @@ import type { ComposerDetach, ComposerDraft, ComposerSnapshot } from '../../shar
 import type { ComposerClientRegion, ComposerPoint } from '../../shared/detached-composer-geometry'
 
 import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot } from '../../shared/detached-composer'
 import { composerChanged, composerDetach, composerDraftDiscarded, composerDragDetach, composerExecute, composerFlushSource, composerInvalidate, composerRecovery, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerViewRecovery } from '../../shared/detached-composer-events'
@@ -84,7 +84,10 @@ export function useDetachedComposerSource(input: {
           draftDirty = false
       }
     }).catch((error) => {
-      checkpointFailed.value = true
+      // A checkpoint that lost the race to a successful detach is rejected by
+      // the main process because the detached editor owns the draft now.
+      if (!detached.value)
+        checkpointFailed.value = true
       throw error
     })
     checkpointQueue = task.catch(() => undefined)
@@ -116,7 +119,8 @@ export function useDetachedComposerSource(input: {
     clearInterval(regionTimer)
     if (value) {
       reportRegion()
-      regionTimer = setInterval(reportRegion, 750)
+      void nextTick(reportRegion)
+      regionTimer = setInterval(reportRegion, 250)
     }
   })
   const offChanged = context.value.on(composerChanged, ({ body }) => {
@@ -192,8 +196,12 @@ export function useDetachedComposerSource(input: {
     detaching.value = true
     failed.value = false
     try {
-      await checkpointQueue
-      const request = { sessionId, userScope, surface: input.surface, sourceGeneration, group: input.group(), draft: input.draft(), recover }
+      // The release point is verified against the real cursor position in the
+      // main process. Waiting for an older checkpoint here makes that check
+      // observe where the pointer moved after the user let go.
+      if (!point)
+        await checkpointQueue
+      const request = { sessionId, userScope, surface: input.surface, sourceGeneration, group: input.group(), draft: structuredClone(toRaw(input.draft())), recover }
       const value = point ? await dragDetachInvoke({ ...request, point }) : await detachInvoke(request)
       if (disposed || sourceGeneration !== generation || sessionId !== input.sessionId() || userScope !== input.userScope()) {
         await invalidateInvoke({ sourceGeneration })
@@ -205,6 +213,7 @@ export function useDetachedComposerSource(input: {
         applyDraft(merged.draft)
       recoverable.value = false
       draftDirty = false
+      checkpointFailed.value = false
       reportRegion()
     }
     catch {

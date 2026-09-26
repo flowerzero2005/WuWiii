@@ -15,13 +15,13 @@ describe('chat composer branches', () => {
         return
       const elements = node.children.filter(child => child.type === 1)
       for (let index = 0; index < elements.length; index++) {
-        const element = elements[index]
-        const widgetBranch = element.tag === 'div'
+          const element = elements[index]
+          const widgetBranch = element.tag === 'div'
           && source.slice(element.loc.start.offset, element.loc.end.offset).includes('ref="quickChatTextareaRef"')
-          && element.props.some(prop => prop.type === 7 && prop.name === 'if' && prop.exp?.type === 4 && prop.exp.content === 'isWidgetSurface')
+          && element.props.some(prop => prop.type === 7 && prop.name === 'if' && prop.exp?.type === 4 && prop.exp.content === 'isWidgetSurface && !composerDetached')
         if (widgetBranch) {
           const alternative = elements[index + 1]
-          expect(alternative?.props.some(prop => prop.type === 7 && prop.name === 'else'), `Widget branch at line ${element.loc.start.line}: next sibling ${alternative?.tag}`).toBe(true)
+          expect(alternative?.props.some(prop => prop.type === 7 && prop.name === 'else-if' && prop.exp?.type === 4 && prop.exp.content === '!composerDetached'), `Widget branch at line ${element.loc.start.line}: next sibling ${alternative?.tag}`).toBe(true)
           expect(source.slice(alternative.loc.start.offset, alternative.loc.end.offset)).toContain('ref="mainChatTextareaRef"')
           found = true
         }
@@ -32,7 +32,7 @@ describe('chat composer branches', () => {
     expect(found).toBe(true)
   })
 
-  it('keeps detached composer controls out of collapsed quick chat while retaining recovery access', () => {
+  it('uses the resize divider to detach either composer and keeps a return target', () => {
     const source = readFileSync(new URL('./InteractiveArea.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"')
@@ -40,6 +40,26 @@ describe('chat composer branches', () => {
     expect(source).toContain('@click.stop="requestWidgetExpand()"')
     expect(source).toContain(':placeholder="isInitialized ? t(\'stage.chat.composer.placeholder\') : t(\'tamagotchi.stage.bootstrap.conversation\')"')
     expect(source).not.toContain("t('stage.message')")
-    expect(source).toMatch(/<div v-if="!isCollapsed" class="order-2 w-full flex shrink-0 items-center gap-1 overflow-x-auto">[\s\S]*data-chat-composer-detach-controls/)
+    expect(source).toContain('historyResizeOutsideWindow.value = outsideWindow')
+    expect(source).toContain('historyResizeTarget.setPointerCapture(event.pointerId)')
+    expect(source).toContain('detachFromResize = point => void detachedComposer.detach(false, point)')
+    expect(source).toContain('releasedOutsideWindow')
+    expect(source).toContain('data-chat-composer-return-target')
+    expect(source).toContain('ref="composerReturnTargetRef"')
+    expect(source).toContain('v-if="isWidgetSurface && !composerDetached"')
+    expect(source).toContain("? 'minmax(0, 1fr) 32px'")
+    expect(source).not.toContain('data-chat-composer-detach-controls')
+    expect(source).not.toContain('@pointerdown="detachedComposer.startDrag"')
+  })
+
+  it('keeps an image add button inside each expanded input and guides users when vision is off', () => {
+    const source = readFileSync(new URL('./InteractiveArea.vue', import.meta.url), 'utf8')
+
+    expect(source).toContain('data-chat-composer-image-picker')
+    expect(source).toContain('data-quick-chat-composer-image-picker')
+    expect(source).toContain("<div class=\"i-ph:plus-bold size-4\" />")
+    expect(source).not.toContain('v-if="visionEnabled && !activeGroupMeta && !isCollapsed"')
+    expect(source).toContain("if (!visionEnabled.value) {")
+    expect(source).toContain("toast.info(t('stage.chat.vision.disabled'))")
   })
 })

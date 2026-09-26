@@ -1,3 +1,5 @@
+import type { SerializableDesktopCapturerSource } from '@proj-airi/electron-screen-capture'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import { createDesktopVisionScreenCapture } from './vision-screen-capture'
@@ -15,5 +17,39 @@ describe('desktop vision screen sources', () => {
     const service = createDesktopVisionScreenCapture(async () => [{ id: 'screen:0', name: 'Screen', display_id: '0', thumbnail: new Uint8Array([255, 216, 255]) }])
     await expect(service.capture('window:closed')).rejects.toThrow('Select a source again')
     await expect(service.capture('')).rejects.toThrow('Select a source again')
+  })
+
+  it('times out both listing and capture when Electron source enumeration stalls', async () => {
+    vi.useFakeTimers()
+    const service = createDesktopVisionScreenCapture(() => new Promise<SerializableDesktopCapturerSource[]>(() => undefined), 100, 100)
+    const listing = service.listSources()
+    const capture = service.capture('screen:0')
+    const listingError = expect(listing).rejects.toThrow('timed out')
+    const captureError = expect(capture).rejects.toThrow('timed out')
+
+    await vi.advanceTimersByTimeAsync(200)
+
+    await listingError
+    await captureError
+    vi.useRealTimers()
+  })
+
+  it('falls back to screens when window enumeration times out', async () => {
+    vi.useFakeTimers()
+    const getSources = vi.fn((options: { types: Array<'screen' | 'window'> }) => options.types.length === 2
+      ? new Promise<SerializableDesktopCapturerSource[]>(() => undefined)
+      : Promise.resolve([{ id: 'screen:0', name: 'Screen', display_id: '0', thumbnail: new Uint8Array() }]))
+    const service = createDesktopVisionScreenCapture(getSources, 100)
+    const listed = service.listSources()
+
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(listed).resolves.toEqual([{
+      id: 'screen:0',
+      name: 'Screen',
+      previewDataUrl: '',
+    }])
+    expect(service.wasLastSourceListFallback?.()).toBe(true)
+    vi.useRealTimers()
   })
 })

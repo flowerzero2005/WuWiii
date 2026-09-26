@@ -5,7 +5,7 @@ import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-visi
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
-import { requiresOfficialCapabilityConsent, useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
+import { useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
 import { Button, FieldCheckbox, FieldInput, FieldRange, FieldSelect } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { computed, onUnmounted, ref, watch } from 'vue'
@@ -43,6 +43,8 @@ const {
 
 const visionPoints = computed(() => officialPricingStore.getCapability('vision')?.pointsPerRequest)
 const testImage = ref<File>()
+const testImageInputRef = ref<HTMLInputElement>()
+const testImagePreviewUrl = ref('')
 const testResult = ref('')
 const testError = ref('')
 const testPending = ref(false)
@@ -52,34 +54,76 @@ const screenCapture = useVisionScreenCapture()
 const screenSources = ref<VisionScreenSource[]>([])
 const screenSourcesLoading = ref(false)
 const screenSourcesError = ref('')
+const screenSourcesRequested = ref(false)
 const selectedScreenSource = computed(() => screenSources.value.find(source => source.id === automaticScreenshotSourceId.value))
+const windowSourcesUnavailable = ref(false)
 const visionQuote = computed(() => officialCapabilityConsentStore.getQuote('vision'))
 const visionConsentNeeded = computed(() => officialCapabilityConsentStore.needsConsent(authUser.value?.id, 'vision', visionQuote.value))
+const officialTestBlocked = computed(() => provider.value === 'official-cloud' && (!authUser.value?.id || visionConsentNeeded.value))
+const testActionDisabled = computed(() => !enabled.value || isAnalyzing.value || testPending.value || officialTestBlocked.value)
 watch(() => [enabled.value, provider.value, testImage.value, authUser.value?.id, visionQuote.value?.fingerprint, aliyunApiKey.value, aliyunBaseUrl.value, aliyunModel.value, openAICompatibleApiKey.value, openAICompatibleBaseUrl.value, openAICompatibleModel.value, geminiApiKey.value, geminiBaseUrl.value, geminiModel.value, visionConsentNeeded.value], () => {
   testController?.abort()
   testResult.value = ''
   testError.value = ''
 }, { flush: 'sync' })
-onUnmounted(() => testController?.abort())
+function clearTestImagePreview() {
+  if (testImagePreviewUrl.value)
+    URL.revokeObjectURL(testImagePreviewUrl.value)
+  testImagePreviewUrl.value = ''
+}
+
+onUnmounted(() => {
+  testController?.abort()
+  clearTestImagePreview()
+})
 
 async function refreshScreenSources() {
   if (!screenCapture)
     return
   screenSourcesLoading.value = true
+  screenSourcesRequested.value = true
   screenSourcesError.value = ''
   try {
     screenSources.value = await screenCapture.listSources()
+    windowSourcesUnavailable.value = screenCapture.wasLastSourceListFallback?.() ?? false
     if (automaticScreenshotSourceId.value && !selectedScreenSource.value) {
       automaticScreenshotSourceId.value = ''
       automaticScreenshotEnabled.value = false
     }
   }
   catch (error) {
-    screenSourcesError.value = error instanceof Error ? error.message : String(error)
+    windowSourcesUnavailable.value = false
+    screenSourcesError.value = error instanceof Error && error.name === 'VisionScreenSourceTimeoutError'
+      ? t('settings.pages.modules.vision.screenshot.source-load-timeout')
+      : error instanceof Error ? error.message : String(error)
   }
   finally {
     screenSourcesLoading.value = false
   }
+}
+
+function chooseTestImage() {
+  testImageInputRef.value?.click()
+}
+
+function handleTestImageChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const image = input.files?.[0]
+  input.value = ''
+  if (!image)
+    return
+  clearTestImagePreview()
+  testImage.value = image
+  testImagePreviewUrl.value = URL.createObjectURL(image)
+  testResult.value = ''
+  testError.value = ''
+}
+
+function clearTestImage() {
+  testImage.value = undefined
+  clearTestImagePreview()
+  testResult.value = ''
+  testError.value = ''
 }
 
 function acceptVisionFee() {
@@ -124,19 +168,16 @@ async function testVision() {
     testError.value = t('settings.pages.modules.vision.test.image-required')
     return
   }
-  if (provider.value === 'official-cloud') {
-    const scopeId = authUser.value?.id
-    if (!scopeId) {
+  if (officialTestBlocked.value) {
+    if (!authUser.value?.id) {
       toast.info(t('stage.chat.capability-consent.login-required'))
       testError.value = t('stage.chat.capability-consent.login-required')
-      return
     }
-    const quote = officialCapabilityConsentStore.getQuote('vision')
-    if (requiresOfficialCapabilityConsent('vision') && officialCapabilityConsentStore.needsConsent(scopeId, 'vision', quote)) {
+    else {
       testError.value = t('stage.chat.capability-consent.approval-required')
       toast.warning(testError.value)
-      return
     }
+    return
   }
   const selectedImage = testImage.value
   const selectedProvider = provider.value
@@ -271,9 +312,14 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
         {{ t('settings.pages.modules.vision.screenshot.desktop-only') }}
       </p>
       <template v-else>
-        <Button :disabled="screenSourcesLoading" @click="refreshScreenSources">
-          {{ t('settings.pages.modules.vision.screenshot.select-source') }}
-        </Button>
+        <Button
+          :loading="screenSourcesLoading"
+          :label="screenSourcesLoading ? t('settings.pages.modules.vision.screenshot.refreshing') : t('settings.pages.modules.vision.screenshot.select-source')"
+          @click="refreshScreenSources"
+        />
+        <p :class="['text-xs airi-text-muted']">
+          {{ t('settings.pages.modules.vision.screenshot.source-help') }}
+        </p>
         <FieldSelect
           v-if="screenSources.length"
           v-model="automaticScreenshotSourceId"
@@ -283,10 +329,21 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
         <p v-if="!automaticScreenshotSourceId" :class="['text-sm airi-text-muted']">
           {{ t('settings.pages.modules.vision.screenshot.source-required') }}
         </p>
-        <img v-if="selectedScreenSource?.previewDataUrl" :src="selectedScreenSource.previewDataUrl" :alt="selectedScreenSource.name" :class="['max-h-56 rounded-lg object-contain']">
-        <p v-if="screenSourcesError" :class="['text-sm airi-status-danger']">
-          {{ screenSourcesError }}
+        <p v-if="screenSourcesRequested && !screenSourcesLoading && !screenSourcesError && !screenSources.length" :class="['rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300']">
+          {{ t('settings.pages.modules.vision.screenshot.no-sources-found') }}
         </p>
+        <p v-if="windowSourcesUnavailable" :class="['rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300']">
+          {{ t('settings.pages.modules.vision.screenshot.window-sources-unavailable') }}
+        </p>
+        <p v-if="screenSourcesError" :class="['text-sm airi-status-danger']">
+          {{ t('settings.pages.modules.vision.screenshot.source-load-failed') }} {{ screenSourcesError }}
+        </p>
+        <div v-if="selectedScreenSource" :class="['overflow-hidden rounded-lg border airi-border-subtle airi-surface-panel']">
+          <img v-if="selectedScreenSource.previewDataUrl" :src="selectedScreenSource.previewDataUrl" :alt="selectedScreenSource.name" :class="['max-h-56 w-full object-contain']">
+          <p :class="['px-3 py-2 text-sm airi-text-muted']">
+            {{ t('settings.pages.modules.vision.screenshot.selected-source', { name: selectedScreenSource.name }) }}
+          </p>
+        </div>
       </template>
       <p v-if="provider === 'official-cloud' && visionPoints !== undefined" :class="['text-sm airi-text-muted']">
         {{ t('settings.pages.modules.vision.screenshot.price', { points: visionPoints, seconds: screenshotIntervalSeconds }) }}
@@ -311,11 +368,27 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
         </p>
       </div>
       <input
+        ref="testImageInputRef"
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
-        @change="testImage = ($event.target as HTMLInputElement).files?.[0]"
+        class="hidden"
+        @change="handleTestImageChange"
       >
-      <Button :disabled="!enabled || isAnalyzing || testPending" @click="testVision">
+      <div :class="['flex flex-wrap items-center gap-3']">
+        <Button variant="secondary" :label="t('settings.pages.modules.vision.test.choose-image')" @click="chooseTestImage" />
+        <p v-if="testImage" :class="['min-w-0 truncate text-sm airi-text-muted']" :title="testImage.name">
+          {{ t('settings.pages.modules.vision.test.image-selected', { name: testImage.name }) }}
+        </p>
+        <Button v-if="testImage" size="sm" variant="ghost" :label="t('settings.pages.modules.vision.test.clear-image')" @click="clearTestImage" />
+      </div>
+      <p :class="['text-xs airi-text-muted']">
+        {{ t('settings.pages.modules.vision.test.selection-local') }}
+      </p>
+      <img v-if="testImagePreviewUrl" :src="testImagePreviewUrl" :alt="testImage?.name" :class="['max-h-56 max-w-full rounded-lg border airi-border-subtle object-contain']">
+      <p v-if="officialTestBlocked" :class="['rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300']">
+        {{ authUser ? t('settings.pages.modules.vision.test.fee-required') : t('stage.chat.capability-consent.login-required') }}
+      </p>
+      <Button :disabled="testActionDisabled" @click="testVision">
         {{ isAnalyzing || testPending ? t('settings.pages.modules.vision.test.analyzing') : t('settings.pages.modules.vision.test.action') }}
       </Button>
       <p v-if="testError" :class="['rounded-lg bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300']">

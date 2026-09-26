@@ -4,13 +4,16 @@ import { ref, watch } from 'vue'
 export type ChatLayoutSurface = 'page' | 'widget'
 
 export const CHAT_LAYOUT_RATIO_MIN = 30
-export const CHAT_LAYOUT_RATIO_MAX = 85
+export const CHAT_LAYOUT_RATIO_MAX = 90
 export const CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT = 8
 export const CHAT_LAYOUT_HISTORY_MIN_HEIGHT = 100
-export const CHAT_LAYOUT_COMPOSER_MIN_HEIGHT = 168
+// The page composer has a detach row, a 48px textarea, and a bottom toolbar.
+// The compact quick-chat composer only needs its textarea and bottom toolbar.
+export const CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT = 120
+export const CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT = 104
 export const DEFAULT_CHAT_LAYOUT_RATIOS = {
-  page: 64,
-  widget: 58,
+  page: 72,
+  widget: 68,
 } as const
 
 export const CHAT_LAYOUT_STORAGE_KEYS = {
@@ -29,7 +32,7 @@ export function clampChatHistoryRatio(value: number, fallback: number) {
  * Keep both panes usable when a chat window is short without overwriting the
  * user's saved ratio. The preferred ratio is restored when the window grows.
  */
-export function getChatHistoryRatioBoundsForHeight(containerHeight: number) {
+export function getChatHistoryRatioBoundsForHeight(containerHeight: number, composerMinHeight = CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT) {
   const availableHeight = Math.round(containerHeight) - CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT
   if (availableHeight <= 0)
     return { max: CHAT_LAYOUT_RATIO_MAX, min: CHAT_LAYOUT_RATIO_MIN }
@@ -40,7 +43,7 @@ export function getChatHistoryRatioBoundsForHeight(containerHeight: number) {
   )
   const maxRatio = Math.min(
     CHAT_LAYOUT_RATIO_MAX,
-    Math.floor(((availableHeight - CHAT_LAYOUT_COMPOSER_MIN_HEIGHT) / availableHeight) * 100),
+    Math.floor(((availableHeight - composerMinHeight) / availableHeight) * 100),
   )
 
   // At a size below the window's supported minimum, preserve the stored
@@ -51,9 +54,9 @@ export function getChatHistoryRatioBoundsForHeight(containerHeight: number) {
   return { max: maxRatio, min: minRatio }
 }
 
-export function constrainChatHistoryRatioForHeight(value: number, containerHeight: number) {
+export function constrainChatHistoryRatioForHeight(value: number, containerHeight: number, composerMinHeight = CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT) {
   const preferred = clampChatHistoryRatio(value, DEFAULT_CHAT_LAYOUT_RATIOS.page)
-  const { max, min } = getChatHistoryRatioBoundsForHeight(containerHeight)
+  const { max, min } = getChatHistoryRatioBoundsForHeight(containerHeight, composerMinHeight)
 
   return Math.min(Math.max(preferred, min), max)
 }

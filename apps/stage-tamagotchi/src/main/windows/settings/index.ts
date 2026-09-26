@@ -7,6 +7,7 @@ import type { WidgetsWindowManager } from '../widgets'
 
 import { join, resolve } from 'node:path'
 
+import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { BrowserWindow, shell } from 'electron'
 
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
@@ -65,6 +66,7 @@ export function setupSettingsWindowReusableFunc(params: {
       appUserModelId: params.appUserModelId,
       developerToolsEnabled: params.developerToolsEnabled,
     })
+    initScreenCaptureForWindow(window)
     await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/settings'))
     return window
   }).getWindow

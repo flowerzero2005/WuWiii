@@ -2380,10 +2380,17 @@ pages:
       last-error: 'Most recent vision request failed: {error}'
       screenshot:
         desktop-only: Screen capture is available only in the desktop app.
-        select-source: Select or refresh screen sources
+        select-source: View available screens and windows
+        refreshing: Reading screen sources…
+        source-help: This only lists the screens and windows currently visible to the desktop app. Choose an automatic screenshot target below; listing or choosing one does not capture, upload, or use points until automatic screenshots are enabled.
         source: Automatic screenshot source
         no-source: No source selected
         source-required: Select a screen or window and check the preview. An unavailable source stops capture and must be selected again.
+        no-sources-found: No screens or windows are available. Check that the desktop app can see the target, then refresh.
+        window-sources-unavailable: Window sources did not respond in time, so only screens are shown. Refresh to try loading windows again.
+        source-load-failed: Could not read screen sources.
+        source-load-timeout: Reading timed out. Try again, and check the system screen-recording permission if it keeps failing.
+        selected-source: 'Selected: {name}'
         price: 'Automatic screenshots cost {points} points each, at an interval of {seconds} seconds, billed separately from chat.'
         heading: Automatic screenshots
         intro: Disabled by default. When enabled, the desktop capture service requests screenshots at the selected interval. It never requests or uses a camera.
@@ -2394,6 +2401,11 @@ pages:
       test:
         heading: Connection test
         intro: The test sends one image with the current configuration and follows the selected provider's billing rules.
+        choose-image: Choose image
+        image-selected: 'Selected: {name}'
+        clear-image: Remove image
+        selection-local: Selecting an image only previews it here. It does not upload, analyze, or use points until you start the test.
+        fee-required: Accept the current official image understanding fee before starting a test. Selecting an image is still local and free.
         image-required: Select an image first.
         prompt: Briefly describe what is in this image.
         disabled: Image understanding is disabled.

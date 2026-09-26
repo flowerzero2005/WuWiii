@@ -452,13 +452,14 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
       ...dependsOn,
       developerToolsEnabled,
       onRendererBootstrapVisible: signalPrelaunchSplashReady,
-      onRendererRuntimeReady: async () => {
+      onRendererRuntimeReady: () => {
         desktopDiagnostics.record('main-renderer-runtime-ready')
         // Production launches must expose the quick-chat surface after the
         // main renderer has completed its handshake. Merely pre-creating the
         // hidden window leaves a clean install looking as if the feature is
         // missing until the user discovers the tray action.
-        await dependsOn.quickChatWindow.openWindow()
+        void dependsOn.quickChatWindow.openWindow()
+          .catch(error => console.warn('[QuickChatWindow] Failed to open after main renderer became ready:', error))
       },
       openDesktopDiagnostics: () => {
         if (desktopDiagnostics.logFile)

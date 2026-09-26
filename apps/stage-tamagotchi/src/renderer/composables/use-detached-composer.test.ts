@@ -15,12 +15,12 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaInvoke: (event: unknown) => mocks.invokes.get(event),
 }))
 const scopes: ReturnType<typeof effectScope>[] = []
-function source(send = vi.fn(async () => ({ consumed: true, draft: { text: '', images: [] } })), draftText = 'Original draft.') {
+function source(send = vi.fn(async () => ({ consumed: true, draft: { text: '', images: [] } })), draftText = 'Original draft.', surface: 'page' | 'widget' = 'page') {
   const scope = effectScope()
   scopes.push(scope)
   const input = reactive({ sessionId: 'room-a', userScope: 'account-a', busy: false, draft: { text: draftText, images: [] } })
   const applyDraft = vi.fn(draft => input.draft = draft)
-  const composer = scope.run(() => useDetachedComposerSource({ sessionId: () => input.sessionId, userScope: () => input.userScope, surface: 'page', group: () => false, busy: () => input.busy, draft: () => input.draft, applyDraft, send }))!
+  const composer = scope.run(() => useDetachedComposerSource({ sessionId: () => input.sessionId, userScope: () => input.userScope, surface, group: () => false, busy: () => input.busy, draft: () => input.draft, applyDraft, send }))!
   return { composer, input, applyDraft, send, scope }
 }
 function emit(event: unknown, body: ComposerSnapshot) {
@@ -41,6 +41,7 @@ describe('source composer lifecycle', () => {
     mocks.invokes.get(composerSourceRead)!.mockResolvedValue({ version: 0, uncertain: false })
     mocks.invokes.get(composerSourceCheckpoint)!.mockImplementation(async input => ({ version: input.version + 1 }))
     mocks.invokes.get(composerDetach)!.mockImplementation(async input => ({ scope: { ...input, sourceWebContentsId: 1, leaseId: 'lease-a' }, version: 0, status: 'detached', busy: false, draft: input.draft }))
+    mocks.invokes.get(composerDragDetach)!.mockImplementation(async input => ({ scope: { ...input, sourceWebContentsId: 1, leaseId: 'lease-a' }, version: 0, status: 'detached', busy: false, draft: input.draft }))
     mocks.invokes.get(composerSourceSubmit)!.mockImplementation(async input => ({ scope: { ...input, sourceWebContentsId: 1, leaseId: 'inline-lease' }, version: input.version, commandId: input.commandId, busy: true, uncertain: true, status: 'orphaned', draft: input.draft }))
     mocks.invokes.get(composerSettle)!.mockImplementation(async input => ({ scope: { userScope: 'account-a', sessionId: 'room-a', surface: 'page', sourceGeneration: 'source-a', sourceWebContentsId: 1, leaseId: input.leaseId, group: false }, version: input.version + 1, status: 'orphaned', busy: false, uncertain: false, draft: input.consumed ? { text: '', images: [] } : input.draft }))
   })
@@ -58,6 +59,39 @@ describe('source composer lifecycle', () => {
     expect(item.send).toHaveBeenCalledOnce()
     expect(mocks.invokes.get(composerSettle)!.mock.calls.every(call => call[0].consumed === true)).toBe(true)
     expect(mocks.invokes.get(composerInvalidate)).toHaveBeenCalled()
+  })
+
+  it('uses the same verified drag detach request for a quick-chat source', async () => {
+    const item = source(undefined, 'Quick chat draft.', 'widget')
+
+    await item.composer.detach(false, { x: 720, y: 640 })
+
+    expect(mocks.invokes.get(composerDragDetach)).toHaveBeenCalledWith(expect.objectContaining({
+      surface: 'widget',
+      point: { x: 720, y: 640 },
+      draft: { text: 'Quick chat draft.', images: [] },
+    }))
+  })
+
+  it('does not wait for a stale checkpoint before verifying a drag detach', async () => {
+    const item = source(undefined, 'Latest draft.')
+    let rejectCheckpoint!: (error: Error) => void
+    mocks.invokes.get(composerSourceCheckpoint)!.mockImplementationOnce(() => new Promise((_, reject) => rejectCheckpoint = reject))
+
+    const checkpoint = item.composer.checkpoint()
+    await vi.waitFor(() => expect(mocks.invokes.get(composerSourceCheckpoint)).toHaveBeenCalledOnce())
+    const detaching = item.composer.detach(false, { x: 720, y: 640 })
+    await vi.waitFor(() => expect(mocks.invokes.get(composerDragDetach)).toHaveBeenCalledOnce())
+    expect(mocks.invokes.get(composerDragDetach)!.mock.calls[0][0]).toMatchObject({
+      point: { x: 720, y: 640 },
+      draft: { text: 'Latest draft.', images: [] },
+    })
+
+    rejectCheckpoint(new Error('The detached editor owns this draft.'))
+    await expect(checkpoint).rejects.toThrow('The detached editor owns this draft.')
+    await detaching
+    expect(item.composer.detached.value).toBe(true)
+    expect(item.composer.checkpointFailed.value).toBe(false)
   })
 
   it('quarantines a thrown send rather than declaring it unconsumed', async () => {

@@ -125,8 +125,6 @@ export async function setupDashboardWindow(params: {
     return { action: 'deny' }
   })
 
-  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/dashboard'))
-
   await setupDashboardWindowElectronInvokes({
     window,
     settingsWindow: params.settingsWindow,
@@ -137,10 +135,12 @@ export async function setupDashboardWindow(params: {
     developerToolsEnabled: params.developerToolsEnabled,
   })
 
+  initScreenCaptureForWindow(window)
+
+  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/dashboard'))
+
   // NOTICE: Frameless Windows windows use renderer-driven, coalesced bounds
   // updates. The old native drag addon blocked transparent-window repainting.
-
-  initScreenCaptureForWindow(window)
 
   return window
 }

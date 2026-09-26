@@ -255,9 +255,9 @@ export async function setupMainWindow(params: {
     i18n: params.i18n,
   })
 
-  await load(window, baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')))
-
   initScreenCaptureForWindow(window)
+
+  await load(window, baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')))
 
   return window
 }
