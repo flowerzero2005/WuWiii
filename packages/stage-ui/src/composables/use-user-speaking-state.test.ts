@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useUserSpeakingState } from './use-user-speaking-state'
+
 vi.mock('../stores/settings/speech-playback', () => ({
   useSpeechPlaybackSettingsStore: () => ({
     settings: {
@@ -9,8 +11,6 @@ vi.mock('../stores/settings/speech-playback', () => ({
     },
   }),
 }))
-
-import { useUserSpeakingState } from './use-user-speaking-state'
 
 describe('useUserSpeakingState', () => {
   beforeEach(() => {

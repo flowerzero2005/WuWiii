@@ -219,7 +219,7 @@ const tabs: Tab[] = [
 const activeTab = computed({
   get: () => {
     // If current active tab is not in available tabs, reset to first tab
-    if (!tabs.find(tab => tab.id === activeTabId.value))
+    if (!tabs.some(tab => tab.id === activeTabId.value))
       return tabs[0]?.id || ''
     return activeTabId.value
   },
@@ -484,7 +484,7 @@ function getDefaultPlaceholder(defaultValue: string | undefined): string {
           </div>
 
           <!-- Error div -->
-          <div v-if="showError" class="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300">
+          <div v-if="showError" class="w-full border border-red-200 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300">
             <p>
               {{ errorMessage }}
             </p>
@@ -497,7 +497,7 @@ function getDefaultPlaceholder(defaultValue: string | undefined): string {
               {{ t('settings.pages.card.creation.fields_info.subtitle') }}
             </p>
 
-            <div class="input-list ml-auto mr-auto w-full max-w-4xl flex flex-col gap-6">
+            <div class="input-list ml-auto mr-auto max-w-4xl w-full flex flex-col gap-6">
               <FieldInput v-model="cardName" :label="t('settings.pages.card.creation.name')" :description="t('settings.pages.card.creation.fields_info.name')" :required="true" />
               <FieldInput v-model="cardNickname" :label="t('settings.pages.card.creation.nickname')" :description="t('settings.pages.card.creation.fields_info.nickname')" />
               <div flex="~ col" gap-2>
@@ -536,7 +536,7 @@ function getDefaultPlaceholder(defaultValue: string | undefined): string {
           </div>
           <!-- Behavior -->
           <div v-else-if="activeTab === 'behavior'" class="tab-content ml-auto mr-auto w-95%">
-            <div class="input-list ml-auto mr-auto w-full max-w-4xl flex flex-col gap-6">
+            <div class="input-list ml-auto mr-auto max-w-4xl w-full flex flex-col gap-6">
               <div :class="['airi-surface-glass', 'flex flex-col items-start gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between']">
                 <div class="min-w-0">
                   <div :class="['airi-text', 'text-sm font-medium']">
@@ -648,7 +648,7 @@ function getDefaultPlaceholder(defaultValue: string | undefined): string {
           </div>
           <!-- Settings -->
           <div v-else-if="activeTab === 'settings'" class="tab-content ml-auto mr-auto w-95%">
-            <div class="input-list ml-auto mr-auto w-full max-w-4xl flex flex-col gap-6">
+            <div class="input-list ml-auto mr-auto max-w-4xl w-full flex flex-col gap-6">
               <FieldInput v-model="cardSystemPrompt" :label="t('settings.pages.card.systemprompt')" :single-line="false" :required="true" :description="t('settings.pages.card.creation.fields_info.systemprompt')" />
               <FieldInput v-model="cardPostHistoryInstructions" :label="t('settings.pages.card.posthistoryinstructions')" :single-line="false" :required="true" :description="t('settings.pages.card.creation.fields_info.posthistoryinstructions')" />
               <FieldInput v-model="cardVersion" :label="t('settings.pages.card.creation.version')" :required="true" :description="t('settings.pages.card.creation.fields_info.version')" />

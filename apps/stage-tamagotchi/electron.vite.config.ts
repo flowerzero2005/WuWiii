@@ -233,6 +233,10 @@ export default defineConfig({
     },
 
     optimizeDeps: {
+      // The stage and general settings route are loaded dynamically. Discover
+      // their dependencies before serving modules to avoid a rebundle that
+      // reloads windows and splits active Vue/Pinia instances.
+      include: ['@proj-airi/stage-ui-live2d > pixi-filters', 'std-env'],
       exclude: [
         // Internal Packages
         '@proj-airi/stage-ui/*',
@@ -272,6 +276,9 @@ export default defineConfig({
     },
 
     server: {
+      // Keep the renderer origin stable so per-origin settings survive restarts.
+      port: 5173,
+      strictPort: true,
       warmup: {
         clientFiles: [
           `${resolve(join(import.meta.dirname, '..', '..', 'packages', 'stage-ui', 'src'))}/*.vue`,

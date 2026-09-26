@@ -107,15 +107,18 @@ export class OPFSCache {
         try {
           const settings = JSON.parse(await settingsFiles[0].text())
           const mocPath = settings?.FileReferences?.Moc
-          if (typeof mocPath === 'string') {
-            const settingsPath = settingsFiles[0].webkitRelativePath || settingsFiles[0].name
-            const basePath = settingsPath.includes('/') ? settingsPath.slice(0, settingsPath.lastIndexOf('/') + 1) : ''
-            const expectedMocPath = `${basePath}${mocPath}`.replaceAll('\\', '/')
-            const hasMoc = files.some((file) => {
-              const path = (file.webkitRelativePath || file.name).replaceAll('\\', '/')
-              return path === expectedMocPath
-            })
-            if (!hasMoc)
+          const textures = settings?.FileReferences?.Textures
+          if (typeof mocPath !== 'string' || !mocPath || !Array.isArray(textures) || textures.length === 0)
+            return null
+          const settingsPath = settingsFiles[0].webkitRelativePath || settingsFiles[0].name
+          const basePath = settingsPath.includes('/') ? settingsPath.slice(0, settingsPath.lastIndexOf('/') + 1) : ''
+          // A partial cache bypasses ZipLoader and cannot recover absent textures.
+          // Treat it as a miss so the same requested archive rebuilds this entry.
+          for (const resourcePath of [mocPath, ...textures]) {
+            if (typeof resourcePath !== 'string' || !resourcePath)
+              return null
+            const expectedPath = `${basePath}${resourcePath}`.replaceAll('\\', '/')
+            if (!files.some(file => (file.webkitRelativePath || file.name).replaceAll('\\', '/') === expectedPath && file.size > 0))
               return null
           }
         }
@@ -141,7 +144,7 @@ export class OPFSCache {
       // hit then exposes a mixed archive to Cubism. This directory contains extracted
       // cache data only, so replace this exact model entry before writing the new set.
       await root.removeEntry(key, { recursive: true }).catch((error) => {
-        if (!(error instanceof DOMException && error.name === 'NotFoundError'))
+        if (!(error instanceof DOMException) || error.name !== 'NotFoundError')
           throw error
       })
       const dirHandle = await root.getDirectoryHandle(key, { create: true })

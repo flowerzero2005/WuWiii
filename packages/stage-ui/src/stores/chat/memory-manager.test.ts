@@ -1,3 +1,4 @@
+import type { NotebookData } from '../../database/repos/notebook.repo'
 import type { AiriReplyFeedbackMemorySummary, AiriReplyFeedbackScope } from '../../types/reply-feedback'
 import type { MemoryExtractionCandidate } from './memory-extractor'
 
@@ -16,7 +17,7 @@ const replyFeedbackScope: AiriReplyFeedbackScope = {
 
 const repoMock = vi.hoisted(() => ({
   load: vi.fn(),
-  save: vi.fn(),
+  save: vi.fn<(scopeId: string, data: NotebookData) => Promise<NotebookData>>(),
 }))
 
 function makeReplyFeedbackSummary(
@@ -119,6 +120,7 @@ describe('memory manager', () => {
     repoMock.load.mockReset()
     repoMock.save.mockReset()
     repoMock.load.mockResolvedValue(null)
+    repoMock.save.mockImplementation(async (_scopeId, data) => structuredClone(data))
   })
 
   it('writes source trace metadata through the completed-turn dispatcher', async () => {
@@ -524,7 +526,10 @@ describe('memory manager', () => {
     const firstGate = new Promise<void>((resolve) => {
       releaseFirst = resolve
     })
-    repoMock.save.mockImplementationOnce(async () => firstGate).mockResolvedValue(undefined)
+    repoMock.save.mockImplementationOnce(async (_scopeId, data) => {
+      await firstGate
+      return structuredClone(data)
+    })
 
     const first = memoryManager.processCompletedChatTurnForMemory({
       userMessage: '用户喜欢雨夜散步',
@@ -557,7 +562,9 @@ describe('memory manager', () => {
     expect(repoMock.save).toHaveBeenCalledTimes(1)
 
     releaseFirst()
-    await Promise.all([first, second])
+    const results = await Promise.all([first, second])
+    for (const result of results)
+      expect(result).toMatchObject({ success: true, savedCount: 1 })
 
     expect(notebookStore.entries.map(entry => entry.text)).toEqual([
       '用户喜欢雨夜散步。',

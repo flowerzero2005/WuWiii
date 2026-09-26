@@ -1,8 +1,8 @@
-import type { ComposerDetach } from '../../../shared/detached-composer'
+import type { ComposerDetach, ComposerRecoveryData } from '../../../shared/detached-composer'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { composerDetach, composerEdit, composerFlushAndClose, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerDetach, composerDiscard, composerDragDetach, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { createDetachedComposerService } from './detached-composer'
 
 const mocks = vi.hoisted(() => ({
@@ -10,14 +10,16 @@ const mocks = vi.hoisted(() => ({
   contexts: new Map<number, any>(),
   appHooks: new Map<string, (...args: any[]) => void>(),
   open: vi.fn(),
+  cursor: { x: 200, y: 200 },
 }))
 vi.mock('@moeru/eventa', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@moeru/eventa')>()
   return { ...actual, defineInvokeHandler: (context: any, event: unknown, handler: unknown) => context.handlers.set(event, handler) }
 })
 vi.mock('electron', () => ({
-  app: { on: (event: string, handler: (...args: any[]) => void) => mocks.appHooks.set(event, handler), removeListener: vi.fn() },
+  app: { on: (event: string, handler: (...args: any[]) => void) => mocks.appHooks.set(event, handler), removeListener: vi.fn(), quit: vi.fn() },
   BrowserWindow: { getAllWindows: () => mocks.windows },
+  screen: { getCursorScreenPoint: () => mocks.cursor, getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) },
 }))
 vi.mock('../../windows/composer', () => ({ createDetachedComposerWindow: mocks.open }))
 vi.mock('../../windows/shared/window', () => ({
@@ -30,9 +32,17 @@ vi.mock('../../windows/shared/window', () => ({
 }))
 function window(id: number, route = '/chat') {
   const hooks = new Map<string, (...args: any[]) => void>()
-  return { hooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, on: vi.fn(), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: vi.fn(), isDestroyed: () => false, show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
+  const webHooks = new Map<string, (...args: any[]) => void>()
+  return { hooks, webHooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, getZoomFactor: () => 1, on: (event: string, handler: (...args: any[]) => void) => webHooks.set(event, handler), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: vi.fn(), isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 100, y: 100, width: 800, height: 600 }), getBounds: () => ({ x: 100, y: 100, width: 640, height: 430 }), setPosition: vi.fn(), show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
 }
 const input: ComposerDetach = { userScope: 'account-a', sessionId: 'room-a', surface: 'page', sourceGeneration: 'source-a', group: false, draft: { text: 'Hello', images: [] } }
+let durable: ComposerRecoveryData
+const persistence = { load: vi.fn(async () => structuredClone(durable)), save: vi.fn(async (data: ComposerRecoveryData) => {
+  durable = structuredClone(data)
+}) }
+function createService() {
+  return createDetachedComposerService(persistence)
+}
 async function invoke(id: number, event: unknown, body?: unknown, sender = id) {
   return mocks.contexts.get(id).handlers.get(event)(body, { raw: { ipcMainEvent: { sender: { id: sender } } } })
 }
@@ -42,6 +52,11 @@ describe('composer main sender and close guards', () => {
     vi.clearAllMocks()
     mocks.contexts.clear()
     mocks.appHooks.clear()
+    durable = { version: 1, drafts: [] }
+    persistence.load.mockImplementation(async () => structuredClone(durable))
+    persistence.save.mockImplementation(async (data) => {
+      durable = structuredClone(data)
+    })
     mocks.windows = [window(1), window(2, '/settings')]
     mocks.open.mockImplementation(async (onCreated) => {
       const editor = window(3, '/composer')
@@ -53,7 +68,7 @@ describe('composer main sender and close guards', () => {
   })
 
   it('rejects a spoofed sender and a settings window pretending to be a conversation source', async () => {
-    const service = createDetachedComposerService()
+    const service = createService()
     await expect(invoke(1, composerDetach, input, 2)).resolves.toBeUndefined()
     await expect(invoke(2, composerDetach, input)).rejects.toThrow('conversation window')
     await expect(invoke(2, composerRecovery, input)).rejects.toThrow('conversation window')
@@ -63,7 +78,7 @@ describe('composer main sender and close guards', () => {
   })
 
   it('allows only the active editor to edit, submit or release its owner lease', async () => {
-    const service = createDetachedComposerService()
+    const service = createService()
     const detached = await invoke(1, composerDetach, input)
     const version = { leaseId: detached.scope.leaseId, version: detached.version }
     for (const event of [composerEdit, composerSubmit, composerRelease])
@@ -77,7 +92,7 @@ describe('composer main sender and close guards', () => {
   })
 
   it('blocks native close until the editor flushes and explicitly releases its confirmed revision', async () => {
-    const service = createDetachedComposerService()
+    const service = createService()
     const detached = await invoke(1, composerDetach, input)
     const preventDefault = vi.fn()
     mocks.windows[2].hooks.get('close')!({ preventDefault })
@@ -90,7 +105,7 @@ describe('composer main sender and close guards', () => {
   })
 
   it('accepts an old source outcome for its quarantined cache while a different source owns a new lease', async () => {
-    const service = createDetachedComposerService()
+    const service = createService()
     const detached = await invoke(1, composerDetach, input)
     const oldCommand = { leaseId: detached.scope.leaseId, version: detached.version, commandId: 'command-old' }
     await invoke(3, composerSubmit, oldCommand)
@@ -102,5 +117,136 @@ describe('composer main sender and close guards', () => {
     const later = await invoke(4, composerDetach, { ...input, sessionId: 'room-b', sourceGeneration: 'source-b', draft: { text: 'Later draft.', images: [] } })
     await expect(invoke(1, composerSettle, { ...oldCommand, consumed: true, draft: input.draft })).resolves.toMatchObject({ uncertain: false, draft: { text: '', images: [] } })
     expect(service.read()).toEqual(later)
+  })
+
+  it('waits for a durable submit marker before executing and rolls back failed editor acknowledgements', async () => {
+    const service = createService()
+    const detached = await invoke(1, composerDetach, input)
+    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    persistence.save.mockRejectedValueOnce(new Error('disk full'))
+    await expect(invoke(3, composerEdit, { ...version, draft: { text: 'Not saved.', images: [] } })).rejects.toThrow('disk full')
+    expect(service.read()).toEqual(detached)
+    let finish!: () => void
+    persistence.save.mockImplementationOnce(async (data) => {
+      await new Promise<void>(resolve => finish = resolve)
+      durable = structuredClone(data)
+    })
+    const submitting = invoke(3, composerSubmit, { ...version, commandId: 'paid-a' })
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(mocks.contexts.get(1).emit.mock.calls.some((call: unknown[]) => call[0] === composerExecute)).toBe(false)
+    finish()
+    await submitting
+    expect(durable.drafts[0].uncertain).toBe(true)
+    expect(mocks.contexts.get(1).emit).toHaveBeenCalledWith(composerExecute, service.read())
+  })
+
+  it('flushes a source before native close and refuses a stale scope close acknowledgement', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const preventDefault = vi.fn()
+    mocks.windows[0].hooks.get('close')!({ preventDefault })
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(mocks.contexts.get(1).emit).toHaveBeenCalledWith(composerFlushSource, { sourceGeneration: input.sourceGeneration })
+    await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
+    await expect(invoke(1, composerSourceCloseAck, { sourceGeneration: 'old-source' })).rejects.toThrow('older source')
+    expect(mocks.windows[0].close).not.toHaveBeenCalled()
+    await invoke(1, composerSourceCloseAck, { sourceGeneration: input.sourceGeneration })
+    expect(mocks.windows[0].close).toHaveBeenCalledOnce()
+    expect(durable.drafts[0].draft.text).toBe('Hello')
+  })
+
+  it('restores inline drafts in the precise account/session/surface scope and quarantines unknown outcomes', async () => {
+    durable = { version: 1, drafts: [{ userScope: input.userScope, sessionId: input.sessionId, surface: input.surface, group: false, version: 4, uncertain: true, draft: input.draft }] }
+    createService()
+    expect(await invoke(1, composerSourceRead, { ...input, userScope: 'account-b' })).toEqual({ version: 0, uncertain: false, draft: undefined })
+    expect(await invoke(1, composerSourceRead, input)).toMatchObject({ version: 4, uncertain: true, draft: input.draft })
+    await expect(invoke(1, composerSourceCheckpoint, { ...input, version: 4 })).rejects.toThrow('read only')
+    await expect(invoke(1, composerDetach, input)).rejects.toThrow('quarantined')
+    await invoke(1, composerViewRecovery, input)
+    const value = await invoke(3, composerRead)
+    await invoke(3, composerDiscard, { leaseId: value.scope.leaseId, version: value.version })
+    expect(durable.drafts).toEqual([])
+  })
+
+  it('allows drag return only over the live source composer region and verifies the actual cursor', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    await invoke(1, composerSourceRegion, { sourceGeneration: input.sourceGeneration, region: { rect: { x: 20, y: 450, width: 600, height: 100 }, viewport: { width: 800, height: 600 } } })
+    const detached = await invoke(1, composerDetach, input)
+    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    mocks.cursor = { x: 300, y: 300 }
+    expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(false)
+    mocks.cursor = { x: 300, y: 600 }
+    expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(true)
+    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 900, y: 600 } })).rejects.toThrow('cursor position')
+    await expect(invoke(1, composerDragDetach, { ...input, point: mocks.cursor })).rejects.toThrow('outside the source window')
+  })
+
+  it('keeps corrupt storage unavailable without replacing it or opening an editor', async () => {
+    persistence.load.mockRejectedValue(new Error('corrupt storage'))
+    createService()
+    await expect(invoke(1, composerSourceRead, input)).rejects.toThrow('corrupt storage')
+    await expect(invoke(1, composerDetach, input)).rejects.toThrow('corrupt storage')
+    expect(persistence.save).not.toHaveBeenCalled()
+    expect(mocks.open).not.toHaveBeenCalled()
+  })
+
+  it('does not resurrect a confirmed inline send after service restart or accept its stale clear revision', async () => {
+    const first = createService()
+    await invoke(1, composerSourceRead, input)
+    const checkpoint = await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
+    const submitted = await invoke(1, composerSourceSubmit, { ...input, version: checkpoint.version, commandId: 'inline-paid' })
+    expect(durable.drafts[0].uncertain).toBe(true)
+    const receipt = { leaseId: submitted.scope.leaseId, version: submitted.version, commandId: submitted.commandId, consumed: true, draft: input.draft }
+    await invoke(1, composerSettle, receipt)
+    expect(durable.drafts).toEqual([])
+    expect(await invoke(1, composerRecovery, input)).toEqual({ exists: false, uncertain: false, version: submitted.version + 1, draft: undefined })
+    await expect(invoke(1, composerSourceCheckpoint, { ...input, version: 0 })).rejects.toThrow('saved draft version')
+    first.dispose()
+    createService()
+    expect(await invoke(1, composerSourceRead, { ...input, sourceGeneration: 'after-restart' })).toEqual({ version: 0, uncertain: false, draft: undefined })
+    expect(mocks.open).not.toHaveBeenCalled()
+  })
+
+  it('restores an inline pending outcome read only and requires explicit discard after restart', async () => {
+    const first = createService()
+    await invoke(1, composerSourceRead, input)
+    const checkpoint = await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
+    await invoke(1, composerSourceSubmit, { ...input, version: checkpoint.version, commandId: 'inline-unknown' })
+    first.dispose()
+    createService()
+    await invoke(1, composerSourceRead, { ...input, sourceGeneration: 'after-restart' })
+    await expect(invoke(1, composerSourceSubmit, { ...input, sourceGeneration: 'after-restart', version: checkpoint.version, commandId: 'no-replay' })).rejects.toThrow('outcome')
+    await invoke(1, composerViewRecovery, input)
+    const restored = await invoke(3, composerRead)
+    expect(restored).toMatchObject({ busy: false, uncertain: true, status: 'orphaned', draft: input.draft })
+    await invoke(3, composerDiscard, { leaseId: restored.scope.leaseId, version: restored.version })
+    expect(durable.drafts).toEqual([])
+  })
+
+  it('reports the persisted editable inline draft and terminal version after an unconsumed receipt', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const checkpoint = await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
+    const command = await invoke(1, composerSourceSubmit, { ...input, version: checkpoint.version, commandId: 'inline-unconsumed' })
+    await invoke(1, composerSettle, { leaseId: command.scope.leaseId, version: command.version, commandId: command.commandId, consumed: false, draft: input.draft })
+    expect(await invoke(1, composerRecovery, input)).toEqual({ exists: true, uncertain: false, version: command.version + 1, draft: input.draft })
+    expect(durable.drafts[0]).toMatchObject({ uncertain: false, draft: input.draft })
+  })
+
+  it('quarantines a crashed source outcome and removes the dead renderer close barrier', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const checkpoint = await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
+    await invoke(1, composerSourceSubmit, { ...input, version: checkpoint.version, commandId: 'crashed-inline' })
+    mocks.windows[0].webHooks.get('render-process-gone')!()
+    await vi.waitFor(() => expect(persistence.save).toHaveBeenCalledTimes(3))
+    await invoke(1, composerViewRecovery, input)
+    expect(await invoke(3, composerRead)).toMatchObject({ busy: false, uncertain: true, status: 'orphaned' })
+    const preventDefault = vi.fn()
+    mocks.windows[0].hooks.get('close')!({ preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(durable.drafts[0]).toMatchObject({ uncertain: true, draft: input.draft })
+    expect(mocks.contexts.get(1).emit.mock.calls.some((call: unknown[]) => call[0] === composerExecute)).toBe(false)
   })
 })

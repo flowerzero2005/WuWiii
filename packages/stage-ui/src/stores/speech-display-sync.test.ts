@@ -69,7 +69,9 @@ describe('speech display synchronization', () => {
 
       await vi.advanceTimersByTimeAsync(30_000)
       let settled = false
-      void pending.then(() => { settled = true })
+      void pending.then(() => {
+        settled = true
+      })
       await Promise.resolve()
       expect(settled).toBe(false)
 

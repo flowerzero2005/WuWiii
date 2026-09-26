@@ -496,17 +496,17 @@ async function executeMaintenance() {
           && entry.metadata?.importance !== 'high'
           && typeof entry.metadata?.extractedAt === 'number')
           .sort((a, b) => {
-          const importanceOrder = { high: 3, medium: 2, low: 1 }
-          const aImportance = importanceOrder[a.metadata?.importance as keyof typeof importanceOrder] || 1
-          const bImportance = importanceOrder[b.metadata?.importance as keyof typeof importanceOrder] || 1
+            const importanceOrder = { high: 3, medium: 2, low: 1 }
+            const aImportance = importanceOrder[a.metadata?.importance as keyof typeof importanceOrder] || 1
+            const bImportance = importanceOrder[b.metadata?.importance as keyof typeof importanceOrder] || 1
 
-          if (memorySettings.settings.cleanupLowImportance) {
-            if (aImportance !== bImportance)
-              return aImportance - bImportance
-          }
+            if (memorySettings.settings.cleanupLowImportance) {
+              if (aImportance !== bImportance)
+                return aImportance - bImportance
+            }
 
-          return a.createdAt - b.createdAt
-        })
+            return a.createdAt - b.createdAt
+          })
 
         // 删除最旧的低重要性记忆
         const removableCount = Math.min(toDelete, sortedEntries.length)
@@ -685,7 +685,7 @@ function extractFeatures(text: string): string[] {
     gameMatches.forEach(m => features.push(`活动节点:${m}`))
 
   // 明确要求记住的内容
-  if (text.match(/记住|别忘|一定要记得|帮我记录/)) {
+  if (/记住|别忘|一定要记得|帮我记录/.test(text)) {
     const rememberMatch = text.match(/(?:记住|别忘|一定要记得|帮我记录)[^，。、]{2,20}/g)
     if (rememberMatch)
       rememberMatch.forEach(m => features.push(`明确要求:${m}`))

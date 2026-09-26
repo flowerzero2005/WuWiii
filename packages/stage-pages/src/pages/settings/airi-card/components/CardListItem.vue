@@ -14,13 +14,13 @@ interface Props {
 }
 
 defineProps<Props>()
-const { t } = useI18n()
 const emit = defineEmits<{
   (e: 'select'): void
   (e: 'activate'): void
   (e: 'delete'): void
   (e: 'edit'): void
 }>()
+const { t } = useI18n()
 </script>
 
 <template>

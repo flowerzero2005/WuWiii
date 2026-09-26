@@ -562,8 +562,7 @@ function shouldSkipLowRiskLightDialogueRewrite(input: AiriResponseRewriteInput, 
 }
 
 function buildCalibrationRuleLines(reasons: AiriResponseCalibrationReason[]) {
-  return [...new Set(reasons)]
-    .map(reason => `- ${CALIBRATION_REWRITE_RULES[reason]}`)
+  return Array.from(new Set(reasons), reason => `- ${CALIBRATION_REWRITE_RULES[reason]}`)
     .join('\n')
 }
 
@@ -824,8 +823,7 @@ export function getAiriResponseCalibrationReasons(input: Pick<AiriResponseRewrit
 export function buildAiriResponseRewriteMessages(input: AiriResponseRewriteInput): Message[] {
   const calibrationReasons = getAiriResponseCalibrationReasons(input)
   const expressionProfile = resolveExpressionProfile(input.expressionProfile)
-  const violationRules = [...new Set(input.guardedResponse.violations)]
-    .map(violation => `- ${VIOLATION_REWRITE_RULES[violation]}`)
+  const violationRules = Array.from(new Set(input.guardedResponse.violations), violation => `- ${VIOLATION_REWRITE_RULES[violation]}`)
     .join('\n')
   const calibrationRules = buildCalibrationRuleLines(calibrationReasons)
   const profileConstraintLines = buildProfileConstraintLines(expressionProfile)

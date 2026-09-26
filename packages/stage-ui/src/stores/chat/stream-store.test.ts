@@ -8,6 +8,7 @@ import { nextTick, watch } from 'vue'
 
 import { advanceAssistantTypingText, resolveAssistantTypingReaction, resolveAssistantTypingTiming } from '../../components/scenarios/chat/assistant-item-state'
 import { hasActiveStreamingMessage } from '../../components/scenarios/chat/history-state'
+import { useChatStreamStore } from './stream-store'
 
 const chatOrchestratorSource = readFileSync(new URL('../chat.ts', import.meta.url), 'utf8')
 
@@ -21,7 +22,9 @@ vi.mock('./session-store', async () => {
   const { defineStore } = await import('pinia')
   const { ref } = await import('vue')
   const activeSessionId = ref('session-a')
-  mocks.setActiveSession = (sessionId: string) => { activeSessionId.value = sessionId }
+  mocks.setActiveSession = (sessionId: string) => {
+    activeSessionId.value = sessionId
+  }
   return {
     useChatSessionStore: defineStore('chat-session-for-stream-test', () => ({
       activeSessionId,
@@ -38,8 +41,6 @@ vi.mock('./session-store', async () => {
     })),
   }
 })
-
-import { useChatStreamStore } from './stream-store'
 
 function textOf(message: StreamingAssistantMessage | null) {
   return typeof message?.content === 'string' ? message.content : ''

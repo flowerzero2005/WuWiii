@@ -35,7 +35,8 @@ function removeKeyValue(index: number, headers: { key: string, value: string }[]
 }
 
 watch(emptyHeaders, (headers) => {
-  if (headers.length > 0 && (headers[headers.length - 1].key !== '' || headers[headers.length - 1].value !== '')) {
+  const last = headers.at(-1)
+  if (last && (last.key !== '' || last.value !== '')) {
     emptyHeaders.value.push({ key: '', value: '' })
   }
 }, {
@@ -44,7 +45,8 @@ watch(emptyHeaders, (headers) => {
 })
 
 watch(singleHeader, (headers) => {
-  if (headers.length > 0 && (headers[headers.length - 1].key !== '' || headers[headers.length - 1].value !== '')) {
+  const last = headers.at(-1)
+  if (last && (last.key !== '' || last.value !== '')) {
     singleHeader.value.push({ key: '', value: '' })
   }
 }, {
@@ -53,7 +55,8 @@ watch(singleHeader, (headers) => {
 })
 
 watch(multipleHeaders, (headers) => {
-  if (headers.length > 0 && (headers[headers.length - 1].key !== '' || headers[headers.length - 1].value !== '')) {
+  const last = headers.at(-1)
+  if (last && (last.key !== '' || last.value !== '')) {
     multipleHeaders.value.push({ key: '', value: '' })
   }
 }, {

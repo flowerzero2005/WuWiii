@@ -322,6 +322,11 @@ export const useLive2d = defineStore('live2d', () => {
   // NOTICE: capabilities-request 只发一次会与主窗口模型加载时序竞争（请求先到、
   // 缓存未就绪则对方静默不回且永无下文）。这里做有限次重试，收到 update 即停。
   const capabilitiesRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const activeActionModelId = ref<string>()
+  const availableMotions = ref<Live2DAvailableMotion[]>([])
+  const availableExpressions = ref<Live2DAvailableExpression[]>([])
+  const capabilitiesByModel = ref<Record<string, { motions: Live2DAvailableMotion[], expressions: Live2DAvailableExpression[], readyAt: number }>>({})
+  const modelConsumerCount = ref(0)
 
   function clearCapabilitiesRetry(modelId: string) {
     const timer = capabilitiesRetryTimers.get(modelId)
@@ -443,7 +448,6 @@ export const useLive2d = defineStore('live2d', () => {
         scene: event.scene,
         status: event.status,
       })
-      return
     }
   })
 
@@ -452,7 +456,6 @@ export const useLive2d = defineStore('live2d', () => {
   const legacyModelParameters = useLocalStorageManualReset<Record<string, number>>('settings/live2d/parameters', defaultModelParameters)
   const modelVisualSettings = useLocalStorageManualReset<Record<string, { position: { x: number, y: number }, scale: number, parameters: Record<string, number> }>>('settings/live2d/model-visual-settings', () => ({}))
   const visualSettingsMigrationModelId = useLocalStorageManualReset<string>('settings/live2d/model-visual-settings-migration-model-id', '')
-  const activeActionModelId = ref<string>()
   const modelEpoch = ref(0)
   const rejectedActionWrites = ref(0)
   const position = computed({
@@ -465,9 +468,6 @@ export const useLive2d = defineStore('live2d', () => {
   }))
   // NOTICE: these are runtime-only model states and should not be persisted or broadcast.
   // Persisting them causes avoidable work whenever the model reloads or previews update.
-  const availableMotions = ref<Live2DAvailableMotion[]>([])
-  const availableExpressions = ref<Live2DAvailableExpression[]>([])
-  const capabilitiesByModel = ref<Record<string, { motions: Live2DAvailableMotion[], expressions: Live2DAvailableExpression[], readyAt: number }>>({})
   const motionMap = useLocalStorageManualReset<Record<string, string>>('settings/live2d/motion-map', {})
   const compositeExpressionPresets = useLocalStorageManualReset<Live2DCompositeExpressionPresets>('settings/live2d/composite-expression-presets', () => ({}))
   const performanceResourceMetadataByModel = useLocalStorageManualReset<Live2DPerformanceResourceMetadataByModel>('settings/live2d/performance-resource-metadata-by-model', () => ({}))
@@ -676,14 +676,6 @@ export const useLive2d = defineStore('live2d', () => {
 
     return new Promise((resolve) => {
       let resolved = false
-      const finish = (result: boolean) => {
-        if (resolved)
-          return
-        resolved = true
-        clearTimeout(timer)
-        unwatch()
-        resolve(result)
-      }
       const unwatch = watch(
         () => capabilitiesByModel.value[normalizedModelId]?.readyAt,
         (readyAt) => {
@@ -691,7 +683,15 @@ export const useLive2d = defineStore('live2d', () => {
             finish(true)
         },
       )
-      const timer = setTimeout(() => finish(false), timeoutMs)
+      const timer = setTimeout(finish, timeoutMs, false)
+      function finish(result: boolean) {
+        if (resolved)
+          return
+        resolved = true
+        clearTimeout(timer)
+        unwatch()
+        resolve(result)
+      }
     })
   }
 
@@ -948,7 +948,6 @@ export const useLive2d = defineStore('live2d', () => {
   // NOTICE: 本窗口是否挂载了会消费动作请求的 Model（渲染模型的窗口，如主窗口）。
   // 纯广播窗口（聊天/快捷聊天）无 Model，队列无人消费会产生空洞推进；主窗口
   // 自己发消息时 BroadcastChannel 不回环，靠本地队列播放——两种场景都由该计数分流。
-  const modelConsumerCount = ref(0)
 
   function retainModelConsumer() {
     modelConsumerCount.value += 1

@@ -39,11 +39,12 @@ export function listenAuthStateChanges(refresh: (event: AuthRefreshEvent) => voi
     ? undefined
     : new BroadcastChannel(AUTH_STATE_CHANNEL_NAME)
   const handleMessage = (event: MessageEvent<AuthStateChangedMessage>) => {
-    if (event.data?.type === 'auth-state-changed')
+    if (event.data?.type === 'auth-state-changed') {
       requestRefresh({
         broadcast: { reason: event.data.reason, version: event.data.version },
         reason: 'broadcast',
       })
+    }
   }
   const handleFocus = () => requestRefresh({ reason: 'focus' })
   const handleVisibilityChange = () => {

@@ -21,9 +21,9 @@ export type VoiceCallCancellationReason = 'user-requested' | 'emotional-boundary
 
 function voiceCallActionResult(status: VoiceCallActionStatus): VoiceCallActionResult {
   const messages: Record<VoiceCallActionStatus, string> = {
-    ringing: 'The incoming-call invitation is now ringing. The user has not accepted it yet. Continue ordinary chat normally while it rings, and use current runtime call state on later turns.',
-    unavailable: 'The requested voice-call action could not be completed because voice call requirements are unavailable. Explain this without claiming success.',
-    cancelled: 'The voice call was cancelled successfully.',
+    'ringing': 'The incoming-call invitation is now ringing. The user has not accepted it yet. Continue ordinary chat normally while it rings, and use current runtime call state on later turns.',
+    'unavailable': 'The requested voice-call action could not be completed because voice call requirements are unavailable. Explain this without claiming success.',
+    'cancelled': 'The voice call was cancelled successfully.',
     'kept-open': 'The pending hangup was withdrawn successfully. Continue the active call naturally without saying goodbye.',
   }
 

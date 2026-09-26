@@ -870,8 +870,15 @@ export const useAiriCardStore = defineStore('airi-card', () => {
   }
 
   let isApplyingActiveCard = false
+  let hasAppliedInitialDisplayModel = false
 
   function applyDisplayModelBinding(modelId?: string) {
+    // Startup restores the persisted stage selection. Later persona changes
+    // apply that persona's binding without changing the startup choice.
+    if (!hasAppliedInitialDisplayModel) {
+      modelId = stageModelStore.stageModelSelected
+      hasAppliedInitialDisplayModel = true
+    }
     if (activeDisplayModelApplication && activeDisplayModelId === modelId)
       return activeDisplayModelApplication
 
@@ -879,8 +886,9 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     activeDisplayModelId = modelId
     const application = (async () => {
       try {
+        // The renderer watches model ID/source changes. Emitting an explicit
+        // refresh here also remounts it, bypassing its duplicate-load guard.
         await stageModelStore.applyPersonaDisplayModel(modelId)
-        await stageModelStore.refreshStageView()
       }
       catch (error) {
         console.warn('[AiriCard] Failed to refresh active display model:', error)
@@ -900,7 +908,7 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     if (!activeCard.value)
       return Promise.resolve()
 
-    return applyDisplayModelBinding(resolveAiriExtension(activeCard.value).modules.display?.modelId)
+    return applyDisplayModelBinding(stageModelStore.stageModelSelected)
   }
 
   watch([activeCardId, activeCard], ([nextCardId, newCard], previous) => {

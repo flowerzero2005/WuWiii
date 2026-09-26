@@ -99,7 +99,7 @@ export function createButlerReminderService(params: {
   powerMonitor.on('resume', scanAfterResume)
   powerMonitor.on('unlock-screen', scanAfterResume)
 
-  const watchdog = setInterval(() => scan('watchdog'), 60_000)
+  const watchdog = setInterval(scan, 60_000, 'watchdog')
   watchdog.unref()
 
   if (params.initialTasks?.length)

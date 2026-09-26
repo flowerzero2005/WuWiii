@@ -88,7 +88,7 @@ const REPAIR_PATTERNS = [
   /came out wrong/,
   /too stiff/,
   /(?:you|that|your (?:line|reply|answer)|the (?:line|reply|answer)).{0,12}hurt me/,
-  /(?:that|your (?:line|reply|answer)|the (?:line|reply|answer)).{0,12}\bstung\b/,
+  /(?:that|your (?:line|reply|answer)|the (?:line|reply|answer)).{1,12}\bstung\b/,
   /take that back/,
   /missed (?:me|the point)/,
 ]
@@ -339,7 +339,7 @@ const PRACTICAL_GUIDANCE_PATTERNS = [
   /(?:告诉我|教我|说说)?怎么做(?:这[个道]?|那个|[菜饭面蛋])?/,
   /(?:帮我|麻烦你|能不能|可以|你来)?(?:看看|看一下|查一下|查找|找一下|确认|检查|列(?:一下)?|总结|整理|改一下|修一下|处理一下|运行|执行|测试).{0,24}(?:工作区|文件|目录|代码|项目|仓库|测试|类型检查|lint|构建|日志|报错|错误|bug|时间|日期|消息|资讯|资料|攻略|剧情|版本|考试|高考)/,
   /(?:工作区|文件|目录|代码|项目|仓库|日志|报错|错误|bug|消息|资讯|资料|攻略|剧情|版本).{0,18}(?:看看|看一下|查一下|查找|找一下|确认|检查|列(?:一下)?|总结|整理|改一下|修一下|处理一下|运行|执行|测试)/,
-  /(?:现在|今天|当前)?(?:时间|日期)(?:是|多少|几[点号]|是什么)/,
+  /(?:现在|今天|当前)?(?:时间|日期)(?:是|多少|几[点号])/,
   /(?:高考|考试|版本|剧情|消息|资讯|资料|攻略).{0,18}(?:查一下|查找|找一下|看看|有(?:什么|哪些)|消息|资讯)/,
   /做法/,
   /步骤/,
@@ -357,12 +357,12 @@ const PRACTICAL_GUIDANCE_PATTERNS = [
 ]
 
 const WORKSPACE_CAPABILITY_QUESTION_PATTERNS = [
-  /(?:can you|are you able to|do you have access to).{0,40}(?:read|see|access|open|inspect).{0,40}(?:workspace|files?|folders?|directories|repo|repository|code|project)/i,
-  /(?:你|airi)?(?:能不能|能否|可以|可不可以|能|是否|会不会).{0,24}(?:读|读取|读到|看到|看见|看得到|查看|访问|打开).{0,24}(?:工作区|文件|目录|文件夹|代码|项目|仓库|路径)/,
+  /(?:can you|are you able to|do you have access to).{0,40}(?:read|see|access|open|inspect).{0,40}(?:workspace|files?|folders?|directories|repo|code|project)/i,
+  /(?:你|airi)?(?:能不能|能否|可以|可不可以|能|是否|会不会).{0,24}(?:读|看到|看见|看得到|查看|访问|打开).{0,24}(?:工作区|文件|目录|代码|项目|仓库|路径)/,
 ]
 
 const WORKSPACE_ACTION_REQUEST_PATTERNS = [
-  /(?:帮我|麻烦你|请|直接|现在|顺便|你来).{0,20}(?:读|读取|列|列出|看一下|看看|查看|打开|检查|搜索|查找|找一下)/,
+  /(?:帮我|麻烦你|请|直接|现在|顺便|你来).{0,20}(?:读|列|看一下|看看|查看|打开|检查|搜索|查找|找一下)/,
   /\b(?:please|help me|go ahead|now|directly).{0,30}(?:read|list|show|open|inspect|check|search|find)\b/i,
 ]
 

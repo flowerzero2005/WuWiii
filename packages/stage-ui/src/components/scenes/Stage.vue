@@ -2307,6 +2307,7 @@ onUnmounted(() => {
 defineExpose({
   app,
   displayObject,
+  modelIdentity: () => live2dSceneRef.value?.modelIdentity(),
   canvasElement,
   readRenderTargetRegionAtClientPoint,
 })

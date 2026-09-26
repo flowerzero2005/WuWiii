@@ -330,8 +330,8 @@ describe('interactive area group chat UI', () => {
     const helperSource = source.slice(helperStart, helperEnd)
 
     expect(helperSource).toContain('模型没有返回可显示的内容，请重试。')
-    expect(helperSource.indexOf("normalizedMessage.includes('model returned no visible reply')"))
-      .toBeLessThan(helperSource.indexOf("normalizedMessage.includes('temporarily unavailable')"))
+    expect(helperSource.indexOf('normalizedMessage.includes(\'model returned no visible reply\')'))
+      .toBeLessThan(helperSource.indexOf('normalizedMessage.includes(\'temporarily unavailable\')'))
   })
 
   it('finalizes or resets a background group draft in its owning room', () => {

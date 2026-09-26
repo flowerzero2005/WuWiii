@@ -147,34 +147,33 @@ export const useSpeechLatencyStore = defineStore('speech-latency', () => {
       grouped.set(key, [...(grouped.get(key) ?? []), sample])
     }
 
-    return [...grouped.entries()]
-      .map(([key, providerSamples]) => {
-        const first = providerSamples[0]!
-        const successful = providerSamples.filter(sample => !sample.error)
-        const failures = providerSamples.length - successful.length
-        const avgTotalMs = average(successful.map(sample => sample.totalMs))
+    return Array.from(grouped.entries(), ([key, providerSamples]) => {
+      const first = providerSamples[0]!
+      const successful = providerSamples.filter(sample => !sample.error)
+      const failures = providerSamples.length - successful.length
+      const avgTotalMs = average(successful.map(sample => sample.totalMs))
 
-        return {
-          key,
-          provider: first.provider,
-          model: first.model,
-          voice: first.voice,
-          samples: providerSamples.length,
-          failures,
-          avgTtsMs: average(successful.map(sample => sample.ttsMs ?? 0)),
-          avgDecodeMs: average(successful.map(sample => sample.decodeMs ?? 0)),
-          avgPlaybackWaitMs: average(successful.filter(sample => sample.playbackWaitMs != null).map(sample => sample.playbackWaitMs ?? 0)),
-          avgFirstAudioMs: average(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0)),
-          p50FirstAudioMs: percentile(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0), 0.5),
-          p95FirstAudioMs: percentile(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0), 0.95),
-          avgTotalMs,
-          lastTotalMs: providerSamples[0]?.totalMs ?? 0,
-          lastFirstAudioMs: successful.find(sample => sample.firstAudioMs != null)?.firstAudioMs ?? 0,
-          failureRate: providerSamples.length === 0 ? 0 : failures / providerSamples.length,
-          tier: classifySummary({ samples: providerSamples.length, failures, avgTotalMs: average(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0)) || avgTotalMs }),
-          lastError: providerSamples.find(sample => sample.error)?.error ?? null,
-        }
-      })
+      return {
+        key,
+        provider: first.provider,
+        model: first.model,
+        voice: first.voice,
+        samples: providerSamples.length,
+        failures,
+        avgTtsMs: average(successful.map(sample => sample.ttsMs ?? 0)),
+        avgDecodeMs: average(successful.map(sample => sample.decodeMs ?? 0)),
+        avgPlaybackWaitMs: average(successful.filter(sample => sample.playbackWaitMs != null).map(sample => sample.playbackWaitMs ?? 0)),
+        avgFirstAudioMs: average(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0)),
+        p50FirstAudioMs: percentile(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0), 0.5),
+        p95FirstAudioMs: percentile(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0), 0.95),
+        avgTotalMs,
+        lastTotalMs: providerSamples[0]?.totalMs ?? 0,
+        lastFirstAudioMs: successful.find(sample => sample.firstAudioMs != null)?.firstAudioMs ?? 0,
+        failureRate: providerSamples.length === 0 ? 0 : failures / providerSamples.length,
+        tier: classifySummary({ samples: providerSamples.length, failures, avgTotalMs: average(successful.filter(sample => sample.firstAudioMs != null).map(sample => sample.firstAudioMs ?? 0)) || avgTotalMs }),
+        lastError: providerSamples.find(sample => sample.error)?.error ?? null,
+      }
+    })
       .sort((a, b) => {
         const tierOrder: Record<SpeechLatencyTier, number> = {
           'low-latency': 0,

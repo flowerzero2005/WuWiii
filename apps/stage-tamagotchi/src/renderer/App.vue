@@ -391,20 +391,6 @@ async function initializeCharacterRuntime(proactiveTopicPriority: number) {
   })
 }
 
-async function initializeStageModelRuntime() {
-  const [
-    { useDisplayModelsStore },
-    { useSettingsStageModel },
-  ] = await Promise.all([
-    import('@proj-airi/stage-ui/stores/display-models'),
-    import('@proj-airi/stage-ui/stores/settings/stage-model'),
-  ])
-  const displayModelsStore = useDisplayModelsStore()
-  const settingsStageModelStore = useSettingsStageModel()
-  await displayModelsStore.loadDisplayModelsFromIndexedDB()
-  await settingsStageModelStore.initializeStageModel()
-}
-
 async function waitForStageRendererMounted() {
   const existingError = document.documentElement.dataset.airiStageRendererError
   if (existingError)
@@ -422,7 +408,7 @@ async function waitForStageRendererMounted() {
     }
     timeout = window.setTimeout(() => {
       cleanup()
-      reject(new Error('The character renderer did not become ready in time.'))
+      reject(new Error(i18n.t('tamagotchi.stage.bootstrap.failed-detail')))
     }, 45_000)
     function handleMounted() {
       cleanup()
@@ -432,7 +418,7 @@ async function waitForStageRendererMounted() {
       cleanup()
       const message = event instanceof CustomEvent && typeof event.detail === 'string'
         ? event.detail
-        : 'The character renderer failed to initialize.'
+        : i18n.t('tamagotchi.stage.bootstrap.failed-detail')
       reject(new Error(message))
     }
     window.addEventListener('airi:stage-mounted', handleMounted, { once: true })
@@ -599,11 +585,10 @@ async function initializeAppRuntime() {
     }
 
     // NOTICE: The active persona owns the selected display model. Apply that
-    // binding before mounting the stage so a renderer reload cannot show the
-    // persisted fallback model until the settings page happens to refresh it.
+    // binding once; the renderer watches its source/model ID. A second model
+    // initialization repeats the lookup and published-performance request.
     await initializeCardRuntime()
     if (shouldInitializeStageRuntime.value) {
-      await initializeStageModelRuntime()
       setRuntimeProgress(38, 'tamagotchi.stage.bootstrap.model')
       await waitForStageRendererMounted()
       setRuntimeProgress(48, 'tamagotchi.stage.bootstrap.character')

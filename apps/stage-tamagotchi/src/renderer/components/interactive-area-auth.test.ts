@@ -12,7 +12,9 @@ describe('interactive area authentication affordances', () => {
   })
 
   it('treats an interrupted queued send as cancellation instead of a visible error', () => {
-    expect(source).toContain('error instanceof DOMException && error.name === \'AbortError\'')
+    expect(source).toContain('run.controller.signal.aborted || !chatSendLifecycle.isCurrent(run)')
+    expect(source).toContain('error instanceof Error && error.name === \'AbortError\'')
+    expect(source).toMatch(/catch \(error\) \{[\s\S]*?chatSendLifecycle\.isCurrent\(run\)[\s\S]*?restoreSubmittedDraft\(\)\s+return/)
     expect(source).not.toContain('[QuickChatSend]')
   })
 
@@ -21,7 +23,7 @@ describe('interactive area authentication affordances', () => {
   })
 
   it('uses public billing surfaces instead of the internal page/widget names', () => {
-    expect(source).toContain("sourceSurface: props.surface === 'widget' ? 'quick-chat' : 'chat'")
+    expect(source).toContain('sourceSurface: props.surface === \'widget\' ? \'quick-chat\' : \'chat\'')
     expect(source).not.toContain('sourceSurface: props.surface,')
   })
 })

@@ -2,6 +2,7 @@ export const DESKTOP_REGRESSION_FIXTURE_PATHS = {
   authCapabilities: '/api/auth/capabilities',
   authSession: '/api/auth/get-session',
   characterPerformance: '/api/character-performance/preset-live2d-1',
+  models: '/api/model-gateway/v1/models',
   pricing: '/api/model-gateway/v1/pricing',
 } as const
 
@@ -105,6 +106,8 @@ export function resolveDesktopRegressionFixtureResponse(method: string | undefin
     return { body: { emailOtp: false, phoneOtp: false, registration: false }, endpoint, preflight: false, status: 200 }
   if (endpoint === 'pricing')
     return { body: desktopRegressionPricingFixture, endpoint, preflight: false, status: 200 }
+  if (endpoint === 'models')
+    return { body: { object: 'list', data: [] }, endpoint, preflight: false, status: 200 }
   if (endpoint === 'characterPerformance')
     return { body: desktopRegressionCharacterPerformanceFixture, endpoint, preflight: false, status: 200 }
 

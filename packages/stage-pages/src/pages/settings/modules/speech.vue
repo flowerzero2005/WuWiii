@@ -132,7 +132,7 @@ const speechLanguageOptions = computed(() => {
     }
   }
 
-  return [...options.entries()].map(([value, label]) => ({ value, label }))
+  return Array.from(options.entries(), ([value, label]) => ({ value, label }))
 })
 
 const compatibleSpeechVoices = computed(() => {

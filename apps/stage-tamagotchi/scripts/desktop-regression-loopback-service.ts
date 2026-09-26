@@ -49,7 +49,12 @@ export async function startDesktopRegressionFixtureService(rendererOrigin: strin
     const method = request.method?.toUpperCase() ?? 'GET'
     const origin = request.headers.origin
     const result = resolveDesktopRegressionFixtureResponse(method, request.url)
-    const corsValid = isExpectedRendererOrigin(origin, rendererOrigin)
+    // Electron's main-process fetch proxy does not attach a browser Origin.
+    // Only these public, read-only fixture catalogs support that request path;
+    // session/pricing/performance and every foreign Origin retain exact checks.
+    const mainProcessCatalog = origin === undefined && method === 'GET'
+      && (result.endpoint === 'models' || result.endpoint === 'authCapabilities')
+    const corsValid = isExpectedRendererOrigin(origin, rendererOrigin) || mainProcessCatalog
     const preflightValid = !result.preflight || isAllowedPerformancePreflight(request)
     const status = corsValid && preflightValid ? result.status : 403
     const responseStatus = status === 200

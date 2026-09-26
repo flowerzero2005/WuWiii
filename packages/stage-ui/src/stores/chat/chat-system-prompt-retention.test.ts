@@ -6,10 +6,12 @@ const source = readFileSync(new URL('../chat.ts', import.meta.url), 'utf8')
 
 describe('chat system prompt retention', () => {
   it('keeps the safety and persona prompt in the protected system prefix', () => {
-    expect(source).toContain("const firstMessage = newMessages[0]")
-    expect(source).toContain("firstMessage?.role === 'system'")
+    expect(source).toContain('const firstMessage = newMessages[0]')
+    expect(source).toContain('firstMessage?.role === \'system\'')
+    // eslint-disable-next-line no-template-curly-in-string -- Assert literal source text, including template placeholders.
     expect(source).toContain('content: `${String(firstMessage.content)}\\n\\n${languageInstruction}`')
-    expect(source).not.toContain("content: `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}")
+    // eslint-disable-next-line no-template-curly-in-string -- Assert literal source text, including template placeholders.
+    expect(source).not.toContain('content: `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}')
   })
 
   it('keeps character actions in the shared runtime context reference', () => {

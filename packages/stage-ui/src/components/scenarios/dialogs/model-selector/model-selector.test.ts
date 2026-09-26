@@ -18,7 +18,8 @@ describe('model selector card preview', () => {
   })
 
   it('uses localized feedback for imported display models', () => {
-    expect(source).toContain("t('settings.pages.models.model-selector.import_success'")
+    expect(source).toContain('t(\'settings.pages.models.model-selector.import_success\'')
+    // eslint-disable-next-line no-template-curly-in-string -- Assert literal source text, including template placeholders.
     expect(source).not.toContain('toast.success(`${model.name} imported.`)')
   })
 })

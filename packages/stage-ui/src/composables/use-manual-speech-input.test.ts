@@ -134,5 +134,4 @@ describe('useManualSpeechInput stopDictation', () => {
     expect(mocks.stopStreamingTranscription).toHaveBeenCalledWith(false)
     expect(mocks.stopStreamingTranscription).toHaveBeenCalledWith(true)
   })
-
 })

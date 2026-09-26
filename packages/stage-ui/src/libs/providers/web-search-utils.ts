@@ -85,7 +85,7 @@ export function cleanWebSearchText(value: string | undefined, maxLength: number)
 
   const text = value
     .replace(/<[^>]*>/g, ' ')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/[\u0000-\u0008\v\f\u000E-\u001F\u007F]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -100,7 +100,7 @@ export function normalizeWebSearchUrl(value: string | undefined) {
     const url = new URL(value)
     url.hash = ''
     for (const key of [...url.searchParams.keys()]) {
-      if (/^(utm_[^=]*|fbclid|gclid|mc_cid|mc_eid)$/i.test(key))
+      if (/^(?:utm_[^=]*|fbclid|gclid|mc_cid|mc_eid)$/i.test(key))
         url.searchParams.delete(key)
     }
     return url.toString()

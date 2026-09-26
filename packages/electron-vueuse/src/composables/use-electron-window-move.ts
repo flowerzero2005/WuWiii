@@ -145,7 +145,9 @@ export function useElectronWindowMove() {
         cleanupActiveMove = undefined
     }
 
-    const handleBlur = () => finishMove()
+    function handleBlur() {
+      finishMove()
+    }
 
     cleanupActiveMove = finishMove
     // Register before the bounds IPC completes so a quick drag cannot lose its

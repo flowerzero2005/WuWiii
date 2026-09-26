@@ -154,6 +154,7 @@ defineExpose({
   captureFrame,
   app,
   displayObject,
+  modelIdentity: () => live2dModelRef.value?.modelIdentity(),
   canvasElement: () => {
     return live2dCanvasRef.value?.canvasElement()
   },

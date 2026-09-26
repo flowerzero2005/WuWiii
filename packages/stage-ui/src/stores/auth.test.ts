@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useAuthStore } from './auth'
+
 const authMocks = vi.hoisted(() => ({
   AuthSessionRefreshError: class AuthSessionRefreshError extends Error {
     constructor(public readonly status?: number) {
@@ -24,8 +26,6 @@ vi.mock('../libs/auth-sync', () => ({
     return vi.fn()
   }),
 }))
-
-import { useAuthStore } from './auth'
 
 describe('auth store session refresh', () => {
   beforeEach(async () => {

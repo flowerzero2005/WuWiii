@@ -25,7 +25,7 @@ import { useOfficialPricingStore } from '../official-pricing'
 import { useProvidersStore } from '../providers'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
 import { useOfficialCapabilityConsentStore } from '../settings/official-capability-consent'
-import { deriveAiriInnerVoiceMoodTags, generateAiriInnerVoiceNote } from './inner-voice-note-generator'
+import { deriveAiriInnerVoiceMoodTags, generateAiriInnerVoiceNote, shouldPrewarmAiriInnerVoiceNote } from './inner-voice-note-generator'
 import { createDefaultAiriRelationshipState } from './persona-relationship-state'
 import { useChatPersonaRuntimeStore } from './persona-runtime-store'
 import { createDefaultAiriPersonaState } from './persona-state'
@@ -411,6 +411,10 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
     if (existingTask)
       return existingTask
 
+    const runtime = resolveGenerationRuntime(input)
+    if (!input.requireNote && !shouldPrewarmAiriInnerVoiceNote(runtime))
+      return null
+
     const task = (async () => {
       setGenerating(key, true)
       setGenerationError(key)
@@ -444,7 +448,6 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
         // NOTICE: Start the generation timeout only after any user consent dialog closes.
         // A blocking confirmation must not consume the model request's response budget.
         linkedAbort = createLinkedAbortSignal(input.abortSignal, input.timeoutMs ?? 20_000)
-        const runtime = resolveGenerationRuntime(input)
         const generationInput: AiriInnerVoiceNoteGenerationInput = {
           stream: client.stream,
           model: client.model,

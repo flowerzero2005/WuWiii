@@ -1,5 +1,5 @@
-import { nextTick, reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick, reactive } from 'vue'
 
 const route = reactive({ fullPath: '/settings/first' })
 

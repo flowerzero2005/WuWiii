@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useModulesList } from './use-modules-list'
+
 const state = vi.hoisted(() => ({
   vision: { customProviderConfigured: true, enabled: false },
 }))
@@ -49,8 +51,6 @@ vi.mock('../stores/modules/vision', () => ({
 vi.mock('../stores/modules/web-search', () => ({
   useWebSearchStore: () => ({ configured: false }),
 }))
-
-import { useModulesList } from './use-modules-list'
 
 describe('useModulesList', () => {
   beforeEach(() => {

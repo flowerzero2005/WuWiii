@@ -138,7 +138,7 @@ export async function playGroupNarrationSpeech(input: {
       requestHeaders: createChatTraceHeaders(undefined, {
         groupTurnId: input.groupTurnId,
         parentRequestId: input.parentRequestId,
-      requestId,
+        requestId,
         characterName: input.characterName ?? '旁白',
         sourceSurface: 'group-chat',
         stage: 'group-narration-tts',

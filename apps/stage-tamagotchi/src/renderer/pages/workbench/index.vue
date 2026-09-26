@@ -7599,7 +7599,7 @@ async function refreshWorkspaceBrowserAfterFileDelete(path: string) {
       refreshPaths.add(expandedParentPath)
   }
 
-  await Promise.all([...refreshPaths].map(directoryPath => loadDirectory(directoryPath)))
+  await Promise.all(Array.from(refreshPaths, directoryPath => loadDirectory(directoryPath)))
 }
 
 async function loadWorkspaceFilePreview(path: string) {

@@ -7,6 +7,7 @@ import { computed, ref } from 'vue'
 import { client } from '../composables/api'
 import { useLocalFirstRequest } from '../composables/use-local-first'
 import { providersRepo } from '../database/repos/providers.repo'
+import { parseCreateProviderConfigPayload, parseUpdateProviderConfigPayload } from '../libs/client-api-contract'
 import { getDefinedProvider, listProviders } from '../libs/providers/providers'
 
 export const useProviderCatalogStore = defineStore('provider-catalog', () => {
@@ -69,14 +70,14 @@ export const useProviderCatalogStore = defineStore('provider-catalog', () => {
       },
       remote: async () => {
         const res = await client.api.providers.$post({
-          json: {
+          json: parseCreateProviderConfigPayload({
             id,
             definitionId,
             name: provider.name,
             config: provider.config,
             validated: provider.validated,
             validationBypassed: provider.validationBypassed,
-          },
+          }),
         })
         if (!res.ok) {
           throw new Error('Failed to add provider')
@@ -136,12 +137,12 @@ export const useProviderCatalogStore = defineStore('provider-catalog', () => {
       remote: async () => {
         const res = await client.api.providers[':id'].$patch({
           param: { id: providerId },
-          // @ts-expect-error hono client typing misses json option for this route
-          json: {
+          // The independent client contract declares this route's JSON payload.
+          json: parseUpdateProviderConfigPayload({
             config: newConfig,
             validated: options.validated,
             validationBypassed: options.validationBypassed,
-          },
+          }),
         })
         if (!res.ok) {
           throw new Error('Failed to update provider config')

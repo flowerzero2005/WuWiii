@@ -31,4 +31,15 @@ describe('chat composer branches', () => {
     visit(ast)
     expect(found).toBe(true)
   })
+
+  it('keeps detached composer controls out of collapsed quick chat while retaining recovery access', () => {
+    const source = readFileSync(new URL('./InteractiveArea.vue', import.meta.url), 'utf8')
+
+    expect(source).toContain('v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"')
+    expect(source).toContain('data-chat-composer-recovery')
+    expect(source).toContain('@click.stop="requestWidgetExpand()"')
+    expect(source).toContain(':placeholder="isInitialized ? t(\'stage.chat.composer.placeholder\') : t(\'tamagotchi.stage.bootstrap.conversation\')"')
+    expect(source).not.toContain("t('stage.message')")
+    expect(source).toMatch(/<div v-if="!isCollapsed" class="order-2 w-full flex shrink-0 items-center gap-1 overflow-x-auto">[\s\S]*data-chat-composer-detach-controls/)
+  })
 })

@@ -14,6 +14,16 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
+// Build metadata is injected by the app bundler, outside this store test.
+vi.mock('../composables/use-build-info', () => ({
+  useBuildInfo: () => ({
+    version: 'test',
+    commit: 'fixture',
+    branch: 'fixture',
+    builtOn: new Date(0).toISOString(),
+  }),
+}))
+
 const writeLiteralSpy = vi.fn()
 const writeFlushSpy = vi.fn()
 const endSpy = vi.fn()

@@ -8,6 +8,7 @@ import { ref } from 'vue'
 import { client } from '../composables/api'
 import { useLocalFirstRequest } from '../composables/use-local-first'
 import { charactersRepo } from '../database/repos/characters.repo'
+import { projectPublicCharacterCreatePayload, projectPublicCharacterUpdatePayload } from '../libs/client-api-contract'
 import { CharacterWithRelationsSchema } from '../types/character'
 import { useAuthStore } from './auth'
 
@@ -100,7 +101,7 @@ export const useCharacterStore = defineStore('characters', () => {
         const parsedData: Character[] = []
         for (const char of data) {
           const parsed = parse(CharacterWithRelationsSchema, char)
-          characters.value.set(char.id, parsed)
+          characters.value.set(parsed.id, parsed)
           parsedData.push(parsed)
         }
         await charactersRepo.saveAll(parsedData)
@@ -145,7 +146,7 @@ export const useCharacterStore = defineStore('characters', () => {
       },
       remote: async () => {
         const res = await client.api.characters.$post({
-          json: payload,
+          json: projectPublicCharacterCreatePayload(payload),
         })
         if (!res.ok) {
           throw new Error('Failed to create character')
@@ -184,8 +185,8 @@ export const useCharacterStore = defineStore('characters', () => {
       remote: async () => {
         const res = await (client.api.characters[':id'].$patch)({
           param: { id },
-          // @ts-expect-error FIXME: hono client typing misses json option for this route
-          json: payload,
+          // The independent client contract declares this route's JSON payload.
+          json: projectPublicCharacterUpdatePayload(payload),
         })
         if (!res.ok) {
           throw new Error('Failed to update character')

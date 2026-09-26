@@ -91,7 +91,6 @@ apps/stage-tamagotchi/electron.vite.config.*.mjs
 /--disable-gpu
 
 # Accidental network probe output
-/20.205.243.166
 
 # Netlify
 **/.netlify/*
@@ -207,3 +206,6 @@ apps/stage-tamagotchi/deliveries/
 !/**/src/**/*.md
 !/**/LICENSE*.md
 !/**/NOTICE*.md
+
+# Reviewed developer and user guides are shareable.
+!/guides/*.md

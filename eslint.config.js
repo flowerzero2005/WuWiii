@@ -11,6 +11,13 @@ export default defineConfig({
   vue: true,
 }, {
   ignores: [
+    '.archived/**',
+    // Local copies of compiled client chunks used for diagnostics.
+    'user-chat-*.js',
+    'user-quick-chat-*.js',
+    '*-user.js',
+    '.tmp-*',
+    '.tmp-*',
     'cspell.config.yaml',
     'cspell.config.yml',
     'crowdin.yaml',
@@ -38,6 +45,10 @@ export default defineConfig({
     // treats every zero-argument factory as constant. Its fix shares mutable
     // vectors/DP rows and runs Promise factories only once, changing behavior.
     'e18e/prefer-array-fill': 'off',
+    // NOTICE: @e18e/eslint-plugin@0.2.0 reports every regexp inside a function,
+    // including one-time initializers and g/y expressions with mutable lastIndex.
+    // Keep the performance suggestion visible without requiring unsafe sharing.
+    'e18e/prefer-static-regex': 'warn',
     // TODO: remove this
     'depend/ban-dependencies': 'warn',
     'import/order': 'off',

@@ -130,6 +130,7 @@ const disableFocusAt = toRef(() => props.disableFocusAt)
 // NOTICE: Pixi/Live2D runtime objects are mutable class instances updated every frame.
 // Deep Vue proxies make Cubism curve evaluation traverse reactive traps continuously.
 const model = shallowRef<Live2DModel<PixiLive2DInternalModel>>()
+let loadedModelIdentity: { modelId?: string, modelSrc: string } | undefined
 let disposeModelTickerUpdate: (() => void) | undefined
 const initialModelWidth = ref<number>(0)
 const initialModelHeight = ref<number>(0)
@@ -1371,6 +1372,7 @@ function attachModelTickerUpdate(live2DModel: Live2DModel<PixiLive2DInternalMode
 }
 
 function destroyCurrentModel() {
+  loadedModelIdentity = undefined
   const currentModel = model.value
   detachModelTickerUpdate()
   activeMotionBaselineRestore = undefined
@@ -1625,6 +1627,7 @@ async function loadModel(
     coreModel.saveParameters()
     void playNextIdleMotion()
 
+    loadedModelIdentity = { modelId: requestedModelId, modelSrc: requestedModelSrc }
     modelLoadSucceeded = true
     emits('modelLoaded')
   }
@@ -2556,6 +2559,7 @@ function displayObject() {
 
 defineExpose({
   displayObject,
+  modelIdentity: () => loadedModelIdentity && { ...loadedModelIdentity },
   listExpressions,
   setMotion,
   previewMotion,

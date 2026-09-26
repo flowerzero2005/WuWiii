@@ -76,7 +76,7 @@ function applySnapshot(snapshot: WidgetSnapshot) {
   }
 
   if (snapshot.ttlMs && snapshot.ttlMs > 0)
-    ttlTimer = setTimeout(() => requestRemoval(snapshot.id), snapshot.ttlMs)
+    ttlTimer = setTimeout(requestRemoval, snapshot.ttlMs, snapshot.id)
 }
 
 async function requestSnapshot(id: string) {

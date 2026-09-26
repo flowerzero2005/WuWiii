@@ -144,6 +144,31 @@ const relationshipState: AiriPersonaRelationshipState = {
   recentSensitiveTopics: ['repair'],
 }
 
+function createNeutralRuntime() {
+  return {
+    sceneMode: {
+      mode: 'casual-chat' as const,
+      confidence: 'low' as const,
+      reason: 'Low pressure chat.',
+      signals: ['default-fallback'],
+      alternatives: [],
+    },
+    personaState: {
+      ...personaState,
+      hurt: 0.02,
+      affection: 0.48,
+      inhibition: 0.35,
+      emotionalOverhang: 'steady' as const,
+      trajectory: 'steady' as const,
+    },
+    relationshipState: {
+      ...relationshipState,
+      repairDebt: 0.02,
+      recentSensitiveTopics: [],
+    },
+  }
+}
+
 describe('assistant inner voice note store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -296,6 +321,48 @@ describe('assistant inner voice note store', () => {
     })
 
     expect(cached).toEqual(saved)
+    expect(stream).toHaveBeenCalledOnce()
+  })
+
+  it('skips neutral automatic prewarm but honors an explicit note request', async () => {
+    const store = useAssistantInnerVoiceNoteStore()
+    const stream = vi.fn(async (_model, _provider, _messages, options) => {
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'A small thought worth keeping.' })
+    })
+    const runtime = createNeutralRuntime()
+
+    const skipped = await store.ensureNoteForMessage({
+      sessionId: 'session-neutral',
+      messageId: 'assistant-neutral',
+      userId: 'user-a',
+      personaCardId: 'airi',
+      assistantText: 'Everything is ready.',
+      stream,
+      model: 'test-model',
+      chatProvider: {} as any,
+      ...runtime,
+    })
+
+    expect(skipped).toBeNull()
+    expect(stream).not.toHaveBeenCalled()
+    expect(officialConsentMock.needsConsent).not.toHaveBeenCalled()
+    expect(store.isGeneratingNoteForMessage('session-neutral', 'assistant-neutral')).toBe(false)
+    expect(store.getGenerationErrorForMessage('session-neutral', 'assistant-neutral')).toBeUndefined()
+
+    const saved = await store.ensureNoteForMessage({
+      sessionId: 'session-required',
+      messageId: 'assistant-required',
+      userId: 'user-a',
+      personaCardId: 'airi',
+      assistantText: 'Everything is ready.',
+      stream,
+      model: 'test-model',
+      chatProvider: {} as any,
+      requireNote: true,
+      ...runtime,
+    })
+
+    expect(saved?.text).toBe('A small thought worth keeping.')
     expect(stream).toHaveBeenCalledOnce()
   })
 

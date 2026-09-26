@@ -36,10 +36,10 @@ const chineseDigitMap: Partial<Record<string, number>> = {
 const chineseNumberSource = '零〇一二两三四五六七八九十'
 const numberSource = `\\d{1,4}|[${chineseNumberSource}]{1,4}`
 const relativeTimePatterns = [
-  { pattern: new RegExp(`(${numberSource})分钟?(?:以?后)`), multiplier: 60 * 1000 },
-  { pattern: new RegExp(`(${numberSource})(?:小时|钟头)(?:以?后)`), multiplier: 60 * 60 * 1000 },
+  { pattern: new RegExp(`(${numberSource})分钟?以?后`), multiplier: 60 * 1000 },
+  { pattern: new RegExp(`(${numberSource})(?:小时|钟头)以?后`), multiplier: 60 * 60 * 1000 },
 ] as const
-const clockTimePattern = new RegExp(`(今天|明天)?(早上|上午|下午|晚上)?(${numberSource})[点:：](半|${numberSource}(?:分)?)?`)
+const clockTimePattern = new RegExp(`(今天|明天)?(早上|上午|下午|晚上)?(${numberSource})[点:：](半|${numberSource}分?)?`)
 
 function parseChineseNumber(value?: string) {
   if (!value)
@@ -67,7 +67,7 @@ function parseChineseNumber(value?: string) {
   if (normalized.length === 1)
     return chineseDigitMap[normalized]
 
-  const digits = [...normalized].map(char => chineseDigitMap[char])
+  const digits = Array.from(normalized, char => chineseDigitMap[char])
   if (digits.includes(undefined))
     return undefined
 

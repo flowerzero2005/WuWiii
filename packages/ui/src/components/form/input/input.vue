@@ -7,14 +7,6 @@ import { computed, ref } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
-// Define button variants for better type safety and maintainability
-type InputVariant = 'primary' | 'secondary' | 'primary-dimmed'
-
-type InputTheme = 'default'
-
-// Define size options for better flexibility
-type InputSize = 'sm' | 'md' | 'lg'
-
 const props = withDefaults(defineProps<{
   type?: InputType
   variant?: InputVariant // Button style variant
@@ -27,6 +19,14 @@ const props = withDefaults(defineProps<{
   theme: 'default',
   showPasswordToggle: false,
 })
+
+// Define button variants for better type safety and maintainability
+type InputVariant = 'primary' | 'secondary' | 'primary-dimmed'
+
+type InputTheme = 'default'
+
+// Define size options for better flexibility
+type InputSize = 'sm' | 'md' | 'lg'
 
 const modelValue = defineModel<T>({ required: false })
 const passwordVisible = ref(false)
@@ -91,7 +91,7 @@ const variantClasses: Record<InputVariant, Record<InputTheme, {
       >
       <button
         type="button"
-        class="absolute right-2 top-1/2 size-7 -translate-y-1/2 rounded-md text-[var(--airi-text-muted)] transition-colors hover:bg-black/5 hover:text-[var(--airi-text)] dark:hover:bg-white/10"
+        class="absolute right-2 top-1/2 size-7 rounded-md text-[var(--airi-text-muted)] transition-colors -translate-y-1/2 hover:bg-black/5 hover:text-[var(--airi-text)] dark:hover:bg-white/10"
         :aria-label="passwordVisible ? 'Hide password' : 'Show password'"
         :title="passwordVisible ? 'Hide password' : 'Show password'"
         @click="togglePasswordVisibility"

@@ -21,7 +21,7 @@ function normalizeIntensity(value: unknown): number {
 }
 
 export function parseActPerformance(content: string) {
-  const match = /<\|\s*ACT\s*(?::|=)?\s*(\{[\s\S]*?\})\s*\|>/i.exec(content)
+  const match = /<\|\s*ACT\s*(?:(?::|=)\s*)?(\{[\s\S]*?\})\s*\|>/i.exec(content)
   if (!match)
     return { ok: false, actionCardId: null as string | null, emotion: null as EmotionPayload | null }
 

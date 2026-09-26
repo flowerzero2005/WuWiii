@@ -120,7 +120,7 @@ watch(() => [
     if (generation !== loadGeneration)
       return
     const uniqueAssets = new Map(Object.values(assets).map(asset => [asset.path, asset.blob]))
-    assetUrls.value = Object.fromEntries([...uniqueAssets].map(([path, blob]) => [path, URL.createObjectURL(blob)]))
+    assetUrls.value = Object.fromEntries(Array.from(uniqueAssets, ([path, blob]) => [path, URL.createObjectURL(blob)]))
   }
   catch (error) {
     if (generation !== loadGeneration)

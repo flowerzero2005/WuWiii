@@ -62,15 +62,16 @@ describe('voice call session state', () => {
     expect(interactiveAreaSource).toContain('const pendingHangup = voiceCallHangupState.snapshotForTurn(turnId)')
     expect(interactiveAreaSource).toContain('scheduleVoiceCallHangupAfterReply(')
     expect(interactiveAreaSource).toContain('VOICE_CALL_HANGUP_AFTER_PLAYBACK_MS = 1000')
-    expect(interactiveAreaSource).toContain("event.type === 'playback-end'")
+    expect(interactiveAreaSource).toContain('event.type === \'playback-end\'')
   })
 
   it('persists the final hangup conclusion after the settle window', () => {
     expect(interactiveAreaSource).toContain('function persistVoiceCallFinalMessage(input: {')
     expect(interactiveAreaSource).toContain('persistVoiceCallFinalMessage(input)')
-    expect(interactiveAreaSource).toContain("messageId = `${input.assistantTurnId}:hangup-complete`")
-    expect(interactiveAreaSource).toContain("persistSessionMessages(input.sessionId, { immediate: true })")
-    const teardownIndex = interactiveAreaSource.indexOf("endVoiceCallSession()\n    // Persist only after the call teardown")
+    // eslint-disable-next-line no-template-curly-in-string -- Assert literal source text, including template placeholders.
+    expect(interactiveAreaSource).toContain('messageId = `${input.assistantTurnId}:hangup-complete`')
+    expect(interactiveAreaSource).toContain('persistSessionMessages(input.sessionId, { immediate: true })')
+    const teardownIndex = interactiveAreaSource.indexOf('endVoiceCallSession()\n    // Persist only after the call teardown')
     const persistIndex = interactiveAreaSource.indexOf('persistVoiceCallFinalMessage(input)', teardownIndex)
     expect(teardownIndex).toBeGreaterThan(-1)
     expect(persistIndex).toBeGreaterThan(teardownIndex)
@@ -78,7 +79,7 @@ describe('voice call session state', () => {
 
   it('keeps final hangup text independent from speech output state', () => {
     const start = interactiveAreaSource.indexOf('if (pendingHangup) {')
-    const end = interactiveAreaSource.indexOf("postVoiceCallPresentEvent({ type: 'quick-chat-turn-complete'", start)
+    const end = interactiveAreaSource.indexOf('postVoiceCallPresentEvent({ type: \'quick-chat-turn-complete\'', start)
     const hangup = interactiveAreaSource.slice(start, end)
     expect(hangup).toContain('const finalText = segments.join(\' \').trim() || acknowledgement.trim()')
     expect(hangup).toContain('scheduleVoiceCallHangupAfterReply({')

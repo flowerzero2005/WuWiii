@@ -2,12 +2,13 @@ chat:
   composer:
     title: 独立输入窗口
     description: 在这里编辑，由原会话执行唯一发送及图片费用确认。
+    placeholder: 输入消息…
     detach: 拆出输入
     return: 收回输入
     recover: 恢复本会话草稿
     view-recovery: 查看保留的草稿
     orphaned: 原会话已切换或关闭。请回到原会话后恢复这份草稿。
-    uncertain: 原发送结果尚未确认。这份草稿保留在内存中，只有原会话确认结果后才能再次提交。
+    uncertain: 原发送结果尚未确认。这份草稿已保存在当前设备，不能再次发送。请先检查原会话，再明确选择是否丢弃。
     sync-failed: 草稿同步失败，已阻止关闭以保留最新输入。请重试同步后再收回。
     source-failed: 拆出或收回失败。请先结束当前发送，或收回另一个已拆出的输入窗口。
     send-failed: 原会话未能发送这份草稿，请检查原会话。
@@ -19,6 +20,13 @@ chat:
     syncing: 正在同步草稿…
     synced: 草稿已同步
     retry-sync: 重试同步
+    drag-detach: 拖到此窗口外，拆出输入窗口。
+    drag-return: 将此处拖到原会话的输入区域，收回草稿。
+    return-target-unavailable: 原输入区域当前不可用。请先回到原会话，再尝试拖回。
+    checkpoint-failed: 草稿未能保存。请检查磁盘空间，或明确丢弃较早的已保存草稿，再点击重试。
+    discard: 丢弃已保存草稿
+    cancel-discard: 保留草稿
+    discard-confirm: 确定永久丢弃这份草稿吗？结果未知的消息可能已出现在原会话中。此操作不会重新发送或取消它。
   actions:
     clear-messages: 清除当前对话
     close-personas: 关闭角色列表

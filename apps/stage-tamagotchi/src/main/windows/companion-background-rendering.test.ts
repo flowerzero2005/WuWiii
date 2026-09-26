@@ -25,7 +25,7 @@ describe('persistent companion window rendering', () => {
   it('does not enlarge transparent HWND compositor surfaces on Windows', () => {
     const source = readFileSync(new URL('../index.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain("app.commandLine.appendSwitch('disable-features', 'EnableTransparentHwndEnlargement')")
+    expect(source).toContain('app.commandLine.appendSwitch(\'disable-features\', \'EnableTransparentHwndEnlargement\')')
   })
 
   it('registers and opens the floating dialogue overlay window', () => {

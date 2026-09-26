@@ -1470,6 +1470,13 @@ const detachedComposer = useDetachedComposerSource({
   group: () => !!activeGroupMeta.value,
   busy: composerSourceIsBusy,
   draft: getComposerDraft,
+  region: () => {
+    const textarea = (props.surface === 'widget' ? quickChatTextareaRef.value : mainChatTextareaRef.value)?.textareaRef
+    if (!textarea)
+      return undefined
+    const rect = textarea.getBoundingClientRect()
+    return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, viewport: { width: window.innerWidth, height: window.innerHeight } }
+  },
   applyDraft: (draft) => {
     attachments.value.forEach(image => URL.revokeObjectURL(image.url))
     messageInput.value = draft.text
@@ -3178,7 +3185,7 @@ async function handleGroupSend(textToSend: string, attachmentCount: number, trac
 async function handleSend() {
   if (detachedComposer.readonly.value)
     return
-  await performComposerSend()
+  await detachedComposer.sendInline()
 }
 
 async function performComposerSend(trackSubmission?: (sessionId: string, messageId: string) => void) {
@@ -5473,20 +5480,22 @@ const chatSurfaceStyle = computed(() => {
           >
             <div class="i-ph:plus-bold size-4" />
           </button>
-          <div :class="['[-webkit-app-region:no-drag] relative z-20 flex shrink-0 flex-col gap-1 text-[10px]']">
-            <button type="button" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control rounded-md px-2 py-1 disabled:opacity-50']" @click="detachedComposer.detached.value ? detachedComposer.requestReturn() : detachedComposer.detach()">
-              {{ t(detachedComposer.detached.value ? 'stage.chat.composer.return' : 'stage.chat.composer.detach') }}
-            </button>
-            <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
-              {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
-            </button>
-            <span v-if="detachedComposer.failed.value" role="alert" :class="['max-w-36 text-amber-600']">{{ t('stage.chat.composer.source-failed') }}</span>
-          </div>
+          <button
+            v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"
+            type="button"
+            :title="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : t('stage.chat.composer.source-failed')"
+            :aria-label="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : t('stage.chat.composer.source-failed')"
+            :class="['quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid size-9 shrink-0 place-items-center rounded-full text-base outline-none transition-all duration-250 ease-out active:scale-95', 'bg-amber-400/16 text-amber-700 hover:bg-amber-400/24 dark:text-amber-300']"
+            data-chat-composer-recovery
+            @click.stop="requestWidgetExpand()"
+          >
+            <div class="i-lucide:triangle-alert size-4" />
+          </button>
           <BasicTextarea
             ref="quickChatTextareaRef"
             v-model="messageInput"
             :auto-resize="isCollapsed"
-            :placeholder="isInitialized ? t('stage.message') : t('tamagotchi.stage.bootstrap.conversation')"
+            :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
             :disabled="!isInitialized"
             :readonly="detachedComposer.readonly.value"
             :autofocus="isWidgetSurface && !isCollapsed"
@@ -5509,6 +5518,18 @@ const chatSurfaceStyle = computed(() => {
             @paste-file="handleFilePaste"
           />
           <div v-if="!isCollapsed" class="order-2 w-full flex shrink-0 items-center gap-1 overflow-x-auto">
+            <div data-chat-composer-detach-controls :class="['flex shrink-0 items-center gap-1 text-xs']">
+              <button type="button" :title="t('stage.chat.composer.drag-detach')" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control touch-none rounded-md px-2 py-1 disabled:opacity-50']" @pointerdown="detachedComposer.startDrag" @click="detachedComposer.clickDetach">
+                {{ t(detachedComposer.detached.value ? 'stage.chat.composer.return' : 'stage.chat.composer.detach') }}
+              </button>
+              <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
+                {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
+              </button>
+              <span v-if="detachedComposer.failed.value" role="alert" :class="['max-w-36 text-amber-600']">{{ t('stage.chat.composer.source-failed') }}</span>
+              <button v-if="detachedComposer.checkpointFailed.value" type="button" :class="['max-w-36 text-amber-600 underline']" @click="detachedComposer.checkpoint().catch(() => undefined)">
+                {{ t('stage.chat.composer.checkpoint-failed') }}
+              </button>
+            </div>
             <div :class="['mr-auto flex min-w-0 items-center gap-1']">
               <GroupMentionPicker
                 v-if="activeGroupMeta"
@@ -5848,20 +5869,23 @@ const chatSurfaceStyle = computed(() => {
             </button>
           </div>
           <div :class="['order-0 flex items-center gap-3 text-xs']">
-            <button type="button" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control rounded-md px-2 py-1 disabled:opacity-50']" @click="detachedComposer.detached.value ? detachedComposer.requestReturn() : detachedComposer.detach()">
+            <button type="button" :title="t('stage.chat.composer.drag-detach')" :disabled="composerDetachUnavailable || detachedComposer.detaching.value" :class="['airi-overlay-control touch-none rounded-md px-2 py-1 disabled:opacity-50']" @pointerdown="detachedComposer.startDrag" @click="detachedComposer.clickDetach">
               {{ t(detachedComposer.detached.value ? 'stage.chat.composer.return' : 'stage.chat.composer.detach') }}
             </button>
             <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
               {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
             </button>
             <span v-if="detachedComposer.failed.value" role="alert" :class="['text-amber-600']">{{ t('stage.chat.composer.source-failed') }}</span>
+            <button v-if="detachedComposer.checkpointFailed.value" type="button" :class="['text-amber-600 underline']" @click="detachedComposer.checkpoint().catch(() => undefined)">
+              {{ t('stage.chat.composer.checkpoint-failed') }}
+            </button>
           </div>
           <div class="relative order-1 min-h-[3rem] w-full flex-1">
             <BasicTextarea
               ref="mainChatTextareaRef"
               v-model="messageInput"
               :auto-resize="false"
-              :placeholder="isInitialized ? t('stage.message') : t('tamagotchi.stage.bootstrap.conversation')"
+              :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
               :disabled="!isInitialized"
               :readonly="detachedComposer.readonly.value"
               :autofocus="isWidgetSurface"

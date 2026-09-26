@@ -2,12 +2,13 @@ chat:
   composer:
     title: Detached composer
     description: Edit here; the original conversation performs the send and any image consent.
+    placeholder: Type a message…
     detach: Detach input
     return: Return input
     recover: Recover this conversation draft
     view-recovery: View saved draft
     orphaned: The original conversation changed or closed. Return to that conversation to recover this draft.
-    uncertain: The original send outcome is unknown. This draft is saved in memory and cannot be resubmitted until the source confirms its outcome.
+    uncertain: The original send outcome is unknown. This draft is saved on this device and cannot be resent. Check the original conversation before explicitly discarding it.
     sync-failed: Draft sync failed. Closing is blocked to keep your latest input here. Retry sync before returning.
     source-failed: Could not detach or return. Finish the current send, or return any other detached input first.
     send-failed: The source could not send this draft. Check the original conversation.
@@ -19,6 +20,13 @@ chat:
     syncing: Syncing draft…
     synced: Draft synced
     retry-sync: Retry sync
+    drag-detach: Drag outside this window to detach the input.
+    drag-return: Drag this handle onto the original input area to return the draft.
+    return-target-unavailable: The original input area is unavailable. Return to that conversation before dragging again.
+    checkpoint-failed: Draft could not be saved. Check disk space or explicitly discard an earlier saved draft, then click to retry.
+    discard: Discard saved draft
+    cancel-discard: Keep draft
+    discard-confirm: Discard this draft permanently? An unknown send may already appear in the original conversation. This does not resend or cancel it.
   actions:
     clear-messages: Clear current conversation
     close-personas: Close character list

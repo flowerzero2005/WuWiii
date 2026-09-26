@@ -13,7 +13,7 @@ function createMemoryDirectory(): MemoryDirectory {
 
 function directoryHandle(directory: MemoryDirectory): FileSystemDirectoryHandle {
   return {
-    async *values() {
+    async* values() {
       for (const [name, child] of directory.directories) {
         yield { ...directoryHandle(child), kind: 'directory', name } as FileSystemDirectoryHandle
       }
@@ -68,7 +68,7 @@ function extractedFile(name: string, contents: string) {
   return file
 }
 
-describe('OPFSCache.save', () => {
+describe('oPFSCache.save', () => {
   let root: MemoryDirectory
 
   beforeEach(() => {
@@ -120,5 +120,40 @@ describe('OPFSCache.save', () => {
 
     expect(root.directories.has('preset-live2d-1')).toBe(false)
     expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('reloads the same archive when its cache has a missing required texture', async () => {
+    const sourceUrl = 'http://localhost:5173/selected-model.zip'
+    await OPFSCache.save('selected-model', [
+      extractedFile('Selected.model3.json', JSON.stringify({ FileReferences: { Moc: 'Selected.moc3', Textures: ['texture.png'] } })),
+      extractedFile('Selected.moc3', 'moc'),
+    ], sourceUrl)
+    const fetchArchive = vi.fn(async () => new Response(new Blob(['archive'])))
+    vi.stubGlobal('fetch', fetchArchive)
+    try {
+      const context = { source: { id: 'selected-model', url: sourceUrl }, opfsKey: undefined, opfsUrl: undefined }
+      const next = vi.fn()
+      await OPFSCache.checkMiddleware(context as never, next)
+      expect(fetchArchive).toHaveBeenCalledWith(sourceUrl)
+      expect(context.opfsKey).toBe('selected-model')
+      expect(context.opfsUrl).toBe(sourceUrl)
+      expect(next).toHaveBeenCalledOnce()
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('accepts complete resources only for the matching source URL and rejects empty textures', async () => {
+    const sourceUrl = 'http://localhost:5173/selected-model.zip'
+    await OPFSCache.save('selected-model', [
+      extractedFile('Selected.model3.json', JSON.stringify({ FileReferences: { Moc: 'Selected.moc3', Textures: ['texture.png'] } })),
+      extractedFile('Selected.moc3', 'moc'),
+      extractedFile('texture.png', 'texture'),
+    ], sourceUrl)
+    await expect(OPFSCache.get('selected-model', sourceUrl)).resolves.toHaveLength(3)
+    await expect(OPFSCache.get('selected-model', 'http://localhost:5173/other-model.zip')).resolves.toBeNull()
+    root.directories.get('selected-model')!.files.set('texture.png', new Blob([]))
+    await expect(OPFSCache.get('selected-model', sourceUrl)).resolves.toBeNull()
   })
 })

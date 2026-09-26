@@ -4,7 +4,8 @@ import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/el
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot, validateComposerDraft } from '../../shared/detached-composer'
-import { composerChanged, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSubmit } from '../../shared/detached-composer-events'
+import { composerChanged, composerDiscard, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSubmit } from '../../shared/detached-composer-events'
+import { useComposerPointerDrag } from './use-composer-pointer-drag'
 
 function readImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -23,6 +24,8 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   const edit = useElectronEventaInvoke(composerEdit)
   const submit = useElectronEventaInvoke(composerSubmit)
   const release = useElectronEventaInvoke(composerRelease)
+  const dragReturn = useElectronEventaInvoke(composerDragReturn)
+  const discardInvoke = useElectronEventaInvoke(composerDiscard)
   const state = ref<ComposerSnapshot>()
   const draft = ref<ComposerDraft>({ text: '', images: [] })
   const dirty = ref(false)
@@ -147,6 +150,42 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       error.value = t(`${key}.sync-failed`)
     }
   }
+  async function discard() {
+    if (!state.value || state.value.busy || closing.value || disposed)
+      return
+    closing.value = true
+    try {
+      await discardInvoke({ leaseId: state.value.scope.leaseId, version: state.value.version })
+    }
+    catch {
+      closing.value = false
+      error.value = t(`${key}.sync-failed`)
+    }
+  }
+  const drag = useComposerPointerDrag(async (point) => {
+    if (!state.value || state.value.status !== 'detached' || busy.value)
+      return
+    try {
+      await flush()
+      if (disposed || state.value.status !== 'detached' || state.value.busy || state.value.uncertain)
+        return
+      const leaseId = state.value.scope.leaseId
+      const version = state.value.version
+      const currentRevision = revision
+      if (await dragReturn({ leaseId, version, point })) {
+        if (!disposed && currentRevision === revision && state.value.scope.leaseId === leaseId && state.value.version === version
+          && state.value.status === 'detached' && !state.value.busy && !state.value.uncertain) {
+          await close()
+        }
+      }
+      else {
+        error.value = t(`${key}.return-target-unavailable`)
+      }
+    }
+    catch {
+      error.value = t(`${key}.return-target-unavailable`)
+    }
+  })
   onScopeDispose(() => {
     disposed = true
     imageEpoch += 1
@@ -154,5 +193,5 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
     offChanged()
     offClose()
   })
-  return { state, draft, dirty, syncing, closing, error, busy, initialize, flush, send, close, addImages }
+  return { state, draft, dirty, syncing, closing, error, busy, initialize, flush, send, close, addImages, discard, startDrag: drag.start, dragging: drag.dragging }
 }

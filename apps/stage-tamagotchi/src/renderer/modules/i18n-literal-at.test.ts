@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 
-import { parse } from 'yaml'
 import { describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
+import { parse } from 'yaml'
 
 function loadSettings(locale: 'en' | 'zh-Hans') {
   const source = readFileSync(
@@ -11,7 +11,7 @@ function loadSettings(locale: 'en' | 'zh-Hans') {
   )
   return parse(source) as {
     pages: {
-      account: { sections: { 'sign-in': { 'email-placeholder': string } } }
+      'account': { sections: { 'sign-in': { 'email-placeholder': string } } }
       'group-scripts': { fields: { 'mention-guidance': string } }
     }
   }

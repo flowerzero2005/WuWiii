@@ -433,7 +433,10 @@ export function createSpeechPipeline<TAudio>(options: SpeechPipelineOptions<TAud
         context.emit(speechPipelineEventMap.onSegment, value)
 
         if (value.text === '' && value.special) {
-          while (preparedItems.length > 0 && await scheduleNextPreparedItem()) {}
+          while (preparedItems.length > 0) {
+            if (!await scheduleNextPreparedItem())
+              break
+          }
           if (ttsSegmentFailed) {
             await reader.cancel('tts-segment-failed')
             break
@@ -466,8 +469,8 @@ export function createSpeechPipeline<TAudio>(options: SpeechPipelineOptions<TAud
         }
       }
 
-      while (!ttsSegmentFailed && preparedItems.length > 0) {
-        if (!await scheduleNextPreparedItem())
+      while (preparedItems.length > 0) {
+        if (ttsSegmentFailed || !await scheduleNextPreparedItem())
           break
       }
 

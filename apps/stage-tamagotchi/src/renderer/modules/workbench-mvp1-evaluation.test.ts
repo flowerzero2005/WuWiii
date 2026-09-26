@@ -157,10 +157,12 @@ describe('workbench MVP-1 routing regressions', () => {
     const neutralIntent = {
       isWorkspaceCapabilityQuestion: false,
       requiresWebSearch: false,
+      wantsButlerTasks: false,
       wantsMcpDiscovery: false,
       wantsMcpExplicitAction: false,
       wantsMemory: false,
       wantsProactiveTopicOpening: false,
+      wantsVoiceCall: false,
       wantsWebSearch: false,
       wantsWidgets: false,
       wantsWorkspaceApply: false,

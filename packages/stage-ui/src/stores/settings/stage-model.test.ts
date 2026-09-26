@@ -13,14 +13,16 @@ const displayModelRequests = vi.hoisted(() => [] as Array<{
 }>)
 const fetchPublishedConfig = vi.hoisted(() => vi.fn())
 const syncOfficialPresets = vi.hoisted(() => vi.fn())
+const requestLive2dRefresh = vi.hoisted(() => vi.fn())
 
 vi.mock('../../services/character-performance/published-config', () => ({
   fetchPublishedCharacterPerformance: fetchPublishedConfig,
 }))
 
-vi.mock('@proj-airi/stage-ui-live2d', () => ({
+vi.mock('@proj-airi/stage-ui-live2d/stores/live2d', () => ({
   useLive2d: () => ({
     syncOfficialCompositeExpressionPresets: syncOfficialPresets,
+    shouldUpdateView: requestLive2dRefresh,
   }),
 }))
 
@@ -74,6 +76,7 @@ beforeEach(() => {
     presets: [],
   })
   syncOfficialPresets.mockReset()
+  requestLive2dRefresh.mockReset()
   setActivePinia(createPinia())
 })
 
@@ -96,30 +99,86 @@ describe('persona stage model application', () => {
     expect(store.stageModelSelectedDisplayModel?.id).toBe('model-a')
   })
 
-  it('falls back to the default model when a binding is unavailable', async () => {
+  it('retries the selected identity without falling back when a binding is unavailable', async () => {
     const store = useSettingsStageModel()
     const applying = store.applyPersonaDisplayModel('missing-model')
 
     displayModelRequests[0].resolve(undefined)
     await vi.waitFor(() => expect(displayModelRequests).toHaveLength(2))
-    expect(displayModelRequests[1].id).toBe(DEFAULT_STAGE_MODEL_ID)
-    displayModelRequests[1].resolve(createDisplayModel(DEFAULT_STAGE_MODEL_ID))
+    expect(displayModelRequests[1].id).toBe('missing-model')
+    displayModelRequests[1].resolve(undefined)
     await applying
 
-    expect(store.stageModelSelected).toBe(DEFAULT_STAGE_MODEL_ID)
-    expect(store.stageModelSelectedDisplayModel?.id).toBe(DEFAULT_STAGE_MODEL_ID)
+    expect(store.stageModelSelected).toBe('missing-model')
+    expect(store.stageModelSelectedDisplayModel).toBeUndefined()
+    expect(store.stageModelRenderer).toBe('disabled')
   })
 
-  it('contains storage read failures and still attempts the default model', async () => {
+  it('recovers a transient storage failure by retrying the same selected model', async () => {
     const store = useSettingsStageModel()
     const applying = store.applyPersonaDisplayModel('unreadable-model')
 
     displayModelRequests[0].reject(new Error('IndexedDB unavailable'))
     await vi.waitFor(() => expect(displayModelRequests).toHaveLength(2))
-    displayModelRequests[1].resolve(createDisplayModel(DEFAULT_STAGE_MODEL_ID))
+    expect(displayModelRequests[1].id).toBe('unreadable-model')
+    displayModelRequests[1].resolve(createDisplayModel('unreadable-model'))
 
     await expect(applying).resolves.toBeUndefined()
-    expect(store.stageModelSelectedDisplayModel?.id).toBe(DEFAULT_STAGE_MODEL_ID)
+    expect(store.stageModelSelected).toBe('unreadable-model')
+    expect(store.stageModelSelectedDisplayModel?.id).toBe('unreadable-model')
+  })
+
+  it('retains a saved selection for an unbound persona and a fresh-install default', async () => {
+    const store = useSettingsStageModel()
+    const firstInstall = store.applyPersonaDisplayModel()
+    expect(displayModelRequests[0].id).toBe(DEFAULT_STAGE_MODEL_ID)
+    displayModelRequests[0].resolve(createDisplayModel(DEFAULT_STAGE_MODEL_ID))
+    await firstInstall
+    store.stageModelSelected = 'saved-model'
+    const restarted = store.applyPersonaDisplayModel()
+    expect(displayModelRequests[1].id).toBe('saved-model')
+    displayModelRequests[1].resolve(createDisplayModel('saved-model'))
+    await restarted
+    expect(store.stageModelSelected).toBe('saved-model')
+  })
+
+  it('keeps a same-ID resource on read failure but never displays A for a missing B', async () => {
+    const store = useSettingsStageModel()
+    const first = store.applyPersonaDisplayModel('model-a')
+    displayModelRequests[0].resolve(createDisplayModel('model-a'))
+    await first
+    const sameModel = store.updateStageModel()
+    displayModelRequests[1].reject(new Error('IndexedDB unavailable'))
+    await vi.waitFor(() => expect(displayModelRequests).toHaveLength(3))
+    displayModelRequests[2].reject(new Error('IndexedDB unavailable'))
+    await sameModel
+    expect(store.stageModelSelectedDisplayModel?.id).toBe('model-a')
+    expect(store.stageModelSelectedUrl).toBe('https://example.test/model-a.zip')
+    const missingB = store.applyPersonaDisplayModel('model-b')
+    displayModelRequests[3].resolve(undefined)
+    await vi.waitFor(() => expect(displayModelRequests).toHaveLength(5))
+    displayModelRequests[4].resolve(undefined)
+    await missingB
+    expect(store.stageModelSelected).toBe('model-b')
+    expect(store.stageModelSelectedDisplayModel).toBeUndefined()
+    expect(store.stageModelSelectedUrl).toBeUndefined()
+  })
+
+  it('rejects mismatched cached identities and stale results after a direct selection change', async () => {
+    const store = useSettingsStageModel()
+    const applying = store.applyPersonaDisplayModel('model-b')
+    displayModelRequests[0].resolve(createDisplayModel('model-a'))
+    await vi.waitFor(() => expect(displayModelRequests).toHaveLength(2))
+    displayModelRequests[1].resolve(createDisplayModel('model-b'))
+    await applying
+    expect(store.stageModelSelectedDisplayModel?.id).toBe('model-b')
+    const stale = store.updateStageModel()
+    store.stageModelSelected = 'model-c'
+    displayModelRequests[2].resolve({ ...createDisplayModel('model-b'), type: 'url', url: 'https://example.test/stale.zip' })
+    await stale
+    expect(store.stageModelSelected).toBe('model-c')
+    expect(store.stageModelSelectedUrl).toBe('https://example.test/model-b.zip')
+    expect(displayModelRequests).toHaveLength(3)
   })
 
   it('selects the picture OC renderer without exposing the package ZIP as a model URL', async () => {
@@ -170,6 +229,43 @@ describe('persona stage model application', () => {
     await applying
 
     expect(fetchPublishedConfig).not.toHaveBeenCalled()
+  })
+
+  it('preserves a file model URL when the same selection is refreshed', async () => {
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-model')
+    try {
+      const store = useSettingsStageModel()
+      const model: DisplayModel = {
+        id: 'local-model',
+        file: new File(['zip'], 'local.zip'),
+        format: 'live2d-zip' as DisplayModel['format'],
+        importedAt: 0,
+        name: 'Local',
+        type: 'file',
+      }
+      const applying = store.applyPersonaDisplayModel(model.id)
+      displayModelRequests[0].resolve(model)
+      await applying
+      const refreshing = store.updateStageModel()
+      displayModelRequests[1].resolve(model)
+      await refreshing
+      expect(createObjectUrl).toHaveBeenCalledOnce()
+      expect(store.stageModelSelectedUrl).toBe('blob:local-model')
+      expect(requestLive2dRefresh).not.toHaveBeenCalled()
+    }
+    finally {
+      createObjectUrl.mockRestore()
+    }
+  })
+
+  it('delegates an explicit refresh to Stage without doing another model lookup', async () => {
+    const store = useSettingsStageModel()
+    const applying = store.applyPersonaDisplayModel('model-a')
+    displayModelRequests[0].resolve(createDisplayModel('model-a'))
+    await applying
+    await store.refreshStageView()
+    expect(requestLive2dRefresh).toHaveBeenCalledOnce()
+    expect(displayModelRequests).toHaveLength(1)
   })
 
   it('ignores an official response that completes after switching to a file model', async () => {

@@ -179,7 +179,10 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
 </script>
 
 <template>
-  <main :class="['flex flex-col gap-6']">
+  <main
+    data-airi-runtime-route="/settings/modules/vision"
+    :class="['flex flex-col gap-6']"
+  >
     <section :class="panelClass">
       <div>
         <h2 :class="['text-lg airi-text font-semibold md:text-2xl']">

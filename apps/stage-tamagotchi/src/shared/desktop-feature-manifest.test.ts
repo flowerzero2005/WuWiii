@@ -17,6 +17,8 @@ describe('desktop feature manifest', () => {
     expect(manifest.features.workbench).toBe(true)
     expect(manifest.requiredRoutes).toEqual(DESKTOP_REQUIRED_ROUTES)
     expect(manifest.requiredRoutes).toContain('/dashboard')
+    expect(manifest.requiredRoutes).toContain('/settings/group-scenarios')
+    expect(manifest.requiredRoutes).toContain('/settings/modules/vision')
     expect(manifest.requiredRoutes).toContain('/settings/system/general')
     expect(manifest.routeExcludes.shared).toEqual(['**/devtools/**', '**/v2/**'])
     expect(manifest.routeExcludes.desktop).toEqual(['**/devtools/**', '**/settings/system/developer.vue'])

@@ -90,7 +90,7 @@ async function applyRecommendedSpeechConfig() {
   if (providerConfig) {
     providerConfig.model = summary.model
     providerConfig.voice = summary.voice
-    if (Object.prototype.hasOwnProperty.call(providerConfig, 'voiceId'))
+    if (Object.hasOwn(providerConfig, 'voiceId'))
       providerConfig.voiceId = summary.voice
   }
 

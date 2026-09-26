@@ -32,6 +32,11 @@ describe('desktop regression loopback fixture service', () => {
       endpoint: 'pricing',
       status: 200,
     })
+    expect(resolveDesktopRegressionFixtureResponse('GET', '/api/model-gateway/v1/models')).toMatchObject({
+      body: { object: 'list', data: [] },
+      endpoint: 'models',
+      status: 200,
+    })
     expect(parseModelPerformanceConfig(getDesktopRegressionCharacterPerformanceFixture().config.config)).toMatchObject({
       modelId: 'preset-live2d-1',
       renderer: 'live2d',
@@ -81,6 +86,7 @@ describe('desktop regression loopback fixture service', () => {
       authCapabilities: 0,
       authSession: 1,
       characterPerformance: 2,
+      models: 0,
       pricing: 1,
     })
     expect(service.unexpectedRequests).toEqual(expect.arrayContaining([
@@ -110,5 +116,21 @@ describe('desktop regression loopback fixture service', () => {
     await service.close()
     service = undefined
     await expect(fetch(`${serviceBaseUrl}/api/auth/get-session`)).rejects.toThrow()
+  })
+
+  it('serves public catalogs through the Electron main proxy while rejecting foreign origins and non-GET traffic', async () => {
+    service = await startDesktopRegressionFixtureService(rendererOrigin)
+    const [models, capabilities, foreignOrigin, mutation] = await Promise.all([
+      fetch(`${service.baseUrl}/api/model-gateway/v1/models`),
+      fetch(`${service.baseUrl}/api/auth/capabilities`),
+      fetch(`${service.baseUrl}/api/model-gateway/v1/models`, { headers: { origin: 'https://fixtures.example.invalid' } }),
+      fetch(`${service.baseUrl}/api/model-gateway/v1/models`, { method: 'POST' }),
+    ])
+    expect(models.status).toBe(200)
+    expect(await models.json()).toEqual({ object: 'list', data: [] })
+    expect(capabilities.status).toBe(200)
+    expect(foreignOrigin.status).toBe(403)
+    expect(mutation.ok).toBe(false)
+    expect(service.unexpectedRequests).toHaveLength(2)
   })
 })

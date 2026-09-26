@@ -1,33 +1,30 @@
-# WuWiii private development repository
+# 仓库范围
 
-This repository is a clean development snapshot. Its Git history starts here;
-the earlier working repository and its environment files are not imported.
+这是经过整理的 WuWiii 桌面开发端源码仓库。Git 历史从安全导出开始，早期工作仓库的历史和本机配置没有导入。
 
-Included:
+## 提供的内容
 
-- The Electron desktop application and the shared packages it needs, including
-  client-side server contracts and SDKs but no server implementation.
-- Unit tests, package manifests, the lockfile, required assets and license
-  notices, and safe local configuration examples.
-- The root README and this scope statement, limited to safe local development
-  information.
+- Electron 桌面应用源码，包括主进程、预加载、窗口和 Vue 渲染界面。
+- 客户端所需的共享工作区：UI、页面、布局、国际化、模型渲染、音频、IPC、客户端 SDK 和协议类型。
+- 工作区清单、锁文件、编译配置、测试、必要字体/图片/视频与第三方许可证。
+- 本地开发环境示例以及本仓库的介绍、开发和使用指南。
 
-Excluded:
+`packages/server-sdk`、`server-shared` 和 `server-runtime` 是客户端合同与通信组件，不包含生产服务端的数据库、账号服务、计费实现或管理端部署代码。
 
-- The standalone documentation site and internal design, planning, memory,
-  architecture, handoff, runbook, and operations material.
-- The production server, background services, deprecated website, mobile app,
-  demo apps, plugin examples, Tauri code, and unrelated tooling.
-- Production environment files, provider keys, signing material, user data,
-  database backups, and local development logs.
-- Production operations and deployment runbooks, delivery archives, installers,
-  bundled tools, model weights, and large demonstration media.
-- Automatic deployment and release workflows. Pushing this repository cannot
-  trigger the existing production deployment workflows.
-- The production installer cleanup script and production application identity.
-  Development packages use their own app identity and installation name.
+## 单独安装或导入的内容
 
-Before granting anyone access, review the exact repository membership and
-confirm that sharing the included source is intended. Repository privacy
-controls access; it does not prevent an invited reader from copying code. The
-root `LICENSE` retains the upstream license and attribution.
+- 第三方 JavaScript、原生依赖和 Electron 运行时：由 pnpm 与依赖的安装脚本安装。
+- Live2D Cubism SDK 和开发示例模型：开发配置中的下载插件准备并缓存，首次运行需网络；具体来源见下载配置。
+- 自己使用的聊天/视觉/语音模型权重与角色素材：从合法来源获取，按服务商或应用的导入流程配置。
+- API Key、个人设置与应用数据：由使用者在本机配置，不能提交。
+
+## 未提供的内容
+
+- 官方服务端、生产数据库、后台服务、运维和部署资料。
+- 内部设计文档、任务记录、AI 代理或技能配置、旧工作仓库历史。
+- 官网、移动端、无关示例项目、旧 Tauri 代码和生产发布工作流。
+- 密钥、真实环境文件、证书、用户聊天与日记、备份、日志、安装包及构建缓存。
+
+本仓库默认服务地址是回环地址。没有自行提供兼容服务时，官方登录、余额、计费与云端功能不可用；自配模型与本地客户端开发仍有独立配置路径。
+
+开发版与正式版使用独立的数据目录和应用标识，官方更新 feed 关闭。即使仓库是私有的，受邀读者也可以复制内容，因此分享前仍需检查提交中没有私人配置。

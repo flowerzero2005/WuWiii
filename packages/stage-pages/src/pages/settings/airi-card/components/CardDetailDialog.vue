@@ -913,7 +913,7 @@ const tabs = computed<Tab[]>(() => {
 const activeTab = computed({
   get: () => {
     // If current active tab is not in available tabs, reset to first tab
-    if (!tabs.value.find(tab => tab.id === activeTabId.value))
+    if (!tabs.value.some(tab => tab.id === activeTabId.value))
       return tabs.value[0]?.id || ''
     return activeTabId.value
   },
@@ -1048,13 +1048,19 @@ function getResourceDisplayValue(
             <!-- Description section -->
             <div v-if="activeTab === 'description'">
               <div flex="~ col" gap-3>
-                <div class="rounded-lg border border-primary-200/60 bg-primary-50/60 p-3 text-sm text-primary-800 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
-                  <div class="mb-1 flex items-center gap-2 font-medium"><div i-solar:info-circle-bold-duotone />{{ t('settings.pages.card.runtime_effect') }}</div>
-                  <p class="m-0 text-xs leading-5 opacity-85">{{ t('settings.pages.card.runtime_effect_description') }}</p>
+                <div class="border border-primary-200/60 rounded-lg bg-primary-50/60 p-3 text-sm text-primary-800 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
+                  <div class="mb-1 flex items-center gap-2 font-medium">
+                    <div i-solar:info-circle-bold-duotone />{{ t('settings.pages.card.runtime_effect') }}
+                  </div>
+                  <p class="m-0 text-xs leading-5 opacity-85">
+                    {{ t('settings.pages.card.runtime_effect_description') }}
+                  </p>
                 </div>
                 <FieldInput v-model="nameDraft" :label="t('settings.pages.card.creation.name')" :description="t('settings.pages.card.creation.fields_info.name')" />
                 <FieldInput v-model="nicknameDraft" :label="t('settings.pages.card.creation.nickname')" :description="t('settings.pages.card.creation.fields_info.nickname')" />
-                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.pages.card.field_effects.description') }}</p>
+                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ t('settings.pages.card.field_effects.description') }}
+                </p>
                 <FieldInput
                   v-model="descriptionDraft"
                   :label="t('settings.pages.card.description_label')"
@@ -1106,8 +1112,8 @@ function getResourceDisplayValue(
 
             <!-- Character -->
             <div v-if="activeTab === 'character'">
-              <div class="mx-auto flex w-full max-w-4xl flex-col gap-5">
-                <div class="rounded-lg border border-primary-200/60 bg-primary-50/60 p-3 text-xs leading-5 text-primary-800 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
+              <div class="mx-auto max-w-4xl w-full flex flex-col gap-5">
+                <div class="border border-primary-200/60 rounded-lg bg-primary-50/60 p-3 text-xs text-primary-800 leading-5 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
                   {{ t('settings.pages.card.field_effects.personality') }} {{ t('settings.pages.card.field_effects.scenario') }}
                 </div>
                 <div :class="['airi-surface-glass', 'flex flex-col items-start gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between']">
@@ -1129,13 +1135,21 @@ function getResourceDisplayValue(
                   />
                 </div>
                 <FieldInput v-model="characterDraft.personality" :label="t('settings.pages.card.personality')" :single-line="false" :description="t('settings.pages.card.creation.fields_info.personality')" />
-                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.pages.card.field_effects.personality') }}</p>
+                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ t('settings.pages.card.field_effects.personality') }}
+                </p>
                 <FieldInput v-model="characterDraft.scenario" :label="t('settings.pages.card.scenario')" :single-line="false" :description="t('settings.pages.card.creation.fields_info.scenario')" />
-                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.pages.card.field_effects.scenario') }}</p>
+                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ t('settings.pages.card.field_effects.scenario') }}
+                </p>
                 <FieldInput v-model="characterDraft.systemPrompt" :label="t('settings.pages.card.systemprompt')" :single-line="false" :description="t('settings.pages.card.creation.fields_info.systemprompt')" />
-                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.pages.card.field_effects.system_prompt') }}</p>
+                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ t('settings.pages.card.field_effects.system_prompt') }}
+                </p>
                 <FieldInput v-model="characterDraft.postHistoryInstructions" :label="t('settings.pages.card.posthistoryinstructions')" :single-line="false" :description="t('settings.pages.card.creation.fields_info.posthistoryinstructions')" />
-                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.pages.card.field_effects.post_history') }}</p>
+                <p class="m-0 text-xs text-neutral-500 dark:text-neutral-400">
+                  {{ t('settings.pages.card.field_effects.post_history') }}
+                </p>
                 <FieldValues v-model="characterDraft.greetings" :label="t('settings.pages.card.creation.greetings')" :description="t('settings.pages.card.creation.fields_info.greetings')" :required="false" />
                 <div class="flex justify-end">
                   <button
@@ -1153,8 +1167,10 @@ function getResourceDisplayValue(
             <!-- Persona Package -->
             <div v-if="activeTab === 'personaPackage'">
               <div flex="~ col" gap-4>
-                <div class="rounded-lg border border-primary-200/60 bg-primary-50/60 p-3 text-xs leading-5 text-primary-800 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
-                  <div class="mb-1 flex items-center gap-2 font-medium"><div i-solar:box-bold-duotone />{{ t('settings.pages.card.persona_package.title') }}</div>
+                <div class="border border-primary-200/60 rounded-lg bg-primary-50/60 p-3 text-xs text-primary-800 leading-5 dark:border-primary-500/30 dark:bg-primary-950/20 dark:text-primary-200">
+                  <div class="mb-1 flex items-center gap-2 font-medium">
+                    <div i-solar:box-bold-duotone />{{ t('settings.pages.card.persona_package.title') }}
+                  </div>
                   {{ t('settings.pages.card.field_effects.persona_package') }}
                 </div>
                 <div
@@ -1601,7 +1617,7 @@ function getResourceDisplayValue(
                       {{ t('settings.pages.card.display_model.description') }}
                     </p>
                     <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <span class="min-w-0 max-w-full truncate rounded-md bg-neutral-100 px-2 py-1 text-neutral-600 dark:bg-neutral-900/70 dark:text-neutral-300">
+                      <span class="max-w-full min-w-0 truncate rounded-md bg-neutral-100 px-2 py-1 text-neutral-600 dark:bg-neutral-900/70 dark:text-neutral-300">
                         {{ resolvedDisplayModel?.name ?? t('settings.pages.card.display_model.use_default') }}
                       </span>
                       <span v-if="resolvedDisplayModel" class="rounded-md bg-primary-500/10 px-2 py-1 text-primary-600 dark:text-primary-300">

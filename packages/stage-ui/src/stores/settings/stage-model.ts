@@ -3,7 +3,7 @@ import type { ModelPerformanceConfig } from '@proj-airi/server-shared/types'
 import type { DisplayModel } from '../display-models'
 
 import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
-import { useLive2d } from '@proj-airi/stage-ui-live2d'
+import { useLive2d } from '@proj-airi/stage-ui-live2d/stores/live2d'
 import { refManualReset, useEventListener } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
@@ -31,7 +31,6 @@ export const useSettingsStageModel = defineStore('settings-stage-model', () => {
 
   const stageViewControlsEnabled = refManualReset<boolean>(false)
   let modelUpdateGeneration = 0
-  let personaModelApplicationGeneration = 0
   const OBJECT_URL_REVOKE_DELAY_MS = 30_000
 
   function releaseObjectUrl(url: string | undefined) {
@@ -58,31 +57,31 @@ export const useSettingsStageModel = defineStore('settings-stage-model', () => {
     }
 
     let model: DisplayModel | undefined
-    try {
-      model = await displayModelsStore.getDisplayModel(selectedModelId)
-    }
-    catch (error) {
-      if (generation !== modelUpdateGeneration)
+    let lookupError: unknown
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        model = await displayModelsStore.getDisplayModel(selectedModelId)
+        if (model && model.id !== selectedModelId)
+          throw new Error(`Requested model ${selectedModelId}, received ${model.id}`)
+        lookupError = model ? undefined : new Error(`Model not found: ${selectedModelId}`)
+      }
+      catch (error) {
+        model = undefined
+        lookupError = error
+      }
+      if (generation !== modelUpdateGeneration || stageModelActiveId.value !== selectedModelId)
         return
-
-      console.error('[StageModel] Failed to load model:', selectedModelId, error)
-      stageModelSelectedUrl.value = undefined
-      stageModelSelectedDisplayModel.value = undefined
-      stageModelRenderer.value = 'disabled'
-      publishedPerformanceConfig.value = undefined
-      return
+      if (model)
+        break
     }
-
-    if (generation !== modelUpdateGeneration)
-      return
 
     if (!model) {
-      console.warn('[StageModel] Model not found:', selectedModelId)
-      // Keep the last working model visible while an IndexedDB lookup is
-      // temporarily unavailable. Clearing it here makes the stage blank and
-      // causes a later retry to race with model URL cleanup.
-      if (stageModelSelectedDisplayModel.value)
+      console.error('[StageModel] Failed to load selected model:', selectedModelId, lookupError)
+      // A transient read can retain an already resolved resource for this same
+      // identity. A different previous character must never stand in for it.
+      if (stageModelSelectedDisplayModel.value?.id === selectedModelId)
         return
+      releaseObjectUrl(stageModelSelectedUrl.value)
       stageModelSelectedUrl.value = undefined
       stageModelSelectedDisplayModel.value = undefined
       stageModelRenderer.value = 'disabled'
@@ -112,7 +111,7 @@ export const useSettingsStageModel = defineStore('settings-stage-model', () => {
     else if (model.type === 'file') {
       // Reuse the existing blob URL when refreshing the same model. Replacing
       // it needlessly invalidates an in-flight Live2D/VRM loader.
-      if (!(stageModelSelectedDisplayModel.value?.id === model.id && stageModelSelectedUrl.value?.startsWith('blob:'))) {
+      if (stageModelSelectedDisplayModel.value?.id !== model.id || !stageModelSelectedUrl.value?.startsWith('blob:')) {
         releaseObjectUrl(stageModelSelectedUrl.value)
         stageModelSelectedUrl.value = URL.createObjectURL(model.file)
       }
@@ -144,18 +143,11 @@ export const useSettingsStageModel = defineStore('settings-stage-model', () => {
   }
 
   async function applyPersonaDisplayModel(modelId?: string) {
-    const generation = ++personaModelApplicationGeneration
-    const requestedModelId = modelId?.trim() || DEFAULT_STAGE_MODEL_ID
+    // An unbound persona retains the saved selection. First-install storage
+    // already supplies DEFAULT_STAGE_MODEL_ID; read failures never select it.
+    const requestedModelId = modelId?.trim() || stageModelSelected.value
     stageModelSelected.value = requestedModelId
     await updateStageModel()
-
-    if (generation !== personaModelApplicationGeneration)
-      return
-
-    if (!stageModelSelectedDisplayModel.value && requestedModelId !== DEFAULT_STAGE_MODEL_ID) {
-      stageModelSelected.value = DEFAULT_STAGE_MODEL_ID
-      await updateStageModel()
-    }
   }
 
   async function refreshStageView() {

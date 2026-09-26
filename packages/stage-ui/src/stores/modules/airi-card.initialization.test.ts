@@ -12,6 +12,7 @@ import { useSpeechStore } from './speech'
 const stageModelMocks = vi.hoisted(() => ({
   applyPersonaDisplayModel: vi.fn(),
   refreshStageView: vi.fn(),
+  stageModelSelected: 'preset-live2d-1',
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -72,12 +73,14 @@ vi.mock('../settings/stage-model', () => ({
   useSettingsStageModel: () => ({
     applyPersonaDisplayModel: stageModelMocks.applyPersonaDisplayModel,
     refreshStageView: stageModelMocks.refreshStageView,
+    get stageModelSelected() { return stageModelMocks.stageModelSelected },
   }),
 }))
 
 describe('airi card clean initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    stageModelMocks.stageModelSelected = 'preset-live2d-1'
     setActivePinia(createTestingPinia({ createSpy: vi.fn, stubActions: false }))
   })
 
@@ -326,6 +329,33 @@ describe('airi card clean initialization', () => {
     resolveDisplayModel()
     await initialization
     expect(initialized).toBe(true)
+    expect(stageModelMocks.applyPersonaDisplayModel).toHaveBeenCalledOnce()
+    expect(stageModelMocks.refreshStageView).not.toHaveBeenCalled()
+  })
+
+  it('restores the saved stage selection at startup, then honors a persona switch binding', async () => {
+    stageModelMocks.stageModelSelected = 'saved-stage-model'
+    const store = useAiriCardStore()
+    store.initialize()
+    await store.applyActiveDisplayModel()
+    expect(stageModelMocks.applyPersonaDisplayModel).toHaveBeenCalledWith('saved-stage-model')
+    expect(stageModelMocks.applyPersonaDisplayModel).not.toHaveBeenCalledWith('preset-live2d-1')
+    const nextCardId = store.addCard({
+      ...store.activeCard!,
+      name: 'Next resident',
+      extensions: {
+        ...store.activeCard!.extensions,
+        airi: {
+          ...store.activeCard!.extensions.airi,
+          modules: {
+            ...store.activeCard!.extensions.airi.modules,
+            display: { modelId: 'next-persona-model' },
+          },
+        },
+      },
+    })
+    store.activeCardId = nextCardId
+    expect(stageModelMocks.applyPersonaDisplayModel).toHaveBeenLastCalledWith('next-persona-model')
   })
 
   it('preserves legacy default card content until the user explicitly restores it', () => {
@@ -563,8 +593,9 @@ describe('airi card clean initialization', () => {
     expect(speechStore.selectedLanguage).toBe('ja-JP')
     await vi.waitFor(() => {
       expect(stageModelMocks.applyPersonaDisplayModel).toHaveBeenLastCalledWith('persona-display-model')
-      expect(stageModelMocks.refreshStageView).toHaveBeenCalled()
     })
+    expect(stageModelMocks.applyPersonaDisplayModel.mock.calls.filter(([modelId]) => modelId === 'persona-display-model')).toHaveLength(1)
+    expect(stageModelMocks.refreshStageView).not.toHaveBeenCalled()
 
     speechStore.activeSpeechVoiceId = 'voice-updated-in-chat'
     speechStore.selectedLanguage = 'en-US'

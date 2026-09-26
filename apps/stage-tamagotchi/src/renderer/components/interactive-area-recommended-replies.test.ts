@@ -12,8 +12,12 @@ describe('interactive area recommended replies', () => {
   })
 
   it('fills the composer without sending the selected reply', () => {
-    expect(source).toContain('function fillRecommendedReply(reply: string) {\n  messageInput.value = reply\n}')
-    expect(source).not.toContain('function fillRecommendedReply(reply: string) {\n  void handleSend')
+    const start = source.indexOf('function fillRecommendedReply(reply: string)')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const fill = source.slice(start, source.indexOf('\nfunction ', start + 1))
+    expect(fill).toContain('if (detachedComposer.readonly.value)\n    return')
+    expect(fill).toContain('messageInput.value = reply')
+    expect(fill).not.toMatch(/handleSend|performComposerSend|sendInline/)
   })
 
   it('persists generated candidates on their assistant message', () => {

@@ -22,8 +22,12 @@ describe('assistant typing completion gate', () => {
     const gate = createAssistantTypingCompletionGate()
     let firstResolved = false
     let secondResolved = false
-    const first = gate.wait('reply:1', 'session-a').then(() => { firstResolved = true })
-    const second = gate.wait('reply:1', 'session-b').then(() => { secondResolved = true })
+    const first = gate.wait('reply:1', 'session-a').then(() => {
+      firstResolved = true
+    })
+    const second = gate.wait('reply:1', 'session-b').then(() => {
+      secondResolved = true
+    })
 
     gate.releaseSession('session-a')
     await first

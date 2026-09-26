@@ -1,10 +1,11 @@
 import type { Session, User } from 'better-auth'
 
+import type { AuthRefreshEvent, AuthRefreshReason, AuthStateChangeReason } from '../libs/auth-sync'
+
 import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref } from 'vue'
 
 import { AuthSessionRefreshError, fetchSession, invalidateAuthSession } from '../libs/auth'
-import type { AuthRefreshEvent, AuthRefreshReason, AuthStateChangeReason } from '../libs/auth-sync'
 import { listenAuthStateChanges } from '../libs/auth-sync'
 
 const AUTH_REFRESH_RETRY_DELAYS_MS = [250, 1000, 3000]

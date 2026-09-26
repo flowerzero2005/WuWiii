@@ -38,12 +38,29 @@ interface DiagnosticEvent {
 interface RouteResult {
   diagnostics: DiagnosticEvent[]
   durationMs: number
+  modelRenderEvidence?: MainStageRenderEvidence
   probeMatched?: boolean
   route: string
   routeRootVisible?: boolean
   screenshot?: string
   status: 'failed' | 'passed'
   visibleElements?: number
+}
+
+interface MainStageRenderEvidence {
+  canvasVisible: boolean
+  error?: string
+  loadedModelId?: string
+  loadedModelUrl?: string
+  modelIdentityMatches: boolean
+  modelAttached: boolean
+  modelIntersectsCanvas: boolean
+  opaquePixels: number
+  ready: boolean
+  renderer?: string
+  selectedModel?: string
+  selectedModelUrl?: string
+  state?: string
 }
 
 const DESKTOP_PORT = 5173
@@ -482,12 +499,159 @@ async function captureFailureScreenshot(page: Page, reportDirectory: string, rou
   return existsSync(path) ? path : undefined
 }
 
+async function readMainStageRenderEvidence(page: Page): Promise<MainStageRenderEvidence> {
+  return await page.evaluate(() => {
+    interface Bounds { x: number, y: number, width: number, height: number }
+    interface RenderTarget {
+      parent?: RenderTarget
+      worldVisible: boolean
+      worldAlpha: number
+      getBounds: () => Bounds
+    }
+    interface Renderer {
+      gl: WebGLRenderingContext
+      screen: Bounds
+      render: (target: RenderTarget) => void
+    }
+    interface SceneInstance {
+      exposed?: {
+        app?: () => { renderer: Renderer, stage: RenderTarget } | undefined
+        canvasElement?: () => HTMLCanvasElement | undefined
+        displayObject?: () => RenderTarget | undefined
+        modelIdentity?: () => { modelId?: string, modelSrc: string } | undefined
+      }
+      setupState?: { componentState?: string }
+      subTree?: SceneVNode
+      type?: { __file?: string }
+    }
+    interface SceneVNode {
+      children?: unknown
+      component?: SceneInstance
+    }
+    const evidence: MainStageRenderEvidence = {
+      canvasVisible: false,
+      modelIdentityMatches: false,
+      modelAttached: false,
+      modelIntersectsCanvas: false,
+      opaquePixels: 0,
+      ready: false,
+    }
+    const app = document.querySelector('#app') as HTMLElement & {
+      __vue_app__?: {
+        config: { globalProperties: { $pinia?: { _s: Map<string, Record<string, unknown>> } } }
+      }
+    }
+    const settings = app?.__vue_app__?.config.globalProperties.$pinia?._s.get('settings-stage-model')
+    // Only these public display settings enter the report; no provider/account state.
+    for (const [field, key] of [
+      ['renderer', 'stageModelRenderer'],
+      ['selectedModel', 'stageModelSelected'],
+      ['selectedModelUrl', 'stageModelSelectedUrl'],
+    ] as const) {
+      const value = settings?.[key]
+      if (typeof value === 'string')
+        evidence[field] = value
+    }
+    const routeRoot = document.querySelector('[data-airi-runtime-route="/"]') as HTMLElement & {
+      __vueParentComponent?: SceneInstance
+    }
+    const visited = new Set<SceneInstance>()
+    const pending: (SceneVNode | undefined)[] = [routeRoot?.__vueParentComponent?.subTree]
+    let scene: SceneInstance | undefined
+    while (pending.length) {
+      const node = pending.pop()
+      const instance = node?.component
+      if (instance && !visited.has(instance)) {
+        visited.add(instance)
+        if (instance.type?.__file?.endsWith('/scenes/Stage.vue')) {
+          scene = instance
+          break
+        }
+        pending.push(instance.subTree)
+      }
+      if (Array.isArray(node?.children))
+        pending.push(...node.children as SceneVNode[])
+    }
+    evidence.state = scene?.setupState?.componentState
+    if (evidence.renderer !== 'live2d') {
+      evidence.error = `The clean-profile default character requires Live2D, received ${evidence.renderer ?? 'no renderer'}.`
+      return evidence
+    }
+    const canvas = scene?.exposed?.canvasElement?.()
+    const pixi = scene?.exposed?.app?.()
+    const target = scene?.exposed?.displayObject?.()
+    const loadedIdentity = scene?.exposed?.modelIdentity?.()
+    evidence.loadedModelId = loadedIdentity?.modelId
+    evidence.loadedModelUrl = loadedIdentity?.modelSrc
+    evidence.modelIdentityMatches = loadedIdentity?.modelId === evidence.selectedModel
+      && loadedIdentity?.modelSrc === evidence.selectedModelUrl && Boolean(loadedIdentity)
+    if (!canvas || !pixi || !target || evidence.state !== 'mounted')
+      return evidence
+    if (!evidence.modelIdentityMatches) {
+      evidence.error = 'The loaded model identity/source does not match the selected stage model.'
+      return evidence
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const style = getComputedStyle(canvas)
+    evidence.canvasVisible = rect.width > 0 && rect.height > 0
+      && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight
+      && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
+    for (let element = canvas.parentElement; element; element = element.parentElement) {
+      const ancestorStyle = getComputedStyle(element)
+      if (ancestorStyle.display === 'none' || ancestorStyle.visibility === 'hidden' || Number(ancestorStyle.opacity) === 0)
+        evidence.canvasVisible = false
+    }
+    let ancestor: RenderTarget | undefined = target
+    while (ancestor && ancestor !== pixi.stage)
+      ancestor = ancestor.parent
+    evidence.modelAttached = ancestor === pixi.stage && target.worldVisible && target.worldAlpha > 0
+    if (!evidence.canvasVisible || !evidence.modelAttached)
+      return evidence
+
+    try {
+      // Render and read the screen synchronously: Chromium may clear a WebGL
+      // drawing buffer between frames when preserveDrawingBuffer is disabled.
+      pixi.renderer.render(pixi.stage)
+      const bounds = target.getBounds()
+      const screen = pixi.renderer.screen
+      const left = Math.max(bounds.x, screen.x)
+      const top = Math.max(bounds.y, screen.y)
+      const right = Math.min(bounds.x + bounds.width, screen.x + screen.width)
+      const bottom = Math.min(bounds.y + bounds.height, screen.y + screen.height)
+      evidence.modelIntersectsCanvas = right > left && bottom > top
+      if (!evidence.modelIntersectsCanvas)
+        return evidence
+
+      const gl = pixi.renderer.gl
+      const scaleX = gl.drawingBufferWidth / screen.width
+      const scaleY = gl.drawingBufferHeight / screen.height
+      const x = Math.max(0, Math.floor((left - screen.x) * scaleX))
+      const y = Math.max(0, Math.floor((screen.y + screen.height - bottom) * scaleY))
+      const width = Math.min(gl.drawingBufferWidth - x, Math.floor((right - left) * scaleX))
+      const height = Math.min(gl.drawingBufferHeight - y, Math.floor((bottom - top) * scaleY))
+      const pixels = new Uint8Array(width * height * 4)
+      gl.readPixels(x, y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] >= 20)
+          evidence.opaquePixels += 1
+      }
+      evidence.ready = evidence.opaquePixels >= 32
+    }
+    catch (error) {
+      evidence.error = error instanceof Error ? error.message : String(error)
+    }
+    return evidence
+  })
+}
+
 async function exerciseRoute(page: Page, windowId: string, route: string, diagnostics: DiagnosticEvent[], reportDirectory: string): Promise<RouteResult> {
   const startedAt = Date.now()
   const diagnosticStart = diagnostics.length
   let probeMatched = false
   let routeRootVisible = false
   let visibleElements: number | undefined
+  let modelRenderEvidence: MainStageRenderEvidence | undefined
   let failure: unknown
   try {
     await page.evaluate(async ({ targetRoute, timeoutMs }) => {
@@ -594,6 +758,18 @@ async function exerciseRoute(page: Page, windowId: string, route: string, diagno
       throw new Error(`Route ${route} mounted a hidden or zero-sized runtime root.`)
     if (visibleElements === 0)
       throw new Error(`Route ${route} rendered no visible elements.`)
+    if (route === '/') {
+      do {
+        modelRenderEvidence = await readMainStageRenderEvidence(page)
+        if (modelRenderEvidence.ready)
+          break
+        if (modelRenderEvidence.error)
+          throw new Error(`Main stage model render failed: ${modelRenderEvidence.error}`)
+        if (Date.now() - startedAt >= ROUTE_TIMEOUT_MS)
+          throw new Error(`Main stage model did not render visible pixels: ${JSON.stringify(modelRenderEvidence)}`)
+        await page.waitForTimeout(100)
+      } while (true)
+    }
   }
   catch (error) {
     failure = error
@@ -611,10 +787,16 @@ async function exerciseRoute(page: Page, windowId: string, route: string, diagno
     })
   }
   const status = routeDiagnostics.length === 0 ? 'passed' : 'failed'
-  const screenshot = status === 'failed' ? await captureFailureScreenshot(page, reportDirectory, route) : undefined
+  // Keep visual evidence for the two chat surfaces even when their route roots
+  // mount successfully: a root probe alone cannot demonstrate the character or
+  // collapsed input actually renders correctly.
+  const screenshot = status === 'failed' || route === '/' || route === '/quick-chat'
+    ? await captureFailureScreenshot(page, reportDirectory, route)
+    : undefined
   return {
     diagnostics: routeDiagnostics,
     durationMs: Date.now() - startedAt,
+    modelRenderEvidence,
     probeMatched,
     route,
     routeRootVisible,

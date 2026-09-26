@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BasicTextarea, Button } from '@proj-airi/ui'
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useDetachedComposerEditor } from '../composables/use-detached-composer-editor'
@@ -9,6 +9,7 @@ const { t } = useI18n()
 const key = 'stage.chat.composer'
 const editor = useDetachedComposerEditor(t)
 const { state, draft, dirty, syncing, closing, error, busy, flush, send, close } = editor
+const discardConfirmation = ref(false)
 function addImages(event: Event) {
   const input = event.target as HTMLInputElement
   const files = [...(input.files ?? [])]
@@ -21,7 +22,7 @@ onMounted(editor.initialize)
 <template>
   <main :class="['airi-surface-panel flex h-dvh min-h-0 flex-col gap-3 p-4']">
     <header :class="['flex items-center justify-between gap-3']">
-      <div>
+      <div :title="t(`${key}.drag-return`)" :class="['[-webkit-app-region:no-drag] touch-none select-none cursor-grab', editor.dragging.value ? 'opacity-60' : '']" @pointerdown="editor.startDrag">
         <h1 :class="['airi-text m-0 text-base font-semibold']">
           {{ t(`${key}.title`) }}
         </h1><p :class="['airi-text-muted m-0 mt-1 text-xs']">
@@ -35,7 +36,15 @@ onMounted(editor.initialize)
     </p>
     <p v-if="state?.uncertain" role="alert" :class="['m-0 text-xs text-amber-600']">
       {{ t(`${key}.uncertain`) }}
+      <button type="button" :disabled="closing" :class="['ml-2 underline']" @click="discardConfirmation = true">
+        {{ t(`${key}.discard`) }}
+      </button>
     </p>
+    <div v-if="discardConfirmation" role="alert" :class="['text-xs text-amber-600']">
+      <p>{{ t(`${key}.discard-confirm`) }}</p>
+      <Button size="sm" :disabled="closing" :label="t(`${key}.discard`)" @click="editor.discard()" />
+      <Button size="sm" variant="secondary" :disabled="closing" :label="t(`${key}.cancel-discard`)" @click="discardConfirmation = false" />
+    </div>
     <BasicTextarea v-model="draft.text" :auto-resize="false" :readonly="!!state?.uncertain" :disabled="!state || !!state.busy || closing" :placeholder="t('stage.message')" :class="['airi-overlay-input min-h-0 flex-1 resize-none rounded-xl p-3']" @keydown.ctrl.enter.prevent="send" />
     <div v-if="draft.images.length" :class="['flex gap-2 overflow-x-auto']">
       <div v-for="(image, index) in draft.images" :key="image.id" :class="['relative shrink-0']">

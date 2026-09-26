@@ -38,11 +38,11 @@ describe('live2D preview pause', () => {
 
   it('reports model load failures instead of treating a canvas as a ready character', () => {
     expect(modelSource).toContain('(e: \'modelError\'')
-    expect(modelSource).toContain('modelId: props.modelId')
+    expect(modelSource).toContain('modelId: requestedModelId')
     expect(modelSource).toContain('modelSrc: requestedModelSrc')
     expect(modelSource).toContain('stage: props.runtimeMode')
     expect(modelSource).toContain('componentState.value = \'pending\'')
-    expect(sceneSource).toContain('componentStateCanvas.value !== \'mounted\' || componentStateModel.value !== \'mounted\'')
+    expect(sceneSource).toContain('canvasState !== \'mounted\' || modelState !== \'mounted\'')
     expect(sceneSource).toContain('@model-error="handleModelError"')
     expect(sceneSource).not.toContain('componentStateCanvas.value === \'mounted\' ? \'mounted\' : \'loading\'')
     expect(modelSource).not.toContain('live2dStore.onShouldUpdateView')

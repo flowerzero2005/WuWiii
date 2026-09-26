@@ -52,7 +52,7 @@ function parseNumber(value?: string) {
   if (normalized.length === 1)
     return chineseDigitMap[normalized]
 
-  const digits: Array<number | undefined> = [...normalized].map(char => chineseDigitMap[char])
+  const digits: Array<number | undefined> = Array.from(normalized, char => chineseDigitMap[char])
   if (digits.includes(undefined))
     return undefined
 

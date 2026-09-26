@@ -36,6 +36,13 @@ if (process.platform === 'win32') {
   syncBuiltinESMExports()
 }
 
+// pnpm forwards the command separator to Node. Vitest treats it as the start
+// of a positional argument list, so remove only that first separator.
+const pnpmSeparatorIndex = process.argv.indexOf('--', 2)
+if (pnpmSeparatorIndex !== -1) {
+  process.argv.splice(pnpmSeparatorIndex, 1)
+}
+
 if (!process.argv.includes('--config')) {
   process.argv.splice(2, 0, '--config', 'vitest.config.mjs')
 }

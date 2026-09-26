@@ -23,7 +23,7 @@ describe('group script editor page contract', () => {
 
   it('opens a deep-linked room directly and reloads after session initialization', () => {
     expect(source).toContain('const requestedRoomId = computed(() =>')
-    expect(source).toContain("requestedRoomId.value ? 'room' : 'template'")
+    expect(source).toContain('requestedRoomId.value ? \'room\' : \'template\'')
     expect(source).toContain('watch(requestedRoomId, (roomId) =>')
     expect(source).toContain('await loadSelectedRoomScript()')
   })
@@ -37,7 +37,7 @@ describe('group script editor page contract', () => {
     expect(source).toContain('const roomTitleDraft = ref(\'\')')
     expect(source).toContain('await chatSession.renameGroupSession(room.sessionId, title)')
     expect(source).toContain('@keydown.enter.prevent="saveRoomTitle"')
-    expect(source).toContain("setStatus(renamed ? 'success' : 'error'")
+    expect(source).toContain('setStatus(renamed ? \'success\' : \'error\'')
   })
 
   it('uses localized route metadata and contains no hard-coded Chinese UI copy', () => {

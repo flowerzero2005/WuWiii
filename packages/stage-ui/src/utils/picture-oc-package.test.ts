@@ -140,7 +140,7 @@ describe('picture OC package inspection', () => {
       'custom:wave-small': 'wave.png',
     })).toEqual([expect.objectContaining({
       id: 'custom:wave-small',
-      meaning: 'Picture OC manifest action key: wave-small',
+      meaning: '图片 OC 清单中的动作：wave-small',
       suitableWhen: [],
     })])
   })
