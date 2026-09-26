@@ -2354,7 +2354,7 @@ pages:
         description: 官方云默认使用阿里云视觉模型；自带密钥由你自己的服务商计费。
       provider-options:
         official-cloud: 呜异屋官方云（阿里云视觉）
-        aliyun: 阿里云百炼（自带密钥）
+        aliyun: 阿里云百炼
         openai-compatible: OpenAI 兼容视觉接口
         gemini: Google Gemini 原生接口
       fields:
@@ -2444,6 +2444,11 @@ pages:
       web-search:
         title: 联网搜索
         description: 为当前回复获取实时公开信息，例如 Tavily、Exa 和 Brave Search。
+      vision:
+        title: 视觉
+        description: 为对话分析图片，可使用呜异屋官方云或自行配置的服务。
+        configure: 在“视觉”模块中选择并配置此视觉服务。
+      coming-soon: 未完待续
     explained:
       chat: 文本生成模型服务来源，例如 OpenRouter, OpenAI, Ollama
       Speech: 语音（文本转语音）模型服务来源，例如 ElevenLabs, Azure Speech

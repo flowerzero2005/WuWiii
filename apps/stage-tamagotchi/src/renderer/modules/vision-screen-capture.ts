@@ -14,6 +14,18 @@ export class VisionScreenSourceTimeoutError extends Error {
   }
 }
 
+/**
+ * The selected source still exists, but Electron did not supply pixels for it
+ * after a fresh retry. This is distinct from a source that has closed.
+ */
+export class VisionScreenSourceThumbnailUnavailableError extends VisionScreenSourceUnavailableError {
+  constructor() {
+    super()
+    this.name = 'VisionScreenSourceThumbnailUnavailableError'
+    this.message = 'The selected screen or window did not provide an image. Check screen-capture permission, then select it again.'
+  }
+}
+
 function jpegData(bytes: Uint8Array) {
   let binary = ''
   for (const byte of bytes)
@@ -76,10 +88,24 @@ export function createDesktopVisionScreenCapture(
       const type = sourceId.startsWith('screen:') ? 'screen' : sourceId.startsWith('window:') ? 'window' : undefined
       if (!type)
         throw new VisionScreenSourceUnavailableError()
-      const source = (await sources(1920, 1080, [type], 'capture', captureTimeoutMs)).find(source => source.id === sourceId)
-      if (!source?.thumbnail?.length)
-        throw new VisionScreenSourceUnavailableError()
-      return { data: jpegData(source.thumbnail), mimeType: 'image/jpeg', type: 'image' }
+      let lastResult: 'missing' | 'empty-thumbnail' = 'missing'
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const source = (await sources(1920, 1080, [type], 'capture', captureTimeoutMs)).find(source => source.id === sourceId)
+          if (source?.thumbnail?.length)
+            return { data: jpegData(source.thumbnail), mimeType: 'image/jpeg', type: 'image' }
+          lastResult = source ? 'empty-thumbnail' : 'missing'
+        }
+        catch (error) {
+          // A native enumeration can fail briefly while windows change. Retry
+          // with a fresh capture, but never start a second hanging request.
+          if (error instanceof VisionScreenSourceTimeoutError || attempt === 1)
+            throw error
+        }
+      }
+      if (lastResult === 'empty-thumbnail')
+        throw new VisionScreenSourceThumbnailUnavailableError()
+      throw new VisionScreenSourceUnavailableError()
     },
     wasLastSourceListFallback: () => lastSourceListFallback,
   }

@@ -1,10 +1,11 @@
 import type { ComposerDraft, ComposerSnapshot } from '../../shared/detached-composer'
+import type { ComposerSourceAction, ComposerSourceActionName, ComposerSourceActionStatus } from '../../shared/detached-composer-events'
 
 import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot, validateComposerDraft } from '../../shared/detached-composer'
-import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSubmit } from '../../shared/detached-composer-events'
+import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
 import { useComposerPointerDrag } from './use-composer-pointer-drag'
 
 function readImage(file: File): Promise<string> {
@@ -16,6 +17,12 @@ function readImage(file: File): Promise<string> {
   })
 }
 
+export function composerSourceActionKey(action: Pick<ComposerSourceAction, 'leaseId' | 'version' | 'requestId'>) {
+  return `${action.leaseId}:${action.version}:${action.requestId}`
+}
+
+const SOURCE_ACTION_TIMEOUT_MS = 10_000
+
 /** An editor has no provider or chat runtime; it only commits acknowledged drafts. */
 export function useDetachedComposerEditor(t: (key: string) => string, imageReader = readImage) {
   const key = 'stage.chat.composer'
@@ -26,6 +33,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   const release = useElectronEventaInvoke(composerRelease)
   const dragMove = useElectronEventaInvoke(composerDragMove)
   const dragReturn = useElectronEventaInvoke(composerDragReturn)
+  const requestSourceAction = useElectronEventaInvoke(composerSourceActionRequest)
   const discardInvoke = useElectronEventaInvoke(composerDiscard)
   const state = ref<ComposerSnapshot>()
   const draft = ref<ComposerDraft>({ text: '', images: [] })
@@ -34,6 +42,9 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   const closing = ref(false)
   const error = ref('')
   const dragOverReturnTarget = ref(false)
+  const actionState = ref<Record<string, ComposerSourceActionStatus | undefined>>({})
+  const actionPending = ref<Record<string, boolean>>({})
+  const actionError = ref<Record<string, string | undefined>>({})
   let disposed = false
   let applying = false
   let revision = 0
@@ -42,6 +53,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   let dragMoveRevision = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let flushPromise: Promise<void> | undefined
+  const actionTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const busy = computed(() => !!state.value?.busy || !!state.value?.uncertain || syncing.value || closing.value)
   function receive(value: ComposerSnapshot) {
     if (disposed)
@@ -58,6 +70,31 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   }
   const offChanged = context.value.on(composerChanged, ({ body }) => body && receive(body))
   const offClose = context.value.on(composerFlushAndClose, () => void close())
+  const offSourceActionChanged = context.value.on(composerSourceActionChanged, ({ body }) => {
+    if (!body)
+      return
+    const key = composerSourceActionKey(body)
+    if (!actionPending.value[key])
+      return
+    actionState.value[key] = body
+    actionPending.value[key] = false
+    actionError.value[key] = body.error
+    const timer = actionTimers.get(key)
+    if (timer)
+      clearTimeout(timer)
+    actionTimers.delete(key)
+  })
+  const offSourceTextChanged = context.value.on(composerSourceTextChanged, ({ body }) => {
+    if (!body || !state.value || state.value.status !== 'detached' || state.value.scope.leaseId !== body.leaseId || state.value.scope.sourceGeneration !== body.sourceGeneration)
+      return
+    const text = body.text.trim()
+    if (!text)
+      return
+    draft.value = validateComposerDraft({
+      text: draft.value.text.trim() ? `${draft.value.text.trim()} ${text}` : text,
+      images: draft.value.images,
+    }, false)
+  })
   watch(() => [state.value?.scope.leaseId, state.value?.status, state.value?.uncertain], () => imageEpoch += 1, { flush: 'sync' })
   watch(draft, () => {
     if (applying)
@@ -166,6 +203,38 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       error.value = t(`${key}.sync-failed`)
     }
   }
+  async function requestAction(action: ComposerSourceActionName) {
+    if (!state.value || state.value.status !== 'detached' || closing.value || disposed)
+      return
+    const request = {
+      leaseId: state.value.scope.leaseId,
+      version: state.value.version,
+      requestId: crypto.randomUUID(),
+      action,
+    }
+    const actionKey = composerSourceActionKey(request)
+    actionPending.value[actionKey] = true
+    actionError.value[actionKey] = undefined
+    actionTimers.set(actionKey, setTimeout(() => {
+      if (actionPending.value[actionKey]) {
+        actionPending.value[actionKey] = false
+        actionError.value[actionKey] = t(`${key}.sync-failed`)
+      }
+      actionTimers.delete(actionKey)
+    }, SOURCE_ACTION_TIMEOUT_MS))
+    try {
+      await requestSourceAction(request)
+      return request.requestId
+    }
+    catch {
+      actionPending.value[actionKey] = false
+      actionError.value[actionKey] = t(`${key}.sync-failed`)
+      const timer = actionTimers.get(actionKey)
+      if (timer)
+        clearTimeout(timer)
+      actionTimers.delete(actionKey)
+    }
+  }
   const drag = useComposerPointerDrag(async (point, origin) => {
     dragMoveRevision += 1
     dragOverReturnTarget.value = false
@@ -203,8 +272,12 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
     disposed = true
     imageEpoch += 1
     clearTimeout(timer)
+    actionTimers.forEach(clearTimeout)
+    actionTimers.clear()
     offChanged()
     offClose()
+    offSourceActionChanged()
+    offSourceTextChanged()
   })
-  return { state, draft, dirty, syncing, closing, error, busy, dragOverReturnTarget, initialize, flush, send, close, addImages, discard, startDrag: drag.start, dragging: drag.dragging }
+  return { state, draft, dirty, syncing, closing, error, busy, dragOverReturnTarget, actionState, actionPending, actionError, initialize, flush, send, close, addImages, discard, requestAction, startDrag: drag.start, dragging: drag.dragging }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { VisionScreenSource } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
+import type { VisionProviderId } from '@proj-airi/stage-ui/stores/modules/vision'
 
 import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
@@ -10,9 +11,11 @@ import { Button, FieldCheckbox, FieldInput, FieldRange, FieldSelect } from '@pro
 import { storeToRefs } from 'pinia'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 const { t } = useI18n()
+const route = useRoute()
 const visionStore = useVisionStore()
 const officialPricingStore = useOfficialPricingStore()
 const officialCapabilityConsentStore = useOfficialCapabilityConsentStore()
@@ -141,6 +144,13 @@ const providerOptions = [
   { label: t('settings.pages.modules.vision.provider-options.openai-compatible'), value: 'openai-compatible' },
 ]
 
+const visionProviderIds = new Set<VisionProviderId>(['official-cloud', 'aliyun', 'gemini', 'openai-compatible'])
+watch(() => route.query.provider, (requestedProvider) => {
+  const candidate = Array.isArray(requestedProvider) ? requestedProvider[0] : requestedProvider
+  if (typeof candidate === 'string' && visionProviderIds.has(candidate as VisionProviderId))
+    provider.value = candidate as VisionProviderId
+}, { immediate: true })
+
 function setScreenshotInterval(value: number) {
   visionStore.setScreenshotIntervalSeconds(value)
 }
@@ -257,7 +267,7 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
         :description="t('settings.pages.modules.vision.enabled.description')"
       />
 
-      <template v-if="enabled">
+      <div id="provider" class="scroll-mt-24">
         <FieldSelect
           v-model="provider"
           :label="t('settings.pages.modules.vision.provider.label')"
@@ -265,7 +275,9 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
           :options="providerOptions"
           layout="stacked"
         />
+      </div>
 
+      <template v-if="enabled">
         <template v-if="provider === 'aliyun'">
           <FieldInput v-model="aliyunApiKey" type="password" :label="t('settings.pages.modules.vision.fields.aliyun-api-key')" placeholder="sk-..." />
           <FieldInput v-model="aliyunBaseUrl" :label="t('settings.pages.modules.vision.fields.base-url')" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/" />

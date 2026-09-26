@@ -10,6 +10,8 @@ import type { ChatSessionMeta } from '@proj-airi/stage-ui/types/chat-session'
 import type { SpeechDisplayTiming } from '@proj-airi/stage-ui/utils'
 import type { ChatProvider } from '@xsai-ext/providers/utils'
 
+import type { ComposerSourceAction } from '../../shared/detached-composer-events'
+import type { ComposerToolbarState } from '../../shared/detached-composer-toolbar'
 import type { ComposerSubmission } from '../modules/chat-send-lifecycle'
 import type { ChatToolIntent } from '../modules/chat-tool-bundles'
 import type { GroupSpeakerMilestone, GroupSpeakerTerminalStatus, GroupTurnRunState } from '../modules/group-turn-run-state'
@@ -18,7 +20,7 @@ import type { QuickChatPresentEvent } from '../modules/quick-chat-present'
 import ChatCleanupDialog from '@proj-airi/stage-ui/components/chat-cleanup-dialog'
 import workletUrl from '@proj-airi/stage-ui/workers/vad/process.worklet?worker&url'
 
-import { useElectronEventaInvoke, useElectronWindowResize } from '@proj-airi/electron-vueuse'
+import { useElectronEventaContext, useElectronEventaInvoke, useElectronWindowResize } from '@proj-airi/electron-vueuse'
 import { getStageProductEdition } from '@proj-airi/stage-shared'
 import { CharacterAvatarImage, ChatHistory } from '@proj-airi/stage-ui/components/chat'
 import { useManualSpeechInput } from '@proj-airi/stage-ui/composables'
@@ -90,6 +92,7 @@ import ChatSpeechSwitcher from './chat-speech-switcher.vue'
 import GroupMentionPicker from './group-mention-picker.vue'
 
 import { createDesktopFeatureManifest } from '../../shared/desktop-feature-manifest'
+import { composerSourceAction, composerSourceActionStatus, composerSourceReveal, composerSourceTextAppend } from '../../shared/detached-composer-events'
 import { electronOpenSettings } from '../../shared/eventa'
 import { useDetachedComposerSource } from '../composables/use-detached-composer'
 import { createChatAppCapabilityContext, ingestChatAppCapabilityContext } from '../modules/chat-app-capability-context'
@@ -1541,6 +1544,10 @@ const detachedComposer = useDetachedComposerSource({
     return { consumed, draft: consumed ? { text: '', images: [] } : remaining }
   },
 })
+const composerActionContext = useElectronEventaContext()
+const reportComposerSourceAction = useElectronEventaInvoke(composerSourceActionStatus)
+const appendDetachedComposerText = useElectronEventaInvoke(composerSourceTextAppend)
+const revealDetachedComposerSource = useElectronEventaInvoke(composerSourceReveal)
 watch(detachedComposer.detached, (detached) => {
   composerDetached.value = detached
 }, { immediate: true, flush: 'sync' })
@@ -1586,6 +1593,13 @@ const longTermMemoryEnabled = computed(() => Boolean(memorySettings.value?.enabl
 const innerVoiceEnabled = computed(() => Boolean(memoryAdvancedSettings.value?.enableInnerVoiceNotePrewarm))
 const voiceCallActive = computed(() => voiceCallSessionActive.value)
 const voiceCallPreparing = computed(() => !voiceCallActive.value && voiceCallStarting.value)
+watch(voiceCallActive, (active, previous) => {
+  if (active || !previous)
+    return
+  const scope = detachedComposer.getSourceActionScope()
+  if (scope)
+    void revealDetachedComposerSource({ ...scope, restore: true }).catch(() => undefined)
+})
 const voiceCallStatus = computed(() => voiceCallWaiting.value || responding.value || sending.value
   ? 'responding'
   : 'listening')
@@ -2128,10 +2142,16 @@ function getAgentChatSessionId(sessionId = activeSessionId.value) {
 }
 
 function appendTextToMessageInput(delta: string) {
-  if (isComposerReadonly())
-    return
   const text = delta.trim()
   if (!text)
+    return
+
+  const detachedScope = detachedComposer.getSourceActionScope()
+  if (detachedScope) {
+    void appendDetachedComposerText({ leaseId: detachedScope.leaseId, sourceGeneration: detachedScope.sourceGeneration, text }).catch(() => undefined)
+    return
+  }
+  if (isComposerReadonly())
     return
 
   const currentText = messageInput.value.trim()
@@ -2196,6 +2216,112 @@ const manualSpeechInput = useManualSpeechInput({
 // the microphone icon reflects the actual boolean state instead of the ref
 // object (which is always truthy).
 const { isDictating: isManualSpeechInputDictating } = manualSpeechInput
+
+function getDetachedComposerToolbarState(): ComposerToolbarState {
+  const group = !!activeGroupMeta.value
+  return {
+    dictating: isManualSpeechInputDictating.value,
+    dictationAvailable: !group && hearingConfigured.value,
+    floatingRepliesEnabled: quickChatSettings.value.floatingRepliesEnabled,
+    floatingRepliesAvailable: true,
+    imageAvailable: !group && visionEnabled.value,
+    innerVoiceEnabled: innerVoiceEnabled.value,
+    innerVoiceAvailable: !group,
+    interruptAvailable: canInterrupt.value,
+    screenCaptureAvailable: !group && visionEnabled.value && !!screenCapture,
+    settingsAvailable: true,
+    speechOutputEnabled: speechPlayback.value.speechOutputEnabled,
+    speechOutputAvailable: speechConfigured.value,
+    voiceCallActive: voiceCallActive.value,
+    voiceCallAvailable: !group && !voiceCallPreparing.value,
+    webSearchEnabled: webSearchEnabled.value,
+    webSearchAvailable: !group,
+  }
+}
+
+function sourceActionEnabled(action: ComposerSourceAction['action']) {
+  const state = getDetachedComposerToolbarState()
+  if (action === 'toggle-speech-output')
+    return state.speechOutputEnabled
+  if (action === 'toggle-web-search')
+    return state.webSearchEnabled
+  if (action === 'toggle-inner-voice')
+    return state.innerVoiceEnabled
+  if (action === 'toggle-voice-call')
+    return state.voiceCallActive
+  if (action === 'toggle-floating-replies')
+    return state.floatingRepliesEnabled
+  if (action === 'toggle-microphone')
+    return state.dictating
+  return undefined
+}
+
+async function handleDetachedComposerSourceAction(request: ComposerSourceAction) {
+  const scope = detachedComposer.getSourceActionScope()
+  if (!scope || scope.leaseId !== request.leaseId)
+    return
+
+  let error: string | undefined
+  const requiresSourceDialog = request.action === 'toggle-web-search'
+    || request.action === 'toggle-inner-voice'
+    || request.action === 'toggle-voice-call'
+    || request.action === 'toggle-microphone'
+  const opensSettings = request.action === 'open-speech-settings'
+  try {
+    if (requiresSourceDialog || opensSettings)
+      await revealDetachedComposerSource({ ...scope, restore: false })
+    if (request.action === 'toggle-speech-output') {
+      if (!speechPlayback.value.speechOutputEnabled && !await prepareSpeechEnable())
+        throw new Error(t('tamagotchi.stage.speech-control.configure-first'))
+      speechPlayback.value.speechOutputEnabled = !speechPlayback.value.speechOutputEnabled
+    }
+    else if (request.action === 'toggle-web-search') {
+      await toggleWebSearch()
+    }
+    else if (request.action === 'toggle-inner-voice') {
+      await toggleInnerVoice()
+    }
+    else if (request.action === 'toggle-voice-call') {
+      await toggleVoiceCall(true)
+    }
+    else if (request.action === 'toggle-floating-replies') {
+      quickChatSettingsStore.setFloatingRepliesEnabled(!quickChatSettings.value.floatingRepliesEnabled)
+    }
+    else if (request.action === 'toggle-microphone') {
+      await handleManualSpeechInputToggle(true)
+    }
+    else if (request.action === 'interrupt') {
+      handleInterrupt()
+    }
+    else if (request.action === 'open-speech-settings') {
+      await openSettings({ route: '/settings/modules/speech' })
+    }
+  }
+  catch (cause) {
+    error = getChatErrorMessage(cause)
+  }
+  finally {
+    // During an active call the source owns the transcript and call controls.
+    // Keep it visible until the call ends; other dialogs return to the editor.
+    if (requiresSourceDialog && (request.action !== 'toggle-voice-call' || !voiceCallActive.value))
+      await revealDetachedComposerSource({ ...scope, restore: true }).catch(() => undefined)
+  }
+
+  await reportComposerSourceAction({
+    ...request,
+    sourceGeneration: scope.sourceGeneration,
+    enabled: sourceActionEnabled(request.action),
+    error,
+    state: getDetachedComposerToolbarState(),
+  }).catch(() => undefined)
+}
+
+const offDetachedComposerSourceAction = composerActionContext.value.on(composerSourceAction, ({ body }) => {
+  if (body)
+    void handleDetachedComposerSourceAction(body)
+})
+onUnmounted(offDetachedComposerSourceAction)
+
 function composerSourceIsBusy() {
   return !isInitialized.value || manualSendPending.value || sending.value || responding.value || groupSendingForActiveSession.value || voiceCallActive.value || isManualSpeechInputDictating.value
 }
@@ -2459,6 +2585,7 @@ async function sendConfiguredChatMessage(
     modelId?: string
     onResponseReady?: () => void
     providerId?: string
+    reusePersistedUserMessage?: boolean
     sourceSurface: string
     sourceUserMessageId?: string
     targetSessionId?: string
@@ -2548,6 +2675,7 @@ async function sendConfiguredChatMessage(
       model: modelId,
       chatProvider,
       providerConfig,
+      reusePersistedUserMessage: options.reusePersistedUserMessage,
       attachments: options.attachments,
       displayAttachments: options.displayAttachments,
       disableMessageMerging: options.disableMessageMerging,
@@ -3328,6 +3456,25 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     draftCleared = true
     clearedComposerRevision = composerRevision
 
+    // Vision can take noticeably longer than a text completion. Persist the
+    // submitted turn before analysis so the user sees their text and images
+    // immediately; chat.ts reuses this exact source ID after analysis.
+    if (attachmentsToSend.length > 0) {
+      chatSession.getSessionMessages(targetSessionId).push({
+        role: 'user',
+        id: sourceUserMessageId,
+        createdAt: sourceCreatedAt,
+        content: [
+          { type: 'text', text: textToSend },
+          ...attachmentsToSend.map(attachment => ({
+            type: 'image_url' as const,
+            image_url: { url: `data:${attachment.mimeType};base64,${attachment.data}` },
+          })),
+        ],
+      })
+      await chatSession.persistSessionMessages(targetSessionId, { immediate: true })
+    }
+
     let recommendationsScheduled = false
     const scheduleDirectRecommendations = () => {
       if (recommendationsScheduled || !providerId || !modelId)
@@ -3381,6 +3528,7 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       providerId: providerId ?? undefined,
       sourceSurface: props.surface === 'widget' ? 'quick-chat' : 'chat',
       sourceUserMessageId,
+      reusePersistedUserMessage: attachmentsToSend.length > 0,
       targetSessionId,
       // The visual service is the only recipient of original image bytes.
       // Local and text-only chat providers receive its private text summary.
@@ -3604,8 +3752,8 @@ function resetVoiceCallSurface() {
   clearVoiceCallAssistantSegments()
 }
 
-async function toggleVoiceCall() {
-  if (detachedComposer.readonly.value)
+async function toggleVoiceCall(allowDetachedComposer = false) {
+  if (detachedComposer.readonly.value && !allowDetachedComposer)
     return
   if (activeGroupMeta.value)
     return
@@ -3777,8 +3925,8 @@ watch(
   },
 )
 
-async function handleManualSpeechInputToggle() {
-  if (detachedComposer.readonly.value)
+async function handleManualSpeechInputToggle(allowDetachedComposer = false) {
+  if (detachedComposer.readonly.value && !allowDetachedComposer)
     return
   if (!manualSpeechInput.isDictating.value
     && activeTranscriptionProvider.value === 'official-cloud-transcription'
@@ -4773,7 +4921,7 @@ const chatSurfaceStyle = computed(() => {
             :title="t('stage.voice-call.end')"
             :aria-label="t('stage.voice-call.end')"
             class="[-webkit-app-region:no-drag] grid size-9 shrink-0 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600"
-            @click="toggleVoiceCall"
+            @click="() => toggleVoiceCall()"
           >
             <div class="i-lucide:phone-off size-4" />
           </button>
@@ -4892,7 +5040,7 @@ const chatSurfaceStyle = computed(() => {
               :title="t('stage.voice-call.end')"
               :aria-label="t('stage.voice-call.end')"
               class="grid size-11 place-items-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/25 transition-transform active:scale-95 hover:bg-red-600"
-              @click="toggleVoiceCall"
+              @click="() => toggleVoiceCall()"
             >
               <div class="i-lucide:phone-off size-5" />
             </button>
@@ -5433,7 +5581,7 @@ const chatSurfaceStyle = computed(() => {
         <ChatHistory
           class="max-w-full min-h-0 min-w-0 flex-1 overflow-x-hidden"
           :messages="historyMessages"
-          :sending="sending || responding || groupSendingForActiveSession"
+          :sending="manualSendPending || sending || responding || groupSendingForActiveSession"
           :assistant-label="currentGroupSpeakerName ?? assistantIdentityName"
           :assistant-avatar-url="currentGroupSpeakerAvatarUrl ?? assistantIdentityAvatarUrl"
           :assistant-avatar-model-id="currentGroupSpeakerAvatarModelId ?? assistantIdentityAvatarModelId"
@@ -5688,7 +5836,7 @@ const chatSurfaceStyle = computed(() => {
               ]"
               @pointerdown.stop
               @mousedown.stop.prevent
-              @click.stop="toggleVoiceCall"
+              @click.stop="() => toggleVoiceCall()"
             >
               <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
             </button>
@@ -5746,7 +5894,7 @@ const chatSurfaceStyle = computed(() => {
               ]"
               @pointerdown.stop
               @mousedown.stop.prevent
-              @click.stop="handleManualSpeechInputToggle"
+              @click.stop="() => handleManualSpeechInputToggle()"
             >
               <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" class="size-4" />
             </button>
@@ -5798,7 +5946,7 @@ const chatSurfaceStyle = computed(() => {
               ]"
               @pointerdown.stop
               @mousedown.stop.prevent
-              @click.stop="handleManualSpeechInputToggle"
+              @click.stop="() => handleManualSpeechInputToggle()"
             >
               <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" class="size-4" />
             </button>
@@ -5824,7 +5972,7 @@ const chatSurfaceStyle = computed(() => {
         </div>
 
         <template v-else-if="!composerDetached">
-          <div class="order-2 min-w-0 flex shrink-0 items-center gap-1.5 overflow-x-auto py-1">
+          <div class="order-2 min-w-0 flex shrink-0 items-center gap-1.5 overflow-x-auto px-0.5 py-1.5">
             <GroupMentionPicker
               v-if="activeGroupMeta"
               v-model:open="groupMentionOpen"
@@ -5876,7 +6024,7 @@ const chatSurfaceStyle = computed(() => {
               :aria-pressed="voiceCallActive"
               :disabled="voiceCallPreparing"
               :class="['size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-wait disabled:opacity-70', voiceCallActive ? 'airi-overlay-control-danger' : 'airi-overlay-control-primary']"
-              @click="toggleVoiceCall"
+              @click="() => toggleVoiceCall()"
             >
               <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
             </button>
@@ -5924,7 +6072,7 @@ const chatSurfaceStyle = computed(() => {
               :title="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
               :aria-label="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
               :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', isManualSpeechInputDictating ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
-              @click="handleManualSpeechInputToggle"
+              @click="() => handleManualSpeechInputToggle()"
             >
               <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" />
             </button>
@@ -5938,7 +6086,7 @@ const chatSurfaceStyle = computed(() => {
               {{ t('stage.chat.composer.checkpoint-failed') }}
             </button>
           </div>
-          <div class="relative order-1 min-h-[3rem] w-full flex-1">
+          <div class="relative order-1 min-h-0 w-full flex-1">
             <BasicTextarea
               ref="mainChatTextareaRef"
               v-model="messageInput"
@@ -5948,7 +6096,7 @@ const chatSurfaceStyle = computed(() => {
               :readonly="detachedComposer.readonly.value"
               :autofocus="isWidgetSurface"
               :class="[
-                'ph-no-capture h-full min-h-[3rem] w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-20 font-medium',
+                'ph-no-capture h-full min-h-0 w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-20 font-medium',
                 'airi-overlay-input main-chat-textarea',
               ]"
               @compositionstart="isComposing = true"

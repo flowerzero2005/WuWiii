@@ -2,7 +2,7 @@
 import type { ChatMessage } from '../../../types/chat'
 
 import { useTheme } from '@proj-airi/ui'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import ChatMessageAvatar from './message-avatar.vue'
 
@@ -47,6 +47,7 @@ const imageUrls = computed(() => {
     return [part.image_url.url]
   })
 })
+const expandedImage = ref<string>()
 
 const containerClasses = computed(() => [
   'flex items-start gap-2',
@@ -88,16 +89,26 @@ const presentation = computed(() => resolveChatBubblePresentation(
           :content="content as string"
           class="break-words"
         />
-        <div v-if="imageUrls.length" class="mt-2 flex flex-wrap gap-2">
+        <div v-if="imageUrls.length" :class="['mt-2 grid gap-1.5', imageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2']">
           <img
             v-for="(imageUrl, index) in imageUrls"
             :key="`${index}-${imageUrl.slice(0, 48)}`"
             :src="imageUrl"
             alt="User uploaded image"
-            class="max-h-64 max-w-full rounded-lg object-contain"
+            :class="['cursor-zoom-in rounded-lg object-cover transition-opacity hover:opacity-90', imageUrls.length === 1 ? 'max-h-52 max-w-full' : 'aspect-square w-24']"
+            @click="expandedImage = imageUrl"
           >
         </div>
       </div>
     </div>
+    <button
+      v-if="expandedImage"
+      type="button"
+      class="fixed inset-0 z-100 grid cursor-zoom-out place-items-center bg-black/70 p-6"
+      aria-label="Close enlarged image"
+      @click="expandedImage = undefined"
+    >
+      <img :src="expandedImage" alt="User uploaded image" class="max-h-full max-w-full rounded-xl object-contain shadow-2xl">
+    </button>
   </div>
 </template>

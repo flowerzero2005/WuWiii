@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './speech-display-policy'
+import { resolveSegmentDisplayFallbackMs, resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './speech-display-policy'
 
 describe('speech display fallback policy', () => {
   it('always gives group chat a finite fallback while waiting for speech', () => {
@@ -41,6 +41,14 @@ describe('speech display fallback policy', () => {
       fallbackMs: 6_500,
       lateSpeechPolicy: 'text-first-drop-late',
     })).toBe(6_500)
+  })
+
+  it('does not reveal a ready TTS segment before the bounded playback-start wait', () => {
+    expect(resolveSegmentDisplayFallbackMs({
+      boundedFallbackMs: 30_000,
+      fallbackMs: 2_000,
+      lateSpeechPolicy: 'wait-for-speech',
+    })).toBe(30_000)
   })
 
   it('does not complete on intent end while a registered segment is still playing', () => {

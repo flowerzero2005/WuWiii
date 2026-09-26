@@ -411,6 +411,11 @@ pages:
     vision:
       description: Зрение
       title: Зрение
+      provider-options:
+        official-cloud: Wuwiii Cloud
+        aliyun: Alibaba Cloud Model Studio
+        gemini: Google Gemini
+        openai-compatible: Совместимый с OpenAI
     x:
       description: Просмотр и использование X / Twitter
       title: X / Twitter
@@ -442,6 +447,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: Категории провайдеров
+      vision:
+        title: Зрение
+        description: Анализирует изображения для диалога через Wuwiii Cloud или настроенного вами провайдера.
+        configure: Выберите и настройте этот визуальный провайдер в модуле «Зрение».
+      coming-soon: Скоро появится
     explained:
       chat: Провайдеры текстогенерации, напр. OpenRouter, OpenAI, Ollama.
       Speech: Провайдеры речи (TTS), напр. ElevenLabs, Azure Speech.

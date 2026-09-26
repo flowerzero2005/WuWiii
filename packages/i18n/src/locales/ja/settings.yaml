@@ -434,6 +434,11 @@ pages:
     vision:
       description: 視覚
       title: 視覚
+      provider-options:
+        official-cloud: Wuwiii Cloud
+        aliyun: Alibaba Cloud Model Studio
+        gemini: Google Gemini
+        openai-compatible: OpenAI 互換
     x:
       description: X / Twitterの閲覧と使用
       title: X / Twitter
@@ -465,6 +470,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: プロバイダーカテゴリー
+      vision:
+        title: ビジョン
+        description: Wuwiii Cloud または設定したプロバイダーで、会話用の画像を分析します。
+        configure: ビジョンモジュールでこの画像認識プロバイダーを選択・設定します。
+      coming-soon: 近日公開
     explained:
       chat: テキスト生成モデルプロバイダー。例： OpenRouter, OpenAI, Ollama。
       Speech: 音声 (テキスト読み上げ) モデルプロバイダー。例： ElevenLabs, Azure Speech。

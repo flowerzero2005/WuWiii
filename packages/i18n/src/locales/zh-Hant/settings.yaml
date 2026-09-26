@@ -417,6 +417,11 @@ pages:
     vision:
       description: 視覺
       title: 視覺
+      provider-options:
+        official-cloud: 呜異屋官方雲
+        aliyun: 阿里雲百煉
+        gemini: Google Gemini
+        openai-compatible: OpenAI 相容服務
     x:
       description: X / Twitter 的瀏覽與使用
       title: X / Twitter
@@ -448,6 +453,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: 服務來源分類
+      vision:
+        title: 視覺
+        description: 為對話分析圖片，可使用呜異屋官方雲或自行設定的服務。
+        configure: 在「視覺」模組中選擇並設定此視覺服務。
+      coming-soon: 敬請期待
     explained:
       chat: 文字生成模型服務來源，例如 OpenRouter、OpenAI、Ollama
       Speech: 語音（文字轉語音）模型服務來源，例如 ElevenLabs、Azure Speech

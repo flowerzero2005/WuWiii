@@ -421,5 +421,11 @@ export function useDetachedComposerSource(input: {
     if (!drag.consumeClick())
       return detached.value ? requestReturn() : detach()
   }
-  return { detach, detached, readonly, detaching, recoverable, recoveryUncertain, failed, checkpointFailed, checkpoint, sendInline, requestReturn, viewRecovery, startDrag: drag.start, dragging: drag.dragging, clickDetach }
+  function getSourceActionScope() {
+    const value = snapshot.value
+    if (!value || !matches(value) || value.status !== 'detached')
+      return undefined
+    return { leaseId: value.scope.leaseId, version: value.version, sourceGeneration: value.scope.sourceGeneration }
+  }
+  return { detach, detached, readonly, detaching, recoverable, recoveryUncertain, failed, checkpointFailed, checkpoint, sendInline, requestReturn, viewRecovery, getSourceActionScope, startDrag: drag.start, dragging: drag.dragging, clickDetach }
 }

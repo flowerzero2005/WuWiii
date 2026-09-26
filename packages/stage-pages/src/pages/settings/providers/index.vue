@@ -3,6 +3,7 @@ import { RippleGrid } from '@proj-airi/stage-ui/components/layouts'
 import { IconStatusItem } from '@proj-airi/stage-ui/components/menu'
 import { useAnalytics, useScrollToHash } from '@proj-airi/stage-ui/composables'
 import { useRippleGridState } from '@proj-airi/stage-ui/composables/use-ripple-grid-state'
+import { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
@@ -12,6 +13,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const { t } = useI18n()
 const providersStore = useProvidersStore()
+const visionStore = useVisionStore()
 void providersStore.startRuntimeValidation()
 const { lastClickedIndex, setLastClickedIndex } = useRippleGridState()
 const { trackProviderClick } = useAnalytics()
@@ -22,6 +24,42 @@ const {
   allAudioTranscriptionProvidersMetadata,
   allWebSearchProvidersMetadata,
 } = storeToRefs(providersStore)
+const {
+  aliyunApiKey,
+  aliyunBaseUrl,
+  aliyunModel,
+  enabled: visionEnabled,
+  geminiApiKey,
+  geminiBaseUrl,
+  geminiModel,
+  openAICompatibleBaseUrl,
+  openAICompatibleModel,
+  provider: visionProvider,
+} = storeToRefs(visionStore)
+
+const visionProvidersMetadata = computed(() => {
+  const configured = (id: 'official-cloud' | 'aliyun' | 'gemini' | 'openai-compatible') => {
+    if (!visionEnabled.value || visionProvider.value !== id)
+      return false
+    if (id === 'aliyun')
+      return Boolean(aliyunApiKey.value.trim() && aliyunBaseUrl.value.trim() && aliyunModel.value.trim())
+    if (id === 'gemini')
+      return Boolean(geminiApiKey.value.trim() && geminiBaseUrl.value.trim() && geminiModel.value.trim())
+    if (id === 'openai-compatible')
+      return Boolean(openAICompatibleBaseUrl.value.trim() && openAICompatibleModel.value.trim())
+    return true
+  }
+  return (['official-cloud', 'aliyun', 'gemini', 'openai-compatible'] as const).map(id => ({
+    id,
+    category: 'vision',
+    icon: id === 'official-cloud' ? 'i-solar:cloud-bold-duotone' : id === 'aliyun' ? 'i-solar:server-square-bold-duotone' : id === 'gemini' ? 'i-lobe-icons:gemini-color' : 'i-lobe-icons:openai',
+    iconColor: id === 'official-cloud' || id === 'aliyun' ? undefined : id === 'gemini' ? 'i-lobe-icons:gemini-color' : 'i-lobe-icons:openai',
+    iconImage: undefined,
+    localizedName: t(`settings.pages.modules.vision.provider-options.${id}`),
+    localizedDescription: t('settings.pages.providers.categories.vision.configure'),
+    configured: configured(id),
+  }))
+})
 
 const providerBlocksConfig = [
   {
@@ -52,6 +90,13 @@ const providerBlocksConfig = [
     descriptionKey: 'settings.pages.providers.categories.web-search.description',
     providersRef: allWebSearchProvidersMetadata,
   },
+  {
+    id: 'vision',
+    icon: 'i-solar:gallery-bold-duotone',
+    titleKey: 'settings.pages.providers.categories.vision.title',
+    descriptionKey: 'settings.pages.providers.categories.vision.description',
+    providersRef: visionProvidersMetadata,
+  },
 ]
 
 const providerBlocks = computed(() => {
@@ -63,6 +108,9 @@ const providerBlocks = computed(() => {
     description: t(block.descriptionKey),
     providers: block.providersRef.value.map(provider => ({
       ...provider,
+      to: block.id === 'vision'
+        ? `/settings/modules/vision?provider=${encodeURIComponent(provider.id)}#provider`
+        : `/settings/providers/${provider.category}/${provider.id}`,
       renderIndex: globalIndex++,
     })),
   }))
@@ -102,7 +150,7 @@ useScrollToHash(() => route.hash, {
     <nav
       :aria-label="t('settings.pages.providers.categories.navigation')"
       :class="[
-        'sticky top-2 z-20 grid grid-cols-2 gap-1 rounded-lg border p-1 shadow-sm backdrop-blur-md sm:grid-cols-4',
+        'sticky top-2 z-20 grid grid-cols-2 gap-1 rounded-lg border p-1 shadow-sm backdrop-blur-md md:grid-cols-3',
         'border-[var(--airi-border-subtle)] bg-[var(--airi-surface-panel)]/92',
       ]"
     >
@@ -120,6 +168,19 @@ useScrollToHash(() => route.hash, {
         <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ block.title }}</span>
         <span class="shrink-0 text-xs text-[var(--airi-text-muted)]">{{ block.providers.length }}</span>
       </button>
+      <button
+        type="button"
+        disabled
+        :class="[
+          'min-w-0 cursor-not-allowed rounded-md px-2 py-2 text-left opacity-55',
+          'flex items-center gap-2',
+        ]"
+      >
+        <span class="i-solar:hourglass-line-duotone size-4 shrink-0 text-[var(--airi-text-muted)]" />
+        <span class="min-w-0 flex-1 truncate text-sm text-[var(--airi-text-muted)] font-medium">
+          {{ t('settings.pages.providers.categories.coming-soon') }}
+        </span>
+      </button>
     </nav>
 
     <RippleGrid
@@ -127,6 +188,7 @@ useScrollToHash(() => route.hash, {
       :get-items="block => block.providers"
       :columns="{ default: 1, sm: 2, xl: 3 }"
       :origin-index="lastClickedIndex"
+      :delay-per-unit="0"
       @item-click="({ globalIndex }) => setLastClickedIndex(globalIndex)"
     >
       <template #header="{ section: block }">
@@ -152,7 +214,7 @@ useScrollToHash(() => route.hash, {
           :icon="provider.icon"
           :icon-color="provider.iconColor"
           :icon-image="provider.iconImage"
-          :to="`/settings/providers/${provider.category}/${provider.id}`"
+          :to="provider.to"
           :configured="provider.configured"
           @click="trackProviderClick(provider.id, provider.category)"
         />

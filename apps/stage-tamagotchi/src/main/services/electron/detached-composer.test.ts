@@ -2,7 +2,7 @@ import type { ComposerDetach, ComposerRecoveryData } from '../../../shared/detac
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { composerChanged, composerDetach, composerDiscard, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReveal, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { createDetachedComposerService } from './detached-composer'
 
 const mocks = vi.hoisted(() => ({
@@ -33,7 +33,7 @@ vi.mock('../../windows/shared/window', () => ({
 function window(id: number, route = '/chat') {
   const hooks = new Map<string, (...args: any[]) => void>()
   const webHooks = new Map<string, (...args: any[]) => void>()
-  return { hooks, webHooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, getZoomFactor: () => 1, on: (event: string, handler: (...args: any[]) => void) => webHooks.set(event, handler), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: vi.fn(), isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 100, y: 100, width: 800, height: 600 }), getBounds: () => ({ x: 100, y: 100, width: 640, height: 430 }), setPosition: vi.fn(), show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
+  return { hooks, webHooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, getZoomFactor: () => 1, on: (event: string, handler: (...args: any[]) => void) => webHooks.set(event, handler), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: vi.fn(), isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 100, y: 100, width: 800, height: 600 }), getBounds: () => ({ x: 100, y: 100, width: 640, height: 430 }), setPosition: vi.fn(), setAlwaysOnTop: vi.fn(), moveTop: vi.fn(), show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
 }
 const input: ComposerDetach = { userScope: 'account-a', sessionId: 'room-a', surface: 'page', sourceGeneration: 'source-a', group: false, draft: { text: 'Hello', images: [] } }
 let durable: ComposerRecoveryData
@@ -57,6 +57,7 @@ describe('composer main sender and close guards', () => {
     persistence.save.mockImplementation(async (data) => {
       durable = structuredClone(data)
     })
+    mocks.cursor = { x: 200, y: 200 }
     mocks.windows = [window(1), window(2, '/settings')]
     mocks.open.mockImplementation(async (onCreated) => {
       const editor = window(3, '/composer')
@@ -96,6 +97,44 @@ describe('composer main sender and close guards', () => {
     await expect(result).resolves.toMatchObject({ status: 'detached' })
   })
 
+  it('keeps the composer below settings until the user focuses it again', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const detached = await invoke(1, composerDetach, input)
+    await invoke(1, composerSourceReveal, { leaseId: detached.scope.leaseId, sourceGeneration: input.sourceGeneration, restore: false })
+    expect(mocks.windows[2].setAlwaysOnTop).toHaveBeenCalledWith(false)
+    mocks.windows[2].hooks.get('focus')!()
+    expect(mocks.windows[2].setAlwaysOnTop).toHaveBeenLastCalledWith(true, 'screen-saver', 2)
+  })
+
+  it('forwards only the current editor action to its bound source and returns the source status', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const detached = await invoke(1, composerDetach, input)
+    const action = { leaseId: detached.scope.leaseId, version: detached.version, requestId: 'action-a', action: 'toggle-microphone' as const }
+    await invoke(3, composerSourceActionRequest, action)
+    expect(mocks.contexts.get(1).emit).toHaveBeenCalledWith(composerSourceAction, action)
+    await invoke(1, composerSourceActionStatus, { ...action, sourceGeneration: input.sourceGeneration, enabled: true })
+    expect(mocks.contexts.get(3).emit).toHaveBeenCalledWith(composerSourceActionChanged, { ...action, sourceGeneration: input.sourceGeneration, enabled: true })
+    await expect(invoke(2, composerSourceActionRequest, action)).rejects.toThrow('editing window')
+    await expect(invoke(1, composerSourceActionStatus, { ...action, sourceGeneration: input.sourceGeneration })).rejects.toThrow('no longer current')
+  })
+
+  it('accepts an action acknowledgement after an editor draft revision advances on the same lease', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const detached = await invoke(1, composerDetach, input)
+    const action = { leaseId: detached.scope.leaseId, version: detached.version, requestId: 'action-after-edit', action: 'toggle-web-search' as const }
+    await invoke(3, composerSourceActionRequest, action)
+    await invoke(3, composerEdit, { leaseId: detached.scope.leaseId, version: detached.version, draft: { text: 'Edited while the source asked for consent.', images: [] } })
+    await expect(invoke(1, composerSourceActionStatus, {
+      ...action,
+      sourceGeneration: input.sourceGeneration,
+      enabled: true,
+    })).resolves.toBeUndefined()
+    expect(mocks.contexts.get(3).emit).toHaveBeenCalledWith(composerSourceActionChanged, expect.objectContaining({ requestId: action.requestId, version: action.version }))
+  })
+
   it('allows only the active editor to edit, submit or release its owner lease', async () => {
     const service = createService()
     const detached = await invoke(1, composerDetach, input)
@@ -120,6 +159,7 @@ describe('composer main sender and close guards', () => {
     expect(service.read()!.status).toBe('detached')
     await invoke(3, composerRelease, { leaseId: detached.scope.leaseId, version: detached.version })
     expect(service.read()!.status).toBe('returned')
+    expect(mocks.windows[0].focus).toHaveBeenCalledOnce()
     expect(mocks.windows[2].close).toHaveBeenCalledOnce()
   })
 
@@ -187,33 +227,35 @@ describe('composer main sender and close guards', () => {
     expect(durable.drafts).toEqual([])
   })
 
-  it('allows drag return only over the live source composer region and verifies the actual cursor', async () => {
+  it('allows drag return anywhere in the live source conversation and verifies the actual cursor', async () => {
     createService()
     await invoke(1, composerSourceRead, input)
     await invoke(1, composerSourceRegion, { sourceGeneration: input.sourceGeneration, region: { rect: { x: 20, y: 450, width: 600, height: 100 }, viewport: { width: 800, height: 600 } } })
     const detached = await invoke(1, composerDetach, input)
     const version = { leaseId: detached.scope.leaseId, version: detached.version }
     mocks.cursor = { x: 300, y: 300 }
-    expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(false)
+    expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(true)
     mocks.cursor = { x: 300, y: 600 }
     expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(true)
     expect(await invoke(3, composerDragReturn, { ...version, point: { x: 340, y: 600 } })).toBe(true)
-    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 900, y: 600 } })).rejects.toThrow('cursor position')
-    await expect(invoke(1, composerDragDetach, { ...input, point: mocks.cursor })).rejects.toThrow('outside the source window')
+    mocks.cursor = { x: 950, y: 600 }
+    expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(false)
+    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 850, y: 600 } })).rejects.toThrow('cursor position')
   })
 
   it('moves the detached editor with its drag handle before verifying the drop', async () => {
     createService()
     const detached = await invoke(1, composerDetach, input)
 
-    await invoke(3, composerDragMove, {
+    expect(await invoke(3, composerDragMove, {
       leaseId: detached.scope.leaseId,
       version: detached.version,
       origin: { x: 200, y: 200 },
       point: { x: 600, y: 500 },
-    })
+    })).toBe(true)
 
     expect(mocks.windows[2].setPosition).toHaveBeenCalledWith(500, 400)
+    mocks.cursor = { x: 600, y: 500 }
     await invoke(3, composerDragReturn, {
       leaseId: detached.scope.leaseId,
       version: detached.version,

@@ -411,6 +411,11 @@ pages:
     vision:
       description: Visión
       title: Visión
+      provider-options:
+        official-cloud: Wuwiii Cloud
+        aliyun: Alibaba Cloud Model Studio
+        gemini: Google Gemini
+        openai-compatible: Compatible con OpenAI
     x:
       description: Navegación y uso de X / Twitter
       title: X / Twitter
@@ -442,6 +447,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: Categorías de proveedores
+      vision:
+        title: Visión
+        description: Analiza imágenes para la conversación mediante Wuwiii Cloud o un proveedor configurado por ti.
+        configure: Elige y configura este proveedor visual en el módulo Visión.
+      coming-soon: Próximamente
     explained:
       chat: Proveedores de modelos de generación de texto. ej. OpenRouter, OpenAI, Ollama.
       Speech: Proveedores de modelos de habla (texto a voz). ej. ElevenLabs, Azure Speech.

@@ -411,6 +411,11 @@ pages:
     vision:
       description: Thị giác
       title: Thị giác
+      provider-options:
+        official-cloud: Wuwiii Cloud
+        aliyun: Alibaba Cloud Model Studio
+        gemini: Google Gemini
+        openai-compatible: Tương thích OpenAI
     x:
       description: Sử Dụng Twitter
       title: X / Twitter
@@ -442,6 +447,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: Danh mục nhà cung cấp
+      vision:
+        title: Thị giác
+        description: Phân tích hình ảnh cho cuộc trò chuyện bằng Wuwiii Cloud hoặc nhà cung cấp bạn đã cấu hình.
+        configure: Chọn và cấu hình nhà cung cấp thị giác này trong mô-đun Thị giác.
+      coming-soon: Sắp ra mắt
     explained:
       chat: 'Nhà cung cấp mô hình tạo văn bản. Ví dụ: OpenRouter, OpenAI, Ollama.'
       Speech: 'Nhà cung cấp mô hình giọng nói (text-to-speech). Ví dụ: ElevenLabs, Azure Speech.'

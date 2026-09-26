@@ -1,7 +1,29 @@
 import type { ComposerDetach, ComposerDraft, ComposerSnapshot, ComposerSourceDraft, ComposerVersion } from './detached-composer'
 import type { ComposerClientRegion, ComposerPoint } from './detached-composer-geometry'
+import type { ComposerToolbarState } from './detached-composer-toolbar'
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
+
+export const composerSourceActionNames = ['get-toolbar-state', 'toggle-speech-output', 'toggle-web-search', 'toggle-inner-voice', 'toggle-voice-call', 'toggle-floating-replies', 'interrupt', 'open-screen-capture', 'toggle-microphone', 'open-speech-settings'] as const
+export type ComposerSourceActionName = typeof composerSourceActionNames[number]
+export interface ComposerSourceAction extends ComposerVersion {
+  requestId: string
+  action: ComposerSourceActionName
+}
+export interface ComposerSourceActionStatus extends ComposerSourceAction {
+  sourceGeneration: string
+  enabled?: boolean
+  error?: string
+  state?: ComposerToolbarState
+}
+export interface ComposerSourceTextAppend {
+  leaseId: string
+  sourceGeneration: string
+  text: string
+}
+export interface ComposerSourceTextChanged extends ComposerSourceTextAppend {
+  version: number
+}
 
 export const composerDetach = defineInvokeEventa<ComposerSnapshot, ComposerDetach>('eventa:invoke:composer:detach')
 export const composerRead = defineInvokeEventa<ComposerSnapshot | undefined>('eventa:invoke:composer:read')
@@ -27,3 +49,12 @@ export const composerFlushSource = defineEventa<{ sourceGeneration: string }>('e
 export const composerSourceCloseAck = defineInvokeEventa<void, { sourceGeneration: string }>('eventa:invoke:composer:source-close-ack')
 export const composerDraftDiscarded = defineEventa<{ userScope: string, sessionId: string, surface: 'page' | 'widget', version: number }>('eventa:event:composer:draft-discarded')
 export const composerSourceSubmit = defineInvokeEventa<ComposerSnapshot, ComposerSourceDraft & { commandId: string }>('eventa:invoke:composer:source-submit')
+export const composerSourceActionRequest = defineInvokeEventa<void, ComposerSourceAction>('eventa:invoke:composer:source-action-request')
+export const composerSourceAction = defineEventa<ComposerSourceAction>('eventa:event:composer:source-action')
+export const composerSourceActionStatus = defineInvokeEventa<void, ComposerSourceActionStatus>('eventa:invoke:composer:source-action-status')
+export const composerSourceActionChanged = defineEventa<ComposerSourceActionStatus>('eventa:event:composer:source-action-changed')
+/** A trusted source-owned speech recognizer appends confirmed text to the detached draft. */
+export const composerSourceTextAppend = defineInvokeEventa<void, ComposerSourceTextAppend>('eventa:invoke:composer:source-text-append')
+export const composerSourceTextChanged = defineEventa<ComposerSourceTextChanged>('eventa:event:composer:source-text-changed')
+/** Temporarily reveal the source UI for consent dialogs or settings opened from a detached editor. */
+export const composerSourceReveal = defineInvokeEventa<void, ComposerVersion & { sourceGeneration: string, restore: boolean }>('eventa:invoke:composer:source-reveal')

@@ -411,6 +411,11 @@ pages:
     vision:
       description: 시각
       title: 시각
+      provider-options:
+        official-cloud: Wuwiii Cloud
+        aliyun: Alibaba Cloud Model Studio
+        gemini: Google Gemini
+        openai-compatible: OpenAI 호환
     x:
       description: X / 트위터 탐색 및 사용량
       title: X / 트위터
@@ -442,6 +447,13 @@ pages:
         restarted: >-
           MCP servers restarted. Started {started}, failed {failed}, skipped {skipped}
   providers:
+    categories:
+      navigation: 공급자 범주
+      vision:
+        title: 비전
+        description: Wuwiii Cloud 또는 직접 구성한 공급자로 대화의 이미지를 분석합니다.
+        configure: 비전 모듈에서 이 이미지 분석 공급자를 선택하고 구성하세요.
+      coming-soon: 준비 중
     explained:
       chat: '텍스트 생성 모델 제공자를 구성합니다. (예시: OpenRouter, OpenAI, Ollama)'
       Speech: '음성(TTS) 모델 제공자를 구성합니다. (예시: ElevenLabs, Azure Speech)'

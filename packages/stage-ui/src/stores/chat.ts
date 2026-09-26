@@ -69,7 +69,7 @@ import { createReadableFinalText, createReadableSpeechText } from './chat/readab
 import { useReplyFeedbackStore } from './chat/reply-feedback'
 import { useReplyFeedbackReflectionStore } from './chat/reply-feedback-reflection'
 import { useChatSessionStore } from './chat/session-store'
-import { resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './chat/speech-display-policy'
+import { resolveSegmentDisplayFallbackMs, resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './chat/speech-display-policy'
 import { useChatStreamStore } from './chat/stream-store'
 import { createChatTurnContext } from './chat/turn-context'
 import { finalizePendingAssistantDisplayState } from './chat/turn-display-state'
@@ -2264,7 +2264,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           // NOTICE: 群聊不再走整段提前显示兜底（fallbackMs=6.5s 到点 finish→整段直显）：
           // 提前显示会让回合提前完成、把还没开播的语音整条打断（"语音完全不行 + 文字
           // 提前出现"的直接元凶）。群聊文字必须等 playback-start；语音确认失败走
-          // intent-cancel→finish，事件静默断链由 20s 空闲 guard 兜底。
+          // intent-cancel→finish，事件静默断链由 30s 空闲 guard 兜底。
           if (groupRuntime)
             return
 
@@ -2347,20 +2347,21 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           segmentDisplayFallbackTimers.clear()
         }
 
-        // NOTICE: playback-start 事件断链时（跨窗口广播丢失），显示会一直阻塞到
-        // intent-end guard 兜底（约 8 秒+），用户感知为"回复延迟几秒才出现"。
-        // 降级：TTS 结果到达后 2 秒仍无对应 playback-start，按本地时钟直接显示该段，
-        // 并补齐 playbackEnded（start 都没到，end 更不会到），让回合及时完成。
+        // A TTS result is not a playback-start. Do not reveal a slow segment
+        // early; only the bounded speech-start policy or an explicit
+        // text-first preference may release it without playback.
         const scheduleSegmentDisplayFallback = (event: SpeechDisplaySyncSegmentEvent) => {
           if (trigger !== 'playback-start' || completed || displayedSegmentIds.has(event.segmentId) || segmentDisplayFallbackTimers.has(event.segmentId))
             return
 
-          // NOTICE: 2s 段兜底只为 1v1 流式多段救场（playback-start 跨窗口断链时避免
-          // 显示长时间阻塞）。群聊文字必须等语音开播（用户定调），任何段都不允许
-          // 2s 抢跑——streaming 多句时下一句的 playback-start 要等上一句播完，
-          // 2s 必然误触发；群聊统一跳过，断链由 20s 空闲 guard 兜底。
           if (groupRuntime || !allowTextFirstFallback)
             return
+
+          const fallbackMs = resolveSegmentDisplayFallbackMs({
+            boundedFallbackMs: 30_000,
+            fallbackMs: settings.displaySyncFallbackMs,
+            lateSpeechPolicy: settings.displaySyncLateSpeechPolicy,
+          })
 
           segmentDisplayFallbackTimers.set(event.segmentId, setTimeout(() => {
             segmentDisplayFallbackTimers.delete(event.segmentId)
@@ -2376,7 +2377,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
               appendSyncedSpeechText(event.text, { durationMs: event.durationMs })
               maybeComplete()
             })
-          }, 2000))
+          }, fallbackMs))
         }
 
         disposeEventListener = speechDisplaySyncStore.onEvent((event) => {
@@ -2470,10 +2471,10 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           trigger: 'playback-start',
         })
         // TTS is optional. A missing host/provider must not leave either 1v1
-        // or group text behind a 30-second "thinking" bubble. Eight seconds
-        // still gives normal whole-reply synthesis time to establish its real
-        // playback clock, then hands display back to the ordinary typewriter.
-        const playbackFallbackMs = 8_000
+        // or group text behind a 30-second "thinking" bubble. This bounded
+        // window gives slow synthesis time to establish its real playback
+        // clock, then hands display back to the ordinary typewriter.
+        const playbackFallbackMs = 30_000
         // A normal direct reply waits for the real playback-start clock. The
         // configured short grace period is opt-in via text-first-drop-late;
         // otherwise use the bounded recovery window for a lost/failed
@@ -2536,11 +2537,8 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
             return { ...timing, displayDelayMs: 0, wholeReplyTimeline: true }
           }
 
-          // NOTICE: 群聊文字必须等语音真正开播（用户定调）。宽限 60s（用户确认"宽限一分钟"）：
-          // 只覆盖 whole 长文本合成慢；语音正常时 playback-start 先到、兜底不触发。
-          // 等待期间每 15s 续期回合看门狗，防止 30s 无进展误杀。
-          // Use the user's configured fallback instead of holding a group
-          // speaker behind a fixed one-minute wait when TTS is unavailable.
+          // NOTICE: 群聊文字等待真实 playback-start；没有事件时使用用户配置的
+          // 有界宽限。等待期间每 15s 续期回合看门狗，防止其把正常合成误判为停滞。
           const GROUP_SPEECH_START_GRACE_MS = Math.max(1000, settings.displaySyncFallbackMs)
           let groupGraceKeepalive: ReturnType<typeof setInterval> | undefined
           const event = await (async () => {
@@ -3416,9 +3414,13 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
             // them. Preserve image data in local history for the user, while
             // keeping it out of later text-model requests and cloud uploads.
             if (rawMessage.role === 'user' && Array.isArray(rawMessage.content)) {
+              const hasImage = rawMessage.content.some(part => part.type === 'image_url')
               return {
                 ...rawMessage,
-                content: rawMessage.content.filter(part => part.type === 'text'),
+                content: [
+                  ...rawMessage.content.filter(part => part.type === 'text'),
+                  ...(hasImage ? [{ type: 'text' as const, text: '[图片]' }] : []),
+                ],
               }
             }
 
@@ -4561,12 +4563,13 @@ ${contextTexts}
     targetSessionId?: string,
   ) {
     const sessionId = targetSessionId || activeSessionId.value
-    if (!options.hiddenUserMessage && !options.personaRuntime && !options.reusePersistedUserMessage && options.sourceUserMessageId) {
+    if (!options.hiddenUserMessage && !options.personaRuntime && options.sourceUserMessageId) {
       const sessionMessages = chatSession.getSessionMessages(sessionId)
       const accepted = acceptedUserMessageSourceIds.get(sessionId) ?? new Set<string>()
       acceptedUserMessageSourceIds.set(sessionId, accepted)
       if (accepted.has(options.sourceUserMessageId)
-        || sessionMessages.some(message => message.role === 'user' && message.id === options.sourceUserMessageId)) {
+        || (!options.reusePersistedUserMessage
+          && sessionMessages.some(message => message.role === 'user' && message.id === options.sourceUserMessageId))) {
         return
       }
       accepted.add(options.sourceUserMessageId)
@@ -4630,7 +4633,7 @@ ${contextTexts}
       const advancedSettings = useMemoryAdvancedSettingsStore()
 
       // 如果开启了消息合并功能
-      if (!options.hiddenUserMessage && !options.disableMessageMerging && advancedSettings?.settings?.enableMessageMerging) {
+      if (!options.hiddenUserMessage && !options.disableMessageMerging && !options.reusePersistedUserMessage && advancedSettings?.settings?.enableMessageMerging) {
         // 将新消息添加到待处理队列
         const existing = pendingMerges.get(sessionId)
         const state: PendingMergeState = existing && existing.generation === generation

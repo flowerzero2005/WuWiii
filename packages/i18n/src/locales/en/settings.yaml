@@ -2457,6 +2457,11 @@ pages:
       web-search:
         title: Web search
         description: Fetches current public information for replies, including Tavily, Exa, and Brave Search.
+      vision:
+        title: Vision
+        description: Analyzes images for the conversation, using Wuwiii Cloud or a provider you configure.
+        configure: Choose and configure this visual provider in the Vision module.
+      coming-soon: Coming soon
     explained:
       chat: Text generation model providers. e.g. OpenRouter, OpenAI, Ollama.
       Speech: Speech (text-to-speech) model providers. e.g. ElevenLabs, Azure Speech.

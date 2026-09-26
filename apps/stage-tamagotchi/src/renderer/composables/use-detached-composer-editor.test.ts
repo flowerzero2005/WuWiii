@@ -4,8 +4,8 @@ import type { ComposerPoint } from '../../shared/detached-composer-geometry'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 
-import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSubmit } from '../../shared/detached-composer-events'
-import { useDetachedComposerEditor } from './use-detached-composer-editor'
+import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
+import { composerSourceActionKey, useDetachedComposerEditor } from './use-detached-composer-editor'
 
 const mocks = vi.hoisted(() => ({ handlers: new Map<unknown, (event: { body?: ComposerSnapshot }) => void>(), invokes: new Map<unknown, ReturnType<typeof vi.fn>>(), drop: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => Promise<void>), move: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => void) }))
 vi.mock('./use-composer-pointer-drag', () => ({ useComposerPointerDrag: (drop: (point: ComposerPoint, origin: ComposerPoint) => Promise<void>, options?: { move?: (point: ComposerPoint, origin: ComposerPoint) => void }) => {
@@ -31,7 +31,7 @@ describe('detached editor close and image lifecycle', () => {
   beforeEach(() => {
     mocks.handlers.clear()
     mocks.invokes.clear()
-    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragMove, composerDragReturn])
+    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragMove, composerDragReturn, composerSourceActionRequest])
       mocks.invokes.set(event, vi.fn(async () => undefined))
     mocks.invokes.get(composerRead)!.mockResolvedValue(structuredClone(initial))
   })
@@ -141,5 +141,51 @@ describe('detached editor close and image lifecycle', () => {
     expect(item.draft.value.text).toBe('Original')
     expect(item.error.value).toBe('stage.chat.composer.sync-failed')
     expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
+  })
+
+  it('tracks a source action by its lease, version and request id until the source confirms it', async () => {
+    const item = editor()
+    await item.initialize()
+    const requestId = await item.requestAction('toggle-microphone')
+    expect(requestId).toBeTypeOf('string')
+    const request = mocks.invokes.get(composerSourceActionRequest)!.mock.calls[0][0]
+    const actionKey = composerSourceActionKey(request)
+    expect(item.actionPending.value[actionKey]).toBe(true)
+    mocks.handlers.get(composerSourceActionChanged)!({ body: { ...request, sourceGeneration: 'source-a', enabled: true } })
+    expect(item.actionPending.value[actionKey]).toBe(false)
+    expect(item.actionError.value[actionKey]).toBeUndefined()
+    expect(item.actionState.value[actionKey]).toMatchObject({ enabled: true, action: 'toggle-microphone' })
+  })
+
+  it('keeps an acknowledged source action error for the detached toolbar to show', async () => {
+    const item = editor()
+    await item.initialize()
+    await item.requestAction('toggle-web-search')
+    const request = mocks.invokes.get(composerSourceActionRequest)!.mock.calls[0][0]
+    const actionKey = composerSourceActionKey(request)
+    mocks.handlers.get(composerSourceActionChanged)!({ body: { ...request, sourceGeneration: 'source-a', error: 'Consent was not accepted.' } })
+    expect(item.actionPending.value[actionKey]).toBe(false)
+    expect(item.actionError.value[actionKey]).toBe('Consent was not accepted.')
+  })
+
+  it('accepts a verified dictation append after the editor snapshot version advanced', async () => {
+    const item = editor()
+    await item.initialize()
+    mocks.handlers.get(composerSourceTextChanged)!({
+      body: { leaseId: 'lease-a', sourceGeneration: 'source-a', version: 99, text: ' dictated sentence ' },
+    } as never)
+    expect(item.draft.value.text).toBe('Original dictated sentence')
+  })
+
+  it('marks only the matching source action as failed when forwarding is rejected', async () => {
+    mocks.invokes.get(composerSourceActionRequest)!.mockRejectedValueOnce(new Error('Source closed.'))
+    const item = editor()
+    await item.initialize()
+    await item.requestAction('toggle-web-search')
+    const request = mocks.invokes.get(composerSourceActionRequest)!.mock.calls[0][0]
+    const actionKey = composerSourceActionKey(request)
+    expect(item.actionPending.value[actionKey]).toBe(false)
+    expect(item.actionError.value[actionKey]).toBe('stage.chat.composer.sync-failed')
+    expect(item.actionState.value[actionKey]).toBeUndefined()
   })
 })

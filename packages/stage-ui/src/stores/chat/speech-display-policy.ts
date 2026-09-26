@@ -27,6 +27,17 @@ export function resolveSpeechDisplayStartTimeoutMs(input: {
   return Math.max(1000, input.boundedFallbackMs)
 }
 
+/**
+ * A TTS result is not proof that playback has started. Keep its segment on
+ * the same bounded clock as the whole reply unless text-first was selected. */
+export function resolveSegmentDisplayFallbackMs(input: {
+  boundedFallbackMs: number
+  fallbackMs: number
+  lateSpeechPolicy: string
+}) {
+  return resolveSpeechDisplayStartTimeoutMs(input)
+}
+
 /** Intent completion closes synthesis; queued audio may still be playing. */
 export function shouldCompleteSpeechDisplay(input: {
   displayedSegmentCount: number

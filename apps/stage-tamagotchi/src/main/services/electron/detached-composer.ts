@@ -8,7 +8,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow as ElectronWindow, screen } from 'electron'
 
 import { createComposerState, validateComposerScope } from '../../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionNames, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReveal, composerSourceSubmit, composerSourceTextAppend, composerSourceTextChanged, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { composerContainsPoint, composerScreenRegion } from '../../../shared/detached-composer-geometry'
 import { createDetachedComposerWindow } from '../../windows/composer'
 import { createWindowEventaContext, isIpcEventFromWindow } from '../../windows/shared/window'
@@ -16,6 +16,8 @@ import { createComposerPersistence } from './detached-composer-persistence'
 
 const CURSOR_POINT_TOLERANCE_PX = 64
 const RETURN_TARGET_REGION_MAX_AGE_MS = 2_500
+const SOURCE_ACTION_TIMEOUT_MS = 10_000
+const SOURCE_ACTION_MAX_PENDING = 32
 
 /** Register before creating renderer windows; every sender is verified in main. */
 export function createDetachedComposerService(persistence: ComposerPersistence = createComposerPersistence(app.getPath('userData'))) {
@@ -30,6 +32,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
   let queue = Promise.resolve()
   let editorDrag: { leaseId: string, version: number, origin: ComposerPoint, bounds: Rectangle } | undefined
   let finishedEditorDrag: { leaseId: string, version: number, origin: ComposerPoint, at: number } | undefined
+  const sourceActions = new Map<string, { leaseId: string, version: number, sourceWebContentsId: number, sourceGeneration: string, action: string, at: number }>()
   const bindings = new Map<number, Omit<ComposerDetach, 'draft' | 'recover'>>()
   const regions = new Map<number, { generation: string, region: ComposerClientRegion, at: number }>()
   const sourceCloseAllowed = new Set<number>()
@@ -94,6 +97,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       })
       window.webContents.on('render-process-gone', () => {
         const value = snapshot()
+        sourceActions.clear()
         if (value) {
           void commit(() => {
             state.invalidate(value.scope.sourceWebContentsId)
@@ -104,9 +108,17 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         window.destroy()
       })
       window.once('closed', () => {
-        if (editor === window)
+        if (editor === window) {
           editor = undefined
+          sourceActions.clear()
+        }
         finishQuit()
+      })
+      window.on('focus', () => {
+        if (editor === window && snapshot()?.status === 'detached') {
+          window.setAlwaysOnTop(true, 'screen-saver', 2)
+          window.moveTop()
+        }
       })
       return window
     }).finally(() => opening = undefined)
@@ -127,6 +139,27 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
     if (!['/', '/chat', '/quick-chat'].includes(route))
       throw new Error('Only a conversation window can access its composer.')
   }
+  function returnTarget(value: NonNullable<ReturnType<typeof snapshot>>) {
+    const source = ElectronWindow.getAllWindows().find(window => window.webContents.id === value.scope.sourceWebContentsId)
+    if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized())
+      return
+    // Once detached, the source replaces its inline input with a narrow
+    // return strip. Requiring that strip makes an otherwise valid release in
+    // the original conversation look like a no-op, particularly after the
+    // background renderer delays its region update. The content bounds are
+    // native screen DIP coordinates and remain correct while the window moves.
+    return source
+  }
+  function clearSourceActions(predicate: (action: { leaseId: string, version: number, sourceWebContentsId: number, sourceGeneration: string, action: string, at: number }) => boolean) {
+    for (const [requestId, action] of sourceActions) {
+      if (predicate(action))
+        sourceActions.delete(requestId)
+    }
+  }
+  function pruneSourceActions() {
+    const expiresAt = Date.now() - SOURCE_ACTION_TIMEOUT_MS
+    clearSourceActions(action => action.at < expiresAt)
+  }
   function register(window: BrowserWindow) {
     const id = window.webContents.id
     if (contexts.has(id))
@@ -135,6 +168,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
     contexts.set(id, context)
     const invalidate = () => {
       if (editor?.webContents.id !== id) {
+        clearSourceActions(action => action.sourceWebContentsId === id)
         void commit(() => state.invalidate(id)).then(publish).catch(() => undefined)
       }
     }
@@ -147,12 +181,14 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return
       bindings.delete(id)
       regions.delete(id)
+      clearSourceActions(action => action.sourceWebContentsId === id)
       void commit(() => state.invalidate(id)).then(publish).catch(() => undefined).finally(finishQuit)
     })
     window.webContents.once('destroyed', () => {
       invalidate()
       bindings.delete(id)
       regions.delete(id)
+      clearSourceActions(action => action.sourceWebContentsId === id)
       contexts.delete(id)
       dispose()
       finishQuit()
@@ -224,14 +260,8 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const x = Math.round(Math.max(display.x, Math.min(editorDrag.bounds.x + input.point.x - editorDrag.origin.x, display.x + display.width - editorDrag.bounds.width)))
       const y = Math.round(Math.max(display.y, Math.min(editorDrag.bounds.y + input.point.y - editorDrag.origin.y, display.y + display.height - editorDrag.bounds.height)))
       editor!.setPosition(x, y)
-      const source = ElectronWindow.getAllWindows().find(window => window.webContents.id === value.scope.sourceWebContentsId)
-      const region = regions.get(value.scope.sourceWebContentsId)
-      if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized() || !region
-        || region.generation !== value.scope.sourceGeneration || Date.now() - region.at > RETURN_TARGET_REGION_MAX_AGE_MS) {
-        return false
-      }
-      const target = composerScreenRegion(region.region, source.getContentBounds(), source.webContents.getZoomFactor())
-      return composerContainsPoint(target, screen.getCursorScreenPoint())
+      const source = returnTarget(value)
+      return !!source && composerContainsPoint(source.getContentBounds(), screen.getCursorScreenPoint())
     })
     defineInvokeHandler(context, composerSourceRead, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -283,6 +313,69 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       composerScreenRegion(input.region, window.getContentBounds(), window.webContents.getZoomFactor())
       regions.set(id, { generation: input.sourceGeneration, region: structuredClone(input.region), at: Date.now() })
     })
+    defineInvokeHandler(context, composerSourceActionRequest, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireEditor(id)
+      const value = snapshot()
+      if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached')
+        throw new Error('The composer ownership changed before this action could run.')
+      if (typeof input.requestId !== 'string' || !input.requestId || input.requestId.length > 128 || !composerSourceActionNames.includes(input.action))
+        throw new Error('Invalid composer source action.')
+      const binding = bindings.get(value.scope.sourceWebContentsId)
+      const sourceContext = contexts.get(value.scope.sourceWebContentsId)
+      if (!binding || binding.sourceGeneration !== value.scope.sourceGeneration || !sourceContext)
+        throw new Error('The original conversation is no longer available.')
+      pruneSourceActions()
+      if (sourceActions.size >= SOURCE_ACTION_MAX_PENDING)
+        throw new Error('Too many composer source actions are pending.')
+      if (sourceActions.has(input.requestId))
+        throw new Error('This composer source action is already pending.')
+      sourceActions.set(input.requestId, { leaseId: value.scope.leaseId, version: value.version, sourceWebContentsId: value.scope.sourceWebContentsId, sourceGeneration: value.scope.sourceGeneration, action: input.action, at: Date.now() })
+      sourceContext.emit(composerSourceAction, input)
+    })
+    defineInvokeHandler(context, composerSourceActionStatus, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireSource(id)
+      const value = snapshot()
+      const pending = sourceActions.get(input.requestId)
+      if (!value || value.status !== 'detached' || value.scope.leaseId !== input.leaseId || value.scope.sourceGeneration !== input.sourceGeneration
+        || !pending || pending.sourceWebContentsId !== id || pending.leaseId !== input.leaseId || pending.version !== input.version
+        || pending.sourceGeneration !== input.sourceGeneration || pending.action !== input.action) {
+        throw new Error('The composer source action is no longer current.')
+      }
+      sourceActions.delete(input.requestId)
+      contexts.get(editor?.webContents.id ?? -1)?.emit(composerSourceActionChanged, input)
+    })
+    defineInvokeHandler(context, composerSourceTextAppend, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireSource(id)
+      const value = snapshot()
+      if (!value || value.status !== 'detached' || value.scope.leaseId !== input.leaseId || value.scope.sourceGeneration !== input.sourceGeneration
+        || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 8_000) {
+        throw new Error('The detached composer no longer accepts source text.')
+      }
+      contexts.get(editor?.webContents.id ?? -1)?.emit(composerSourceTextChanged, { ...input, version: value.version })
+    })
+    defineInvokeHandler(context, composerSourceReveal, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireSource(id)
+      const value = snapshot()
+      if (!value || value.status !== 'detached' || value.scope.leaseId !== input.leaseId || value.scope.sourceGeneration !== input.sourceGeneration)
+        throw new Error('The detached composer visibility request is no longer current.')
+      if (input.restore) {
+        editor?.setAlwaysOnTop(true, 'screen-saver', 2)
+        editor?.show()
+        editor?.moveTop()
+      }
+      else {
+        editor?.setAlwaysOnTop(false)
+        window.focus()
+      }
+    })
     defineInvokeHandler(context, composerDragReturn, (input, options) => {
       if (!isIpcEventFromWindow(window, options))
         return
@@ -293,14 +386,8 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (input.origin)
         finishedEditorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, at: Date.now() }
       editorDrag = undefined
-      const source = ElectronWindow.getAllWindows().find(window => window.webContents.id === value.scope.sourceWebContentsId)
-      const region = regions.get(value.scope.sourceWebContentsId)
-      if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized() || !region
-        || region.generation !== value.scope.sourceGeneration || Date.now() - region.at > RETURN_TARGET_REGION_MAX_AGE_MS) {
-        return false
-      }
-      const target = composerScreenRegion(region.region, source.getContentBounds(), source.webContents.getZoomFactor())
-      return composerContainsPoint(target, verifiedCursor(input.point))
+      const source = returnTarget(value)
+      return !!source && composerContainsPoint(source.getContentBounds(), verifiedCursor(input.point))
     })
     defineInvokeHandler(context, composerSourceCloseAck, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -386,7 +473,10 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const value = await commit(() => state.release(input))
       editorDrag = undefined
       finishedEditorDrag = undefined
+      sourceActions.clear()
       publish()
+      const source = returnTarget(value)
+      source?.focus()
       allowClose = true
       editor?.close()
       return value
@@ -398,6 +488,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const value = await commit(() => state.discard(input))
       editorDrag = undefined
       finishedEditorDrag = undefined
+      sourceActions.clear()
       publish()
       for (const [sourceId, binding] of bindings) {
         if (binding.userScope === value.scope.userScope && binding.sessionId === value.scope.sessionId && binding.surface === value.scope.surface)

@@ -38,6 +38,24 @@ describe('composer drag handle', () => {
     expect(drag.consumeClick()).toBe(false)
     scope.stop()
   })
+  it('keeps the release listener after moving the native window drops pointer capture', async () => {
+    vi.stubGlobal('HTMLElement', PointerTarget)
+    const fallback = new EventTarget()
+    vi.stubGlobal('window', fallback)
+    const scope = effectScope()
+    const drop = vi.fn(async () => undefined)
+    const drag = scope.run(() => useComposerPointerDrag(drop))!
+    const target = new PointerTarget()
+
+    drag.start({ button: 0, isPrimary: true, currentTarget: target, screenX: 100, screenY: 100, pointerId: 1 } as unknown as PointerEvent)
+    target.dispatchEvent(pointer('pointermove', 500, 400))
+    target.dispatchEvent(pointer('lostpointercapture', 500, 400))
+    fallback.dispatchEvent(pointer('pointerup', 500, 400))
+
+    expect(drop).toHaveBeenCalledWith({ x: 500, y: 400 }, { x: 100, y: 100 })
+    expect(drag.consumeClick()).toBe(true)
+    scope.stop()
+  })
   it('does not split on a small click, canceled gesture or destroyed source', () => {
     vi.stubGlobal('HTMLElement', PointerTarget)
     const scope = effectScope()
