@@ -3,6 +3,16 @@ export interface DesktopRegressionAttributableDiagnostic {
   windowId?: string
 }
 
+/** DevTools uses Chromium-internal pages whose console errors do not reflect app runtime health. */
+export function isApplicationRuntimePageUrl(url: string) {
+  try {
+    return new URL(url).protocol !== 'devtools:'
+  }
+  catch {
+    return true
+  }
+}
+
 /** Assigns report-stable IDs without retaining closed BrowserWindow/Page objects. */
 export function createDesktopRegressionWindowIds() {
   const ids = new WeakMap<object, string>()

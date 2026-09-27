@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setupDashboardWindow } from './index'
 
@@ -14,7 +14,6 @@ const window = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.mock('@proj-airi/electron-screen-capture/main', () => ({ initScreenCaptureForWindow: vi.fn() }))
 vi.mock('electron', () => {
   function BrowserWindow() {
@@ -54,16 +53,32 @@ function createParams(developerToolsEnabled: boolean) {
 }
 
 describe('setupDashboardWindow', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('does not open DevTools in development when developer tools are disabled', async () => {
-    await setupDashboardWindow(createParams(false))
-
-    expect(openDevTools).not.toHaveBeenCalled()
-    expect(setupDashboardWindowElectronInvokes).toHaveBeenCalledWith(expect.objectContaining({ developerToolsEnabled: false }))
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv('MAIN_APP_DEBUG', '')
+    vi.stubEnv('APP_DEBUG', '')
   })
 
-  it('opens DevTools in development when developer tools are enabled', async () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('does not open DevTools in development without an explicit debug flag', async () => {
+    await setupDashboardWindow(createParams(true))
+
+    expect(openDevTools).not.toHaveBeenCalled()
+    expect(setupDashboardWindowElectronInvokes).toHaveBeenCalledWith(expect.objectContaining({ developerToolsEnabled: true }))
+  })
+
+  it('does not open DevTools when APP_DEBUG is set to 0', async () => {
+    vi.stubEnv('APP_DEBUG', '0')
+
+    await setupDashboardWindow(createParams(true))
+
+    expect(openDevTools).not.toHaveBeenCalled()
+  })
+
+  it('opens DevTools only when developer tools and an explicit debug flag are enabled', async () => {
+    vi.stubEnv('MAIN_APP_DEBUG', 'true')
+
     await setupDashboardWindow(createParams(true))
 
     expect(openDevTools).toHaveBeenCalledWith({ mode: 'detach' })

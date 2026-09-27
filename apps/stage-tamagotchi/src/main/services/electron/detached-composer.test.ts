@@ -2,7 +2,7 @@ import type { ComposerDetach, ComposerRecoveryData } from '../../../shared/detac
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { composerChanged, composerDetach, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerDragStart, composerEdit, composerEditorCloseAck, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { createDetachedComposerService } from './detached-composer'
 
 const mocks = vi.hoisted(() => ({
@@ -21,7 +21,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => mocks.windows },
   screen: { getCursorScreenPoint: () => mocks.cursor, getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) },
 }))
-vi.mock('../../windows/composer', () => ({ createDetachedComposerWindow: mocks.open }))
+vi.mock('../../windows/composer', () => ({ DETACHED_COMPOSER_TOP_LEVEL: 7, createDetachedComposerWindow: mocks.open }))
 vi.mock('../../windows/shared/window', () => ({
   createWindowEventaContext: (window: any) => {
     const context = { handlers: new Map(), emit: vi.fn() }
@@ -104,7 +104,7 @@ describe('composer main sender and close guards', () => {
     await invoke(1, composerSourceReveal, { leaseId: detached.scope.leaseId, sourceGeneration: input.sourceGeneration, restore: false })
     expect(mocks.windows[2].setAlwaysOnTop).toHaveBeenCalledWith(false)
     mocks.windows[2].hooks.get('focus')!()
-    expect(mocks.windows[2].setAlwaysOnTop).toHaveBeenLastCalledWith(true, 'screen-saver', 2)
+    expect(mocks.windows[2].setAlwaysOnTop).toHaveBeenLastCalledWith(true, 'screen-saver', 7)
   })
 
   it('forwards only the current editor action to its bound source and returns the source status', async () => {
@@ -138,8 +138,8 @@ describe('composer main sender and close guards', () => {
   it('allows only the active editor to edit, submit or release its owner lease', async () => {
     const service = createService()
     const detached = await invoke(1, composerDetach, input)
-    const version = { leaseId: detached.scope.leaseId, version: detached.version }
-    for (const event of [composerEdit, composerSubmit, composerRelease])
+    const version = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-a' }
+    for (const event of [composerEdit, composerSubmit, composerRelease, composerDragStart])
       await expect(invoke(2, event, { ...version, draft: input.draft, commandId: 'command-a' })).rejects.toThrow('editing window')
     expect(service.read()!.busy).toBe(false)
     await expect(invoke(2, composerRead)).resolves.toBeUndefined()
@@ -149,7 +149,7 @@ describe('composer main sender and close guards', () => {
     await expect(invoke(1, composerSettle, { ...version, commandId: 'command-a', consumed: false, draft: input.draft })).resolves.toMatchObject({ busy: false })
   })
 
-  it('blocks native close until the editor flushes and explicitly releases its confirmed revision', async () => {
+  it('keeps the editor alive until it acknowledges the returned revision', async () => {
     const service = createService()
     const detached = await invoke(1, composerDetach, input)
     const preventDefault = vi.fn()
@@ -157,9 +157,138 @@ describe('composer main sender and close guards', () => {
     expect(preventDefault).toHaveBeenCalledOnce()
     expect(mocks.contexts.get(3).emit).toHaveBeenCalledWith(composerFlushAndClose, service.read())
     expect(service.read()!.status).toBe('detached')
-    await invoke(3, composerRelease, { leaseId: detached.scope.leaseId, version: detached.version })
+    let reply: unknown
+    await invoke(3, composerRelease, { leaseId: detached.scope.leaseId, version: detached.version }).then((value) => {
+      // Eventa awaits the handler and emits its response in this microtask.
+      reply = value
+    })
     expect(service.read()!.status).toBe('returned')
+    expect(reply).toMatchObject({ status: 'returned' })
     expect(mocks.windows[0].focus).toHaveBeenCalledOnce()
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await expect(invoke(2, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      action: 'release',
+    })).rejects.toThrow('editing window')
+    await invoke(3, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      action: 'release',
+    })
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(mocks.windows[2].close).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the editor open when its original chat window is no longer a return target', async () => {
+    const service = createService()
+    const detached = await invoke(1, composerDetach, input)
+    mocks.windows[0].isVisible = () => false
+
+    await expect(invoke(3, composerRelease, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+    })).rejects.toThrow('original chat window')
+
+    expect(service.read()).toEqual(detached)
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+  })
+
+  it('keeps the source open during a durable release and tolerates a failed focus', async () => {
+    const service = createService()
+    await invoke(1, composerSourceRead, input)
+    const detached = await invoke(1, composerDetach, input)
+    let finishSave!: () => void
+    persistence.save.mockImplementationOnce(async (data) => {
+      await new Promise<void>(resolve => finishSave = resolve)
+      durable = structuredClone(data)
+    })
+    mocks.windows[0].focus.mockImplementation(() => {
+      throw new Error('source closed while focusing')
+    })
+
+    const releasing = invoke(3, composerRelease, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+    })
+    await vi.waitFor(() => expect(finishSave).toBeTypeOf('function'))
+    const preventDefault = vi.fn()
+    mocks.windows[0].hooks.get('close')!({ preventDefault })
+    expect(preventDefault).toHaveBeenCalledOnce()
+
+    finishSave()
+    await expect(releasing).resolves.toMatchObject({ status: 'returned' })
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await invoke(3, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      action: 'release',
+    })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(mocks.windows[2].close).toHaveBeenCalledOnce()
+    expect(service.read()).toMatchObject({ status: 'returned' })
+  })
+
+  it('preserves the source when its queued close acknowledgement loses to a release', async () => {
+    createService()
+    await invoke(1, composerSourceRead, input)
+    const detached = await invoke(1, composerDetach, input)
+    const firstClosePreventDefault = vi.fn()
+    mocks.windows[0].hooks.get('close')!({ preventDefault: firstClosePreventDefault })
+    const olderCloseAttempt = mocks.contexts.get(1).emit.mock.calls.find((call: unknown[]) => call[0] === composerFlushSource)![1]
+    let finishSave!: () => void
+    persistence.save.mockImplementationOnce(async (data) => {
+      await new Promise<void>(resolve => finishSave = resolve)
+      durable = structuredClone(data)
+    })
+
+    const releasing = invoke(3, composerRelease, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+    })
+    await vi.waitFor(() => expect(finishSave).toBeTypeOf('function'))
+    const closingSource = invoke(1, composerSourceCloseAck, olderCloseAttempt)
+
+    finishSave()
+    await expect(releasing).resolves.toMatchObject({ status: 'returned' })
+    await expect(closingSource).resolves.toBeUndefined()
+    expect(mocks.windows[0].close).not.toHaveBeenCalled()
+
+    await invoke(3, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      action: 'release',
+    })
+    const secondClosePreventDefault = vi.fn()
+    mocks.windows[0].hooks.get('close')!({ preventDefault: secondClosePreventDefault })
+    const newerCloseAttempt = mocks.contexts.get(1).emit.mock.calls.filter((call: unknown[]) => call[0] === composerFlushSource).at(-1)![1]
+    expect(newerCloseAttempt).not.toEqual(olderCloseAttempt)
+    await invoke(1, composerSourceCloseAck, newerCloseAttempt)
+    expect(mocks.windows[0].close).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a discarded editor alive until it acknowledges the cleared revision', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+    const discarded = await invoke(3, composerDiscard, { leaseId: detached.scope.leaseId, version: detached.version })
+
+    expect(discarded).toMatchObject({ status: 'returned', version: detached.version + 1, draft: { text: '', images: [] } })
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await expect(invoke(3, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version,
+      action: 'discard',
+    })).rejects.toThrow('no longer current')
+    await invoke(3, composerEditorCloseAck, {
+      leaseId: detached.scope.leaseId,
+      version: detached.version + 1,
+      action: 'discard',
+    })
+    expect(mocks.windows[2].close).not.toHaveBeenCalled()
+    await new Promise<void>(resolve => setImmediate(resolve))
     expect(mocks.windows[2].close).toHaveBeenCalledOnce()
   })
 
@@ -181,7 +310,7 @@ describe('composer main sender and close guards', () => {
   it('waits for a durable submit marker before executing and rolls back failed editor acknowledgements', async () => {
     const service = createService()
     const detached = await invoke(1, composerDetach, input)
-    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    const version = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-a' }
     persistence.save.mockRejectedValueOnce(new Error('disk full'))
     await expect(invoke(3, composerEdit, { ...version, draft: { text: 'Not saved.', images: [] } })).rejects.toThrow('disk full')
     expect(service.read()).toEqual(detached)
@@ -205,11 +334,12 @@ describe('composer main sender and close guards', () => {
     const preventDefault = vi.fn()
     mocks.windows[0].hooks.get('close')!({ preventDefault })
     expect(preventDefault).toHaveBeenCalledOnce()
-    expect(mocks.contexts.get(1).emit).toHaveBeenCalledWith(composerFlushSource, { sourceGeneration: input.sourceGeneration })
+    const closeAttempt = mocks.contexts.get(1).emit.mock.calls.find((call: unknown[]) => call[0] === composerFlushSource)![1]
+    expect(closeAttempt).toMatchObject({ sourceGeneration: input.sourceGeneration, closeAttemptId: expect.any(String) })
     await invoke(1, composerSourceCheckpoint, { ...input, version: 0 })
-    await expect(invoke(1, composerSourceCloseAck, { sourceGeneration: 'old-source' })).rejects.toThrow('older source')
+    await expect(invoke(1, composerSourceCloseAck, { ...closeAttempt, sourceGeneration: 'old-source' })).rejects.toThrow('older source')
     expect(mocks.windows[0].close).not.toHaveBeenCalled()
-    await invoke(1, composerSourceCloseAck, { sourceGeneration: input.sourceGeneration })
+    await invoke(1, composerSourceCloseAck, closeAttempt)
     expect(mocks.windows[0].close).toHaveBeenCalledOnce()
     expect(durable.drafts[0].draft.text).toBe('Hello')
   })
@@ -232,7 +362,7 @@ describe('composer main sender and close guards', () => {
     await invoke(1, composerSourceRead, input)
     await invoke(1, composerSourceRegion, { sourceGeneration: input.sourceGeneration, region: { rect: { x: 20, y: 450, width: 600, height: 100 }, viewport: { width: 800, height: 600 } } })
     const detached = await invoke(1, composerDetach, input)
-    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    const version = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-a' }
     mocks.cursor = { x: 300, y: 300 }
     expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(true)
     mocks.cursor = { x: 300, y: 600 }
@@ -240,41 +370,94 @@ describe('composer main sender and close guards', () => {
     expect(await invoke(3, composerDragReturn, { ...version, point: { x: 340, y: 600 } })).toBe(true)
     mocks.cursor = { x: 950, y: 600 }
     expect(await invoke(3, composerDragReturn, { ...version, point: mocks.cursor })).toBe(false)
-    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 850, y: 600 } })).rejects.toThrow('cursor position')
+    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 850, y: 600 } })).resolves.toBe(false)
+    mocks.cursor = { x: 300, y: 600 }
+    // Browser pointer coordinates can differ from Electron's DIP screen
+    // coordinates on a scaled Windows display. The actual cursor wins.
+    await expect(invoke(3, composerDragReturn, { ...version, point: { x: 1_200, y: 750 } })).resolves.toBe(true)
   })
 
-  it('moves the detached editor with its drag handle before verifying the drop', async () => {
+  it('moves the detached editor from the main-process cursor on scaled displays', async () => {
     createService()
     const detached = await invoke(1, composerDetach, input)
+    mocks.cursor = { x: 200, y: 200 }
+    await invoke(3, composerDragStart, { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-a' })
+    mocks.cursor = { x: 600, y: 500 }
 
     expect(await invoke(3, composerDragMove, {
       leaseId: detached.scope.leaseId,
       version: detached.version,
-      origin: { x: 200, y: 200 },
-      point: { x: 600, y: 500 },
+      gestureId: 'drag-a',
+      // At 150% scale the renderer's screen coordinates differ from DIP.
+      origin: { x: 300, y: 300 },
+      point: { x: 900, y: 750 },
     })).toBe(true)
 
     expect(mocks.windows[2].setPosition).toHaveBeenCalledWith(500, 400)
-    mocks.cursor = { x: 600, y: 500 }
     await invoke(3, composerDragReturn, {
       leaseId: detached.scope.leaseId,
       version: detached.version,
-      origin: { x: 200, y: 200 },
-      point: { x: 600, y: 500 },
+      gestureId: 'drag-a',
+      origin: { x: 300, y: 300 },
+      point: { x: 900, y: 750 },
     })
     await invoke(3, composerDragMove, {
       leaseId: detached.scope.leaseId,
       version: detached.version,
-      origin: { x: 200, y: 200 },
-      point: { x: 620, y: 520 },
+      gestureId: 'drag-a',
+      origin: { x: 300, y: 300 },
+      point: { x: 930, y: 780 },
     })
+    expect(mocks.windows[2].setPosition).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reset a drag that moved before its delayed start invoke arrived', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+    const drag = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-race', origin: { x: 200, y: 200 } }
+    mocks.cursor = { x: 600, y: 300 }
+    await invoke(3, composerDragMove, { ...drag, point: { x: 900, y: 450 } })
+    mocks.cursor = { x: 700, y: 300 }
+    await invoke(3, composerDragStart, drag)
+    mocks.cursor = { x: 800, y: 300 }
+    await invoke(3, composerDragMove, { ...drag, point: { x: 1_200, y: 450 } })
+
+    expect(mocks.windows[2].setPosition).toHaveBeenLastCalledWith(300, 100)
+  })
+
+  it('does not revive a returned gesture when its delayed start arrives', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+    const drag = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-late', origin: { x: 200, y: 200 } }
+    mocks.cursor = { x: 600, y: 300 }
+    await invoke(3, composerDragMove, { ...drag, point: { x: 900, y: 450 } })
+    await invoke(3, composerDragReturn, { ...drag, point: { x: 900, y: 450 } })
+    await invoke(3, composerDragStart, drag)
+    mocks.cursor = { x: 700, y: 300 }
+
+    expect(await invoke(3, composerDragMove, { ...drag, point: { x: 1_050, y: 450 } })).toBe(false)
+    expect(mocks.windows[2].setPosition).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not let an old gesture move the editor after a newer gesture starts', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+    const oldDrag = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-old', origin: { x: 200, y: 200 } }
+    const newDrag = { ...oldDrag, gestureId: 'drag-new' }
+    mocks.cursor = { x: 600, y: 300 }
+    await invoke(3, composerDragMove, { ...oldDrag, point: { x: 900, y: 450 } })
+    mocks.cursor = { x: 650, y: 300 }
+    await invoke(3, composerDragStart, newDrag)
+    mocks.cursor = { x: 800, y: 300 }
+
+    expect(await invoke(3, composerDragMove, { ...oldDrag, point: { x: 1_200, y: 450 } })).toBe(false)
     expect(mocks.windows[2].setPosition).toHaveBeenCalledTimes(1)
   })
 
   it('clears the source return highlight for a verified cancelled editor drag without returning it', async () => {
     createService()
     const detached = await invoke(1, composerDetach, input)
-    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    const version = { leaseId: detached.scope.leaseId, version: detached.version, gestureId: 'drag-a' }
     mocks.cursor = { x: 600, y: 500 }
     await invoke(3, composerDragMove, { ...version, origin: { x: 200, y: 200 }, point: mocks.cursor })
 

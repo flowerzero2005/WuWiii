@@ -9,7 +9,6 @@ import { dirname, join, resolve } from 'node:path'
 import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-import { is } from '@electron-toolkit/utils'
 import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { defu } from 'defu'
 import { BrowserWindow, shell } from 'electron'
@@ -32,6 +31,8 @@ const appConfigSchema = object({
 })
 
 type AppConfig = InferOutput<typeof appConfigSchema>
+
+const ENABLED_ENV_FLAG_PATTERN = /^(?:1|true|yes|on)$/i
 
 export async function setupDashboardWindow(params: {
   settingsWindow: () => Promise<BrowserWindow>
@@ -74,8 +75,8 @@ export async function setupDashboardWindow(params: {
     params.onWindowCreated(window)
   }
 
-  // NOTICE: in development mode, open devtools by default
-  if (params.developerToolsEnabled && (is.dev || env.MAIN_APP_DEBUG || env.APP_DEBUG)) {
+  // Keep normal launches product-like and require an explicit debug flag.
+  if (params.developerToolsEnabled && ENABLED_ENV_FLAG_PATTERN.test(env.MAIN_APP_DEBUG ?? env.APP_DEBUG ?? '')) {
     try {
       window.webContents.openDevTools({ mode: 'detach' })
     }

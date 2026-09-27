@@ -28,6 +28,16 @@ export interface ComposerSourceReturnTargetState {
   sourceGeneration: string
   active: boolean
 }
+export interface ComposerDragGesture extends ComposerVersion {
+  gestureId: string
+}
+export interface ComposerEditorCloseAck extends ComposerVersion {
+  action: 'release' | 'discard'
+}
+export interface ComposerSourceCloseAttempt {
+  sourceGeneration: string
+  closeAttemptId: string
+}
 
 export const composerDetach = defineInvokeEventa<ComposerSnapshot, ComposerDetach>('eventa:invoke:composer:detach')
 export const composerRead = defineInvokeEventa<ComposerSnapshot | undefined>('eventa:invoke:composer:read')
@@ -46,12 +56,14 @@ export const composerSourceRead = defineInvokeEventa<{ version: number, draft?: 
 export const composerSourceCheckpoint = defineInvokeEventa<{ version: number }, ComposerSourceDraft>('eventa:invoke:composer:source-checkpoint')
 export const composerSourceRegion = defineInvokeEventa<void, { sourceGeneration: string, region: ComposerClientRegion }>('eventa:invoke:composer:source-region')
 export const composerDragDetach = defineInvokeEventa<ComposerSnapshot, ComposerDetach & { point: ComposerPoint }>('eventa:invoke:composer:drag-detach')
-export const composerDragMove = defineInvokeEventa<boolean, ComposerVersion & { origin: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-move')
-export const composerDragReturn = defineInvokeEventa<boolean, ComposerVersion & { origin?: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-return')
-export const composerDragCancel = defineInvokeEventa<void, ComposerVersion & { sourceGeneration: string }>('eventa:invoke:composer:drag-cancel')
+export const composerDragStart = defineInvokeEventa<void, ComposerDragGesture>('eventa:invoke:composer:drag-start')
+export const composerDragMove = defineInvokeEventa<boolean, ComposerDragGesture & { origin: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-move')
+export const composerDragReturn = defineInvokeEventa<boolean, ComposerDragGesture & { origin?: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-return')
+export const composerDragCancel = defineInvokeEventa<void, ComposerDragGesture & { sourceGeneration: string }>('eventa:invoke:composer:drag-cancel')
+export const composerEditorCloseAck = defineInvokeEventa<void, ComposerEditorCloseAck>('eventa:invoke:composer:editor-close-ack')
 export const composerDiscard = defineInvokeEventa<ComposerSnapshot, ComposerVersion>('eventa:invoke:composer:discard')
-export const composerFlushSource = defineEventa<{ sourceGeneration: string }>('eventa:event:composer:flush-source')
-export const composerSourceCloseAck = defineInvokeEventa<void, { sourceGeneration: string }>('eventa:invoke:composer:source-close-ack')
+export const composerFlushSource = defineEventa<ComposerSourceCloseAttempt>('eventa:event:composer:flush-source')
+export const composerSourceCloseAck = defineInvokeEventa<void, ComposerSourceCloseAttempt>('eventa:invoke:composer:source-close-ack')
 export const composerDraftDiscarded = defineEventa<{ userScope: string, sessionId: string, surface: 'page' | 'widget', version: number }>('eventa:event:composer:draft-discarded')
 export const composerSourceSubmit = defineInvokeEventa<ComposerSnapshot, ComposerSourceDraft & { commandId: string }>('eventa:invoke:composer:source-submit')
 export const composerSourceActionRequest = defineInvokeEventa<void, ComposerSourceAction>('eventa:invoke:composer:source-action-request')

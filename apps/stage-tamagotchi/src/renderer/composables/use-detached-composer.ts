@@ -370,7 +370,7 @@ export function useDetachedComposerSource(input: {
       await inlinePromise
       await checkpoint()
       if (body.sourceGeneration === generation && !checkpointFailed.value)
-        await closeAckInvoke({ sourceGeneration: generation })
+        await closeAckInvoke({ sourceGeneration: generation, closeAttemptId: body.closeAttemptId })
     })().catch(() => checkpointFailed.value = true)
   })
   const offDiscarded = context.value.on(composerDraftDiscarded, ({ body }) => {

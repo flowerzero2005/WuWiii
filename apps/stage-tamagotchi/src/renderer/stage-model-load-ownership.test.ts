@@ -28,4 +28,9 @@ describe('stage model load ownership', () => {
     expect(appSource).not.toContain('The character renderer did not become ready in time.')
     expect(appSource).not.toContain('The character renderer failed to initialize.')
   })
+
+  it('keeps the rendered character visible while startup blocks input', () => {
+    expect(appSource).toContain("shouldShowRuntimeBootstrap ? 'pointer-events-none' : undefined")
+    expect(appSource).not.toContain("shouldShowRuntimeBootstrap ? 'pointer-events-none opacity-0'")
+  })
 })

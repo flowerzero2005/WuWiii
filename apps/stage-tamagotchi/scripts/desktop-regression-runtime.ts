@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from 'playwright'
 
 import { DESKTOP_REQUIRED_ROUTES } from '../src/shared/desktop-feature-manifest'
-import { createDesktopRegressionWindowIds, selectRouteDiagnostics } from '../src/shared/desktop-regression-diagnostics'
+import { createDesktopRegressionWindowIds, isApplicationRuntimePageUrl, selectRouteDiagnostics } from '../src/shared/desktop-regression-diagnostics'
 import { createDesktopRuntimePhaseTiming, remainingDesktopRouteTimeout } from '../src/shared/desktop-regression-runtime-timing'
 import { startDesktopRegressionFixtureService } from './desktop-regression-loopback-service'
 
@@ -324,6 +324,8 @@ function attachDiagnostics(context: BrowserContext, diagnostics: DiagnosticEvent
     page.on('console', (message) => {
       if (message.type() !== 'error')
         return
+      if (!isApplicationRuntimePageUrl(page.url()))
+        return
       diagnostics.push({
         at: new Date().toISOString(),
         detail: message.text(),
@@ -334,6 +336,8 @@ function attachDiagnostics(context: BrowserContext, diagnostics: DiagnosticEvent
       })
     })
     page.on('pageerror', (error) => {
+      if (!isApplicationRuntimePageUrl(page.url()))
+        return
       diagnostics.push({
         at: new Date().toISOString(),
         detail: error.message,

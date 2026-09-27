@@ -53,6 +53,7 @@ const HANDLE_TOP = 4
 const NATIVE_WINDOW_SHAPE_ENABLED = false
 const USER_BUBBLE_WINDOW_HEIGHT = 132
 const USER_BUBBLE_WINDOW_GAP = 8
+const QUICK_CHAT_TOP_LEVEL = 6
 
 function clampCollapsedWidth(width: number) {
   return Math.min(MAX_COLLAPSED_WIDTH, Math.max(MIN_COLLAPSED_WIDTH, Math.round(width)))
@@ -176,7 +177,7 @@ function createQuickChatWindow() {
   })
 
   let startedAt = Date.now()
-  window.setAlwaysOnTop(true, 'screen-saver', 1)
+  window.setAlwaysOnTop(true, 'screen-saver', QUICK_CHAT_TOP_LEVEL)
   warnIfSlowQuickChatOperation(window, 'quick-chat.setAlwaysOnTop', startedAt)
   window.setFullScreenable(false)
   startedAt = Date.now()
@@ -216,10 +217,6 @@ export function setupQuickChatWindowManager(params: {
     let userBubbleDocumentReady: Promise<void> | undefined
     let userBubbleHideTimer: ReturnType<typeof setTimeout> | undefined
     let userBubbleRequestId = 0
-    let resolveRendererReady = () => {}
-    const rendererReady = new Promise<void>((resolve) => {
-      resolveRendererReady = resolve
-    })
 
     const initialBounds = clampInitialBounds(getConfig().bounds)
     const startedAt = Date.now()
@@ -346,8 +343,8 @@ export function setupQuickChatWindowManager(params: {
       serverChannel: params.serverChannel,
     })
     defineInvokeHandler(context, quickChatRendererRuntimeReady, (_, options) => {
-      if (isIpcEventFromWindow(window, options))
-        resolveRendererReady()
+      if (!isIpcEventFromWindow(window, options))
+        return
     })
 
     defineInvokeHandler(context, quickChatShowUserBubbleWindow, (payload, options) => {
@@ -367,7 +364,6 @@ export function setupQuickChatWindowManager(params: {
     })
 
     await load(window, withHashRoute(rendererBase, '/quick-chat'))
-    await rendererReady
 
     return window
   })

@@ -251,7 +251,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="composer-page min-h-0 flex flex-col h-dvh">
+  <main :class="['composer-page min-h-0 flex flex-col', editor.dragging.value ? 'is-dragging' : '']">
     <header class="composer-drag-rail flex shrink-0 items-center justify-between gap-2 px-3">
       <div
         :title="t(`${key}.drag-return`)"
@@ -266,7 +266,7 @@ onUnmounted(() => {
         :disabled="!!state?.busy || closing"
         :title="t(`${key}.return`)"
         :aria-label="t(`${key}.return`)"
-        class="[-webkit-app-region:no-drag] grid size-7 shrink-0 place-items-center rounded-full airi-overlay-control-muted disabled:cursor-not-allowed disabled:opacity-50"
+        class="composer-return-button [-webkit-app-region:no-drag] grid size-7 shrink-0 place-items-center rounded-full airi-overlay-control-muted disabled:cursor-not-allowed disabled:opacity-50"
         @click="close"
       >
         <span class="i-lucide:arrow-down-to-line size-3.5" />
@@ -280,86 +280,99 @@ onUnmounted(() => {
       {{ t(dragOverReturnTarget ? `${key}.return-ready` : `${key}.drag-return`) }}
     </p>
 
-    <p v-if="state?.status === 'orphaned'" class="mx-1 mb-2 mt-0 text-xs airi-text-muted">
-      {{ t(`${key}.orphaned`) }}
-    </p>
-    <p v-if="state?.busy" role="status" class="composer-notice mx-1 mb-2 mt-0 rounded-lg px-3 py-2 text-xs text-amber-600">
-      {{ t(`${key}.wait-send`) }}
-    </p>
-    <p v-if="state?.uncertain" role="alert" class="composer-notice mx-1 mb-2 mt-0 rounded-lg px-3 py-2 text-xs text-amber-600">
-      {{ t(`${key}.uncertain`) }}
-      <button type="button" :disabled="closing" class="ml-2 underline" @click="discardConfirmation = true">
-        {{ t(`${key}.discard`) }}
-      </button>
-    </p>
-    <div v-if="discardConfirmation" role="alert" class="composer-notice mx-1 mb-2 rounded-lg px-3 py-2 text-xs text-amber-600">
-      <p>{{ t(`${key}.discard-confirm`) }}</p>
-      <div class="mt-2 flex gap-2">
-        <button type="button" :disabled="closing" class="h-8 airi-overlay-control-primary rounded-md px-2.5 text-xs font-medium disabled:opacity-50" @click="editor.discard()">
-          {{ t(`${key}.discard`) }}
-        </button>
-        <button type="button" :disabled="closing" class="h-8 rounded-md airi-overlay-control-muted px-2.5 text-xs font-medium disabled:opacity-50" @click="discardConfirmation = false">
-          {{ t(`${key}.cancel-discard`) }}
-        </button>
-      </div>
-    </div>
-
-    <section class="composer-card mx-2 mb-2 min-h-0 flex flex-1 flex-col border rounded-[18px] p-2.5">
-      <div v-if="draft.images.length" class="mb-1.5 max-h-12 flex gap-1.5 overflow-x-auto overflow-y-hidden px-0.5 pt-0.5">
-        <div v-for="(image, index) in draft.images" :key="image.id" class="relative shrink-0">
-          <button type="button" :aria-label="t(`${key}.image`)" class="size-10 cursor-zoom-in rounded-md" @click="expandedImage = `data:${image.mimeType};base64,${image.data}`">
-            <img :src="`data:${image.mimeType};base64,${image.data}`" :alt="t(`${key}.image`)" class="size-full rounded-md object-cover">
+    <section class="composer-card mx-2 mb-2 min-h-0 flex flex-1 flex-col border rounded-[18px] p-2">
+      <div class="composer-scroll min-h-0 flex flex-1 flex-col overflow-y-auto overscroll-contain pr-1">
+        <p v-if="state?.status === 'orphaned'" class="composer-status mb-2 mt-0 text-xs airi-text-muted">
+          {{ t(`${key}.orphaned`) }}
+        </p>
+        <p v-if="state?.busy" role="status" class="composer-notice composer-status mb-2 mt-0 rounded-lg px-3 py-2 text-xs text-amber-600">
+          {{ t(`${key}.wait-send`) }}
+        </p>
+        <p v-if="state?.uncertain" role="alert" class="composer-notice composer-status mb-2 mt-0 rounded-lg px-3 py-2 text-xs text-amber-600">
+          {{ t(`${key}.uncertain`) }}
+          <button type="button" :disabled="closing" class="ml-2 underline" @click="discardConfirmation = true">
+            {{ t(`${key}.discard`) }}
           </button>
-          <button type="button" :disabled="busy" :aria-label="t(`${key}.remove-image`)" class="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-red-500 text-white shadow-sm disabled:opacity-50" @click="draft.images.splice(index, 1)">
-            <span class="i-lucide:x size-2.5" />
+        </p>
+        <div v-if="discardConfirmation" role="alert" class="composer-notice composer-status mb-2 rounded-lg px-3 py-2 text-xs text-amber-600">
+          <p>{{ t(`${key}.discard-confirm`) }}</p>
+          <div class="mt-2 flex gap-2">
+            <button type="button" :disabled="closing" class="h-8 airi-overlay-control-primary rounded-md px-2.5 text-xs font-medium disabled:opacity-50" @click="editor.discard()">
+              {{ t(`${key}.discard`) }}
+            </button>
+            <button type="button" :disabled="closing" class="h-8 rounded-md airi-overlay-control-muted px-2.5 text-xs font-medium disabled:opacity-50" @click="discardConfirmation = false">
+              {{ t(`${key}.cancel-discard`) }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="draft.images.length" class="mb-1.5 max-h-12 flex shrink-0 gap-1.5 overflow-x-auto overflow-y-hidden px-0.5 pt-0.5">
+          <div v-for="(image, index) in draft.images" :key="image.id" class="relative shrink-0">
+            <button type="button" :aria-label="t(`${key}.image`)" class="size-10 cursor-zoom-in rounded-md" @click="expandedImage = `data:${image.mimeType};base64,${image.data}`">
+              <img :src="`data:${image.mimeType};base64,${image.data}`" :alt="t(`${key}.image`)" class="size-full rounded-md object-cover">
+            </button>
+            <button type="button" :disabled="busy" :aria-label="t(`${key}.remove-image`)" class="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-red-500 text-white shadow-sm disabled:opacity-50" @click="draft.images.splice(index, 1)">
+              <span class="i-lucide:x size-2.5" />
+            </button>
+          </div>
+        </div>
+        <p v-if="draft.images.length" class="mb-2 px-1 text-xs airi-text-muted">
+          {{ t(`${key}.description`) }}
+        </p>
+        <p v-if="visionConsentPending" class="composer-status mb-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {{ t(`${key}.fee-confirm-in-source`) }}
+        </p>
+        <p v-else-if="visionQuoteLoading" class="composer-status mb-2 px-1 text-xs airi-text-muted">
+          {{ t(`${key}.fee-quote-loading`) }}
+        </p>
+        <p v-else-if="visionQuoteUnavailable" class="composer-status mb-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {{ t(`${key}.fee-quote-unavailable`) }}
+        </p>
+
+        <div class="composer-input-area relative min-h-[4.75rem] flex-1">
+          <BasicTextarea
+            v-model="draft.text"
+            :auto-resize="false"
+            :readonly="!!state?.uncertain"
+            :disabled="!state || !!state.busy || closing"
+            :placeholder="t('stage.chat.composer.placeholder')"
+            class="composer-textarea h-full min-h-0 w-full resize-none overflow-y-auto airi-overlay-input rounded-[18px] py-2 pl-3 pr-12 text-sm font-medium"
+            @keydown.ctrl.enter.prevent="send"
+            @paste-file="addPastedImages"
+          />
+          <input ref="imageInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden" @change="addImages">
+          <button
+            type="button"
+            :title="t('stage.actions.send')"
+            :aria-label="t('stage.actions.send')"
+            :disabled="!state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length)"
+            :class="['absolute bottom-2 right-2 grid size-8 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-not-allowed', !state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length) ? 'bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55' : 'airi-overlay-control-primary']"
+            @click="send"
+          >
+            <span class="i-solar:arrow-up-linear size-4" />
           </button>
         </div>
       </div>
-      <p v-if="draft.images.length" class="mb-2 px-1 text-xs airi-text-muted">
-        {{ t(`${key}.description`) }}
-      </p>
-      <p v-if="visionConsentPending" class="mb-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-        {{ t(`${key}.fee-confirm-in-source`) }}
-      </p>
-      <p v-else-if="visionQuoteLoading" class="mb-2 px-1 text-xs airi-text-muted">
-        {{ t(`${key}.fee-quote-loading`) }}
-      </p>
-      <p v-else-if="visionQuoteUnavailable" class="mb-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-        {{ t(`${key}.fee-quote-unavailable`) }}
-      </p>
 
-      <div class="composer-input-area relative min-h-0 flex-1">
-        <BasicTextarea
-          v-model="draft.text"
-          :auto-resize="false"
-          :readonly="!!state?.uncertain"
-          :disabled="!state || !!state.busy || closing"
-          :placeholder="t('stage.chat.composer.placeholder')"
-          class="composer-textarea h-full min-h-0 w-full resize-none overflow-y-auto airi-overlay-input rounded-xl py-2.5 pl-3 pr-12 text-sm font-medium"
-          @keydown.ctrl.enter.prevent="send"
-          @paste-file="addPastedImages"
-        />
-        <input ref="imageInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden" @change="addImages">
-        <button
-          type="button"
-          :title="t('stage.actions.send')"
-          :aria-label="t('stage.actions.send')"
-          :disabled="!state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length)"
-          :class="['absolute bottom-2 right-2 grid size-8 place-items-center rounded-lg text-base outline-none transition-all active:scale-95 disabled:cursor-not-allowed', !state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length) ? 'bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55' : 'airi-overlay-control-primary']"
-          @click="send"
-        >
-          <span class="i-solar:arrow-up-linear size-4" />
+      <p v-if="error" role="alert" class="composer-inline-error mt-1.5 min-w-0 flex items-center gap-2 rounded-md px-2 py-1 text-[11px]">
+        <span class="min-w-0 truncate" :title="error">{{ error }}</span>
+        <button v-if="dirty && !state?.busy" type="button" class="shrink-0 underline" @click="flush().catch(() => undefined)">
+          {{ t(`${key}.retry-sync`) }}
         </button>
-      </div>
+      </p>
 
-      <footer class="composer-toolbar mt-2 min-h-8 shrink-0 overflow-x-auto px-0.5">
-        <DetachedComposerToolbar
-          v-if="state?.status === 'detached' && toolbarState"
-          :state="toolbarState"
-          :pending="toolbarPending?.action"
-          @action="handleToolbarAction"
-        />
-        <span v-if="toolbarError" class="text-red-500" role="alert">{{ toolbarError }}</span>
+      <footer class="composer-toolbar mt-1.5 shrink-0 px-0.5">
+        <p v-if="toolbarError" class="composer-toolbar-error mb-1 truncate text-[11px] text-red-500" :title="toolbarError" role="alert">
+          {{ toolbarError }}
+        </p>
+        <div class="min-h-8 overflow-x-auto overflow-y-hidden pb-0.5">
+          <DetachedComposerToolbar
+            v-if="state?.status === 'detached' && toolbarState"
+            :state="toolbarState"
+            :pending="toolbarPending?.action"
+            @action="handleToolbarAction"
+          />
+        </div>
       </footer>
     </section>
 
@@ -417,27 +430,27 @@ onUnmounted(() => {
         </AlertDialogContent>
       </AlertDialogPortal>
     </AlertDialogRoot>
-
-    <p v-if="error" role="alert" class="m-2 text-xs text-red-500">
-      {{ error }}<button v-if="dirty && !state?.busy" type="button" class="ml-2 underline" @click="flush().catch(() => undefined)">
-        {{ t(`${key}.retry-sync`) }}
-      </button>
-    </p>
   </main>
 </template>
 
 <style scoped>
 .composer-page {
   --airi-chat-field-surface: color-mix(in srgb, var(--airi-surface-field-base, var(--airi-surface-field)) var(--airi-chat-surface-opacity-pct, 35%), transparent);
-  padding-top: 0.25rem;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--airi-border-subtle) 82%, transparent);
+  border-radius: 1.4rem;
   background:
     radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--airi-accent) 18%, transparent), transparent 34%),
     radial-gradient(circle at 92% 100%, color-mix(in srgb, var(--airi-accent-soft) 30%, transparent), transparent 40%),
     color-mix(in srgb, var(--airi-surface-base, var(--airi-surface-panel)) 92%, transparent);
+  box-shadow: 0 12px 28px rgb(15 23 42 / 0.14);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
 .composer-drag-rail {
-  height: 1.7rem;
+  height: 1.65rem;
   color: var(--airi-text-muted);
 }
 
@@ -452,11 +465,8 @@ onUnmounted(() => {
 
 .composer-card {
   position: relative;
-  overflow: hidden;
-  border-color: var(--airi-border-subtle);
-  background: color-mix(in srgb, var(--airi-surface-card-base) var(--airi-chat-surface-opacity-pct, 35%), transparent);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 0.13);
-  backdrop-filter: blur(18px) saturate(1.08);
+  border-color: transparent;
+  background: transparent;
 }
 
 .composer-card::before {
@@ -464,11 +474,16 @@ onUnmounted(() => {
   inset: 0;
   pointer-events: none;
   content: '';
-  background: linear-gradient(135deg, color-mix(in srgb, var(--airi-accent-soft) 12%, transparent), transparent 34%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--airi-accent-soft) 5%, transparent), transparent 34%);
 }
 
 .composer-card > * {
   position: relative;
+}
+
+.composer-scroll {
+  min-width: 0;
+  scrollbar-gutter: stable;
 }
 
 .composer-textarea {
@@ -479,9 +494,41 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+@media (max-height: 220px) {
+  .composer-input-area {
+    min-height: 3.75rem;
+  }
+}
+
 .composer-toolbar :deep(.detached-composer-toolbar) {
   flex-wrap: nowrap;
   min-width: max-content;
+}
+
+@media (max-width: 430px) {
+  .composer-toolbar :deep(.detached-composer-toolbar),
+  .composer-toolbar :deep(.detached-composer-toolbar > div) {
+    gap: 0.25rem;
+  }
+
+  .composer-toolbar :deep(.detached-composer-toolbar > div) {
+    padding-right: 0.25rem;
+  }
+
+  .composer-toolbar :deep(.detached-toolbar-button) {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.5rem;
+  }
+}
+
+.composer-inline-error {
+  color: #dc2626;
+  background: color-mix(in srgb, #ef4444 9%, var(--airi-surface-card-base));
+}
+
+.dark .composer-inline-error {
+  color: #fca5a5;
 }
 
 .composer-notice {
@@ -492,7 +539,49 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--airi-accent) 12%, var(--airi-surface-card-base));
 }
 
-.dark .composer-card {
-  box-shadow: 0 16px 36px rgb(0 0 0 / 0.28);
+.composer-page.is-dragging {
+  border-color: color-mix(in srgb, var(--airi-accent) 72%, var(--airi-border-subtle));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--airi-accent) 22%, transparent);
+  transform: translateY(-1px);
+}
+
+.composer-return-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.94);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .composer-page {
+    animation: composer-arrive 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .composer-drag-status {
+    animation: composer-drag-pulse 700ms ease-in-out infinite alternate;
+  }
+}
+
+@keyframes composer-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes composer-drag-pulse {
+  from {
+    transform: translateX(-50%) scale(0.98);
+  }
+
+  to {
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.dark .composer-page {
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.3);
 }
 </style>

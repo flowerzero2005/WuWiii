@@ -8,13 +8,12 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow as ElectronWindow, screen } from 'electron'
 
 import { createComposerState, validateComposerScope } from '../../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragCancel, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionNames, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSourceTextAppend, composerSourceTextChanged, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragCancel, composerDragDetach, composerDragMove, composerDragReturn, composerDragStart, composerEdit, composerEditorCloseAck, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionNames, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSourceTextAppend, composerSourceTextChanged, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { composerContainsPoint, composerScreenRegion } from '../../../shared/detached-composer-geometry'
-import { createDetachedComposerWindow } from '../../windows/composer'
+import { createDetachedComposerWindow, DETACHED_COMPOSER_TOP_LEVEL } from '../../windows/composer'
 import { createWindowEventaContext, isIpcEventFromWindow } from '../../windows/shared/window'
 import { createComposerPersistence } from './detached-composer-persistence'
 
-const CURSOR_POINT_TOLERANCE_PX = 64
 const RETURN_TARGET_REGION_MAX_AGE_MS = 2_500
 const SOURCE_ACTION_TIMEOUT_MS = 10_000
 const SOURCE_ACTION_MAX_PENDING = 32
@@ -30,12 +29,16 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
   let quitRequested = false
   let persistenceFailure: unknown
   let queue = Promise.resolve()
-  let editorDrag: { leaseId: string, version: number, origin: ComposerPoint, bounds: Rectangle } | undefined
-  let finishedEditorDrag: { leaseId: string, version: number, origin: ComposerPoint, at: number } | undefined
+  let editorDrag: { leaseId: string, version: number, gestureId: string, origin?: ComposerPoint, bounds: Rectangle, cursor: ComposerPoint } | undefined
+  let finishedEditorDrag: { leaseId: string, version: number, gestureId: string, origin: ComposerPoint, at: number } | undefined
+  let pendingEditorClose: { editorWebContentsId: number, leaseId: string, version: number, action: 'release' | 'discard' } | undefined
+  let releaseInFlightSourceWebContentsId: number | undefined
+  let releaseInFlightCount = 0
   const sourceActions = new Map<string, { leaseId: string, version: number, sourceWebContentsId: number, sourceGeneration: string, action: string, at: number }>()
   const bindings = new Map<number, Omit<ComposerDetach, 'draft' | 'recover'>>()
   const regions = new Map<number, { generation: string, region: ComposerClientRegion, at: number }>()
   const sourceCloseAllowed = new Set<number>()
+  const sourceCloseAttempts = new Map<number, { sourceGeneration: string, closeAttemptId: string }>()
   const ready = persistence.load().then(data => state.restore(data)).catch(error => persistenceFailure = error)
   async function initialized() {
     await ready
@@ -57,13 +60,16 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
     }
   }
   function verifiedCursor(point: ComposerPoint) {
-    const cursor = screen.getCursorScreenPoint()
-    // Renderer and main receive the release through separate queues. The
-    // actual cursor is still checked against the target below, so this only
-    // absorbs hand-off latency rather than accepting an off-target drop.
-    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || Math.hypot(point.x - cursor.x, point.y - cursor.y) > CURSOR_POINT_TOLERANCE_PX)
-      throw new Error('The composer drag no longer owns the cursor position.')
-    return cursor
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y))
+      throw new Error('Invalid composer drag position.')
+    // DOM screen coordinates and Electron screen coordinates can use
+    // different DPI units on Windows. Use the main-process cursor for the
+    // target check instead of comparing coordinates from those two spaces.
+    return screen.getCursorScreenPoint()
+  }
+  function requireDragGesture(gestureId: unknown) {
+    if (typeof gestureId !== 'string' || !gestureId || gestureId.length > 128)
+      throw new Error('Invalid composer drag gesture.')
   }
   const snapshot = () => state.read()
   const publish = () => {
@@ -106,18 +112,20 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
           }).then(publish).catch(() => undefined)
         }
         allowClose = true
+        pendingEditorClose = undefined
         window.destroy()
       })
       window.once('closed', () => {
         if (editor === window) {
           editor = undefined
           sourceActions.clear()
+          pendingEditorClose = undefined
         }
         finishQuit()
       })
       window.on('focus', () => {
         if (editor === window && snapshot()?.status === 'detached') {
-          window.setAlwaysOnTop(true, 'screen-saver', 2)
+          window.setAlwaysOnTop(true, 'screen-saver', DETACHED_COMPOSER_TOP_LEVEL)
           window.moveTop()
         }
       })
@@ -186,6 +194,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return
       bindings.delete(id)
       regions.delete(id)
+      sourceCloseAttempts.delete(id)
       clearSourceActions(action => action.sourceWebContentsId === id)
       void commit(() => state.invalidate(id)).then(publish).catch(() => undefined).finally(finishQuit)
     })
@@ -193,6 +202,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       invalidate()
       bindings.delete(id)
       regions.delete(id)
+      sourceCloseAttempts.delete(id)
       clearSourceActions(action => action.sourceWebContentsId === id)
       contexts.delete(id)
       dispose()
@@ -202,8 +212,14 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const binding = bindings.get(id)
       if (!binding || sourceCloseAllowed.has(id) || quitting || editor?.webContents.id === id)
         return
+      if (releaseInFlightCount && releaseInFlightSourceWebContentsId === id) {
+        event.preventDefault()
+        return
+      }
       event.preventDefault()
-      context.emit(composerFlushSource, { sourceGeneration: binding.sourceGeneration })
+      const closeAttempt = { sourceGeneration: binding.sourceGeneration, closeAttemptId: crypto.randomUUID() }
+      sourceCloseAttempts.set(id, closeAttempt)
+      context.emit(composerFlushSource, closeAttempt)
     })
     async function detach(input: ComposerDetach, point?: ComposerPoint) {
       requireConversation(window)
@@ -242,10 +258,29 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (isIpcEventFromWindow(window, options))
         return detach(input, input.point)
     })
+    defineInvokeHandler(context, composerDragStart, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireEditor(id)
+      requireDragGesture(input.gestureId)
+      const value = snapshot()
+      if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached' || value.busy)
+        throw new Error('The composer ownership changed during the drag.')
+      if (finishedEditorDrag && Date.now() - finishedEditorDrag.at > RETURN_TARGET_REGION_MAX_AGE_MS)
+        finishedEditorDrag = undefined
+      if (finishedEditorDrag?.leaseId === input.leaseId && finishedEditorDrag.version === input.version && finishedEditorDrag.gestureId === input.gestureId)
+        return
+      // Move can arrive before this invoke response. Keep the session that
+      // move created when both messages belong to the same gesture.
+      if (!editorDrag || editorDrag.leaseId !== input.leaseId || editorDrag.version !== input.version || editorDrag.gestureId !== input.gestureId)
+        editorDrag = { leaseId: input.leaseId, version: input.version, gestureId: input.gestureId, bounds: editor!.getBounds(), cursor: screen.getCursorScreenPoint() }
+      finishedEditorDrag = undefined
+    })
     defineInvokeHandler(context, composerDragMove, (input, options) => {
       if (!isIpcEventFromWindow(window, options))
         return
       requireEditor(id)
+      requireDragGesture(input.gestureId)
       const value = snapshot()
       if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached' || value.busy)
         throw new Error('The composer ownership changed during the drag.')
@@ -253,18 +288,24 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         throw new Error('Invalid composer drag position.')
       if (finishedEditorDrag && Date.now() - finishedEditorDrag.at > RETURN_TARGET_REGION_MAX_AGE_MS)
         finishedEditorDrag = undefined
-      if (finishedEditorDrag?.leaseId === input.leaseId && finishedEditorDrag.version === input.version
+      if (finishedEditorDrag?.leaseId === input.leaseId && finishedEditorDrag.version === input.version && finishedEditorDrag.gestureId === input.gestureId
         && finishedEditorDrag.origin.x === input.origin.x && finishedEditorDrag.origin.y === input.origin.y) {
         publishSourceReturnTargetState(value, false)
         return false
       }
-      if (!editorDrag || editorDrag.leaseId !== input.leaseId || editorDrag.version !== input.version
-        || editorDrag.origin.x !== input.origin.x || editorDrag.origin.y !== input.origin.y) {
-        editorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, bounds: editor!.getBounds() }
+      if (editorDrag && editorDrag.leaseId === input.leaseId && editorDrag.version === input.version && editorDrag.gestureId !== input.gestureId) {
+        publishSourceReturnTargetState(value, false)
+        return false
       }
-      const display = screen.getDisplayNearestPoint(input.point).workArea
-      const x = Math.round(Math.max(display.x, Math.min(editorDrag.bounds.x + input.point.x - editorDrag.origin.x, display.x + display.width - editorDrag.bounds.width)))
-      const y = Math.round(Math.max(display.y, Math.min(editorDrag.bounds.y + input.point.y - editorDrag.origin.y, display.y + display.height - editorDrag.bounds.height)))
+      if (!editorDrag || editorDrag.leaseId !== input.leaseId || editorDrag.version !== input.version || editorDrag.gestureId !== input.gestureId
+        || (editorDrag.origin && (editorDrag.origin.x !== input.origin.x || editorDrag.origin.y !== input.origin.y))) {
+        editorDrag = { leaseId: input.leaseId, version: input.version, gestureId: input.gestureId, origin: input.origin, bounds: editor!.getBounds(), cursor: verifiedCursor(input.point) }
+      }
+      editorDrag.origin ??= input.origin
+      const cursor = verifiedCursor(input.point)
+      const display = screen.getDisplayNearestPoint(cursor).workArea
+      const x = Math.round(Math.max(display.x, Math.min(editorDrag.bounds.x + cursor.x - editorDrag.cursor.x, display.x + display.width - editorDrag.bounds.width)))
+      const y = Math.round(Math.max(display.y, Math.min(editorDrag.bounds.y + cursor.y - editorDrag.cursor.y, display.y + display.height - editorDrag.bounds.height)))
       editor!.setPosition(x, y)
       const source = returnTarget(value)
       const active = !!source && composerContainsPoint(source.getContentBounds(), screen.getCursorScreenPoint())
@@ -282,6 +323,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         throw new Error('Invalid composer source generation.')
       bindings.set(id, { userScope: input.userScope, sessionId: input.sessionId, surface: input.surface, group: input.group, sourceGeneration: input.sourceGeneration })
       sourceCloseAllowed.delete(id)
+      sourceCloseAttempts.delete(id)
       regions.delete(id)
       const value = state.recovery(input.userScope, input.sessionId, input.surface)
       return { version: state.draftVersion(input), draft: value?.draft, uncertain: !!value?.uncertain }
@@ -375,7 +417,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (!value || value.status !== 'detached' || value.scope.leaseId !== input.leaseId || value.scope.sourceGeneration !== input.sourceGeneration)
         throw new Error('The detached composer visibility request is no longer current.')
       if (input.restore) {
-        editor?.setAlwaysOnTop(true, 'screen-saver', 2)
+        editor?.setAlwaysOnTop(true, 'screen-saver', DETACHED_COMPOSER_TOP_LEVEL)
         editor?.show()
         editor?.moveTop()
       }
@@ -388,11 +430,12 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (!isIpcEventFromWindow(window, options))
         return
       requireEditor(id)
+      requireDragGesture(input.gestureId)
       const value = snapshot()
       if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version || value.status !== 'detached' || value.busy)
         throw new Error('The composer ownership changed during the drag.')
       if (input.origin)
-        finishedEditorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, at: Date.now() }
+        finishedEditorDrag = { leaseId: input.leaseId, version: input.version, gestureId: input.gestureId, origin: input.origin, at: Date.now() }
       editorDrag = undefined
       const source = returnTarget(value)
       try {
@@ -406,13 +449,16 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (!isIpcEventFromWindow(window, options))
         return
       requireEditor(id)
+      requireDragGesture(input.gestureId)
       const value = snapshot()
       if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version
         || value.scope.sourceGeneration !== input.sourceGeneration || value.status !== 'detached' || value.busy) {
         throw new Error('The composer ownership changed during the drag.')
       }
-      editorDrag = undefined
-      finishedEditorDrag = undefined
+      if (editorDrag?.gestureId === input.gestureId)
+        editorDrag = undefined
+      if (finishedEditorDrag?.gestureId === input.gestureId)
+        finishedEditorDrag = undefined
       publishSourceReturnTargetState(value, false)
     })
     defineInvokeHandler(context, composerSourceCloseAck, async (input, options) => {
@@ -420,11 +466,36 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return
       if (bindings.get(id)?.sourceGeneration !== input.sourceGeneration)
         throw new Error('The close acknowledgement belongs to an older source.')
+      const closeAttempt = sourceCloseAttempts.get(id)
+      if (!closeAttempt || closeAttempt.sourceGeneration !== input.sourceGeneration || closeAttempt.closeAttemptId !== input.closeAttemptId)
+        return
       await queue
-      if (bindings.get(id)?.sourceGeneration !== input.sourceGeneration)
-        throw new Error('The close acknowledgement belongs to an older source.')
+      if (sourceCloseAttempts.get(id) !== closeAttempt)
+        return
+      sourceCloseAttempts.delete(id)
       sourceCloseAllowed.add(id)
       window.close()
+    })
+    defineInvokeHandler(context, composerEditorCloseAck, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireEditor(id)
+      const pending = pendingEditorClose
+      if (!pending || pending.editorWebContentsId !== id || pending.leaseId !== input.leaseId || pending.version !== input.version || pending.action !== input.action) {
+        throw new Error('The editor close acknowledgement is no longer current.')
+      }
+      const currentEditor = editor
+      if (!currentEditor || currentEditor.isDestroyed() || currentEditor.webContents.id !== pending.editorWebContentsId)
+        throw new Error('The editor close acknowledgement has no active editor.')
+      pendingEditorClose = undefined
+      allowClose = true
+      // This acknowledgement proves the preceding release/discard reply
+      // reached the editor. Yield once more so Eventa can reply to the ack
+      // itself before its WebContents is destroyed.
+      setImmediate(() => {
+        if (editor === currentEditor && !currentEditor.isDestroyed())
+          currentEditor.close()
+      })
     })
     defineInvokeHandler(context, composerRead, async (_, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -496,17 +567,41 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       if (!isIpcEventFromWindow(window, options))
         return
       requireEditor(id)
-      const value = await commit(() => state.release(input))
-      editorDrag = undefined
-      finishedEditorDrag = undefined
-      sourceActions.clear()
-      publishSourceReturnTargetState(value, false)
-      publish()
-      const source = returnTarget(value)
-      source?.focus()
-      allowClose = true
-      editor?.close()
-      return value
+      const current = snapshot()
+      const source = current && returnTarget(current)
+      if (!source)
+        throw new Error('The original chat window is no longer available.')
+      sourceCloseAttempts.delete(current.scope.sourceWebContentsId)
+      releaseInFlightSourceWebContentsId = current.scope.sourceWebContentsId
+      releaseInFlightCount += 1
+      try {
+        const value = await commit(() => state.release(input))
+        editorDrag = undefined
+        finishedEditorDrag = undefined
+        sourceActions.clear()
+        const currentEditor = editor
+        if (currentEditor && !currentEditor.isDestroyed()) {
+          // Keep the editor alive until its renderer receives this durable
+          // release result and acknowledges that it is ready to close.
+          pendingEditorClose = { editorWebContentsId: currentEditor.webContents.id, leaseId: value.scope.leaseId, version: value.version, action: 'release' }
+        }
+        publishSourceReturnTargetState(value, false)
+        publish()
+        if (!source.isDestroyed()) {
+          try {
+            source.focus()
+          }
+          catch {
+            // The returned draft is durable; source focus is only cosmetic.
+          }
+        }
+        return value
+      }
+      finally {
+        releaseInFlightCount -= 1
+        if (!releaseInFlightCount)
+          releaseInFlightSourceWebContentsId = undefined
+      }
     })
     defineInvokeHandler(context, composerDiscard, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -521,8 +616,9 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         if (binding.userScope === value.scope.userScope && binding.sessionId === value.scope.sessionId && binding.surface === value.scope.surface)
           contexts.get(sourceId)?.emit(composerDraftDiscarded, { userScope: value.scope.userScope, sessionId: value.scope.sessionId, surface: value.scope.surface, version: value.version })
       }
-      allowClose = true
-      editor?.close()
+      const currentEditor = editor
+      if (currentEditor && !currentEditor.isDestroyed())
+        pendingEditorClose = { editorWebContentsId: currentEditor.webContents.id, leaseId: value.scope.leaseId, version: value.version, action: 'discard' }
       return value
     })
   }

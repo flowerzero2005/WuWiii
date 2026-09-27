@@ -825,7 +825,7 @@ onUnmounted(() => {
   <div
     :class="[
       'h-full w-full transition-opacity duration-300',
-      shouldShowRuntimeBootstrap ? 'pointer-events-none opacity-0' : 'opacity-100',
+      shouldShowRuntimeBootstrap ? 'pointer-events-none' : undefined,
     ]"
     :style="isChatRoute || isComposerRoute || isQuickChatRoute ? chatSurfaceStyle : isWorkbenchRoute ? workbenchSurfaceStyle : undefined"
     :aria-hidden="shouldShowRuntimeBootstrap"
@@ -833,7 +833,7 @@ onUnmounted(() => {
     <BackgroundProvider
       v-if="(isChatRoute || isComposerRoute || isSettingsRoute || isWorkbenchRoute) && selectedBackground"
       :background="selectedBackground"
-      class="h-full min-h-0"
+      :class="isComposerRoute ? 'composer-background-frame' : 'h-full min-h-0'"
     >
       <RouterView />
     </BackgroundProvider>
@@ -957,6 +957,14 @@ onUnmounted(() => {
 
 .dynamic-hue {
   animation: hue-anim 10s linear infinite;
+}
+
+.composer-background-frame {
+  height: calc(100% - 0.75rem);
+  min-height: 0;
+  margin: 0.375rem;
+  overflow: hidden;
+  border-radius: 1.4rem;
 }
 
 .runtime-bootstrap-enter-active,

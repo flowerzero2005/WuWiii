@@ -4,15 +4,15 @@ import type { ComposerPoint } from '../../shared/detached-composer-geometry'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 
-import { composerChanged, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
+import { composerChanged, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerDragStart, composerEdit, composerEditorCloseAck, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
 import { composerSourceActionKey, useDetachedComposerEditor } from './use-detached-composer-editor'
 
-const mocks = vi.hoisted(() => ({ handlers: new Map<unknown, (event: { body?: ComposerSnapshot }) => void>(), invokes: new Map<unknown, ReturnType<typeof vi.fn>>(), drop: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => Promise<void>), move: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => void), cancel: undefined as undefined | (() => void) }))
+const mocks = vi.hoisted(() => ({ handlers: new Map<unknown, (event: { body?: ComposerSnapshot }) => void>(), invokes: new Map<unknown, ReturnType<typeof vi.fn>>(), start: vi.fn(), drop: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => Promise<void>), move: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => void), cancel: undefined as undefined | (() => void) }))
 vi.mock('./use-composer-pointer-drag', () => ({ useComposerPointerDrag: (drop: (point: ComposerPoint, origin: ComposerPoint) => Promise<void>, options?: { cancel?: () => void, move?: (point: ComposerPoint, origin: ComposerPoint) => void }) => {
   mocks.drop = drop
   mocks.move = options?.move
   mocks.cancel = options?.cancel
-  return { start: vi.fn(), dragging: { value: false } }
+  return { start: mocks.start, dragging: { value: false } }
 } }))
 vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaContext: () => ({ value: { on: (event: unknown, handler: (event: { body?: ComposerSnapshot }) => void) => {
@@ -28,14 +28,20 @@ function editor(reader?: (file: File) => Promise<string>) {
   scopes.push(scope)
   return scope.run(() => useDetachedComposerEditor(key => key, reader))!
 }
+function beginDrag(item: ReturnType<typeof useDetachedComposerEditor>) {
+  item.startDrag({ button: 0, isPrimary: true } as PointerEvent)
+}
 describe('detached editor close and image lifecycle', () => {
   beforeEach(() => {
     mocks.handlers.clear()
     mocks.invokes.clear()
+    mocks.start.mockClear()
     mocks.cancel = undefined
-    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerSourceActionRequest])
+    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragCancel, composerDragStart, composerDragMove, composerDragReturn, composerEditorCloseAck, composerSourceActionRequest])
       mocks.invokes.set(event, vi.fn(async () => undefined))
     mocks.invokes.get(composerRead)!.mockResolvedValue(structuredClone(initial))
+    mocks.invokes.get(composerRelease)!.mockResolvedValue({ ...initial, status: 'returned' })
+    mocks.invokes.get(composerDiscard)!.mockResolvedValue({ ...initial, status: 'returned', version: 1, draft: { text: '', images: [] } })
   })
   afterEach(() => scopes.splice(0).forEach(scope => scope.stop()))
 
@@ -67,6 +73,23 @@ describe('detached editor close and image lifecycle', () => {
     expect(item.error.value).toBe('stage.chat.composer.sync-failed')
   })
 
+  it('waits for the return acknowledgement before completing the close-button path', async () => {
+    let acknowledge!: (value: ComposerSnapshot) => void
+    mocks.invokes.get(composerRelease)!.mockImplementation(() => new Promise(resolve => acknowledge = resolve))
+    const item = editor()
+    await item.initialize()
+
+    const closing = item.close()
+
+    await vi.waitFor(() => expect(mocks.invokes.get(composerRelease)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 0 }))
+    expect(item.closing.value).toBe(true)
+    expect(mocks.invokes.get(composerEditorCloseAck)).not.toHaveBeenCalled()
+    acknowledge({ ...initial, status: 'returned', version: 1 })
+    await closing
+    expect(item.error.value).toBe('')
+    expect(mocks.invokes.get(composerEditorCloseAck)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 1, action: 'release' })
+  })
+
   it('does not import a late image after the source scope is invalidated', async () => {
     let finishImage!: (data: string) => void
     const item = editor(() => new Promise(resolve => finishImage = resolve))
@@ -83,12 +106,13 @@ describe('detached editor close and image lifecycle', () => {
   it('flushes the latest drag draft and releases only after the source region accepts the acknowledged version', async () => {
     const item = editor()
     await item.initialize()
+    beginDrag(item)
     item.draft.value.text = 'Latest drag draft!'
     mocks.invokes.get(composerEdit)!.mockResolvedValue({ ...initial, version: 1, draft: { text: item.draft.value.text, images: [] } })
     mocks.invokes.get(composerDragReturn)!.mockResolvedValue(true)
     await mocks.drop!({ x: 300, y: 600 }, { x: 100, y: 100 })
     expect(mocks.invokes.get(composerEdit)!.mock.calls[0][0].draft.text).toBe('Latest drag draft!')
-    expect(mocks.invokes.get(composerDragReturn)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 0, origin: { x: 100, y: 100 }, point: { x: 300, y: 600 } })
+    expect(mocks.invokes.get(composerDragReturn)).toHaveBeenCalledWith(expect.objectContaining({ leaseId: 'lease-a', version: 0, gestureId: expect.any(String), origin: { x: 100, y: 100 }, point: { x: 300, y: 600 } }))
     expect(mocks.invokes.get(composerRelease)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 1 })
     expect(mocks.invokes.get(composerDragReturn)!.mock.invocationCallOrder[0]).toBeLessThan(mocks.invokes.get(composerEdit)!.mock.invocationCallOrder[0])
     expect(mocks.invokes.get(composerEdit)!.mock.invocationCallOrder[0]).toBeLessThan(mocks.invokes.get(composerRelease)!.mock.invocationCallOrder[0])
@@ -97,20 +121,44 @@ describe('detached editor close and image lifecycle', () => {
   it('moves the native editor while its return handle is being dragged', async () => {
     const item = editor()
     await item.initialize()
+    beginDrag(item)
 
     mocks.move!({ x: 560, y: 420 }, { x: 160, y: 120 })
 
     expect(mocks.invokes.get(composerDragMove)).toHaveBeenCalledWith({
       leaseId: 'lease-a',
       version: 0,
+      gestureId: expect.any(String),
       origin: { x: 160, y: 120 },
       point: { x: 560, y: 420 },
     })
   })
 
+  it('records the main-process cursor before starting a return drag', async () => {
+    const item = editor()
+    await item.initialize()
+    const event = { button: 0, isPrimary: true } as PointerEvent
+
+    item.startDrag(event)
+
+    expect(mocks.invokes.get(composerDragStart)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 0, gestureId: expect.any(String) })
+    expect(mocks.start).toHaveBeenCalledWith(event)
+  })
+
+  it('does not arm a native drag for a secondary-button pointer event', async () => {
+    const item = editor()
+    await item.initialize()
+
+    item.startDrag({ button: 2, isPrimary: true } as PointerEvent)
+
+    expect(mocks.invokes.get(composerDragStart)).not.toHaveBeenCalled()
+    expect(mocks.start).not.toHaveBeenCalled()
+  })
+
   it('clears the source return highlight without releasing when a drag is cancelled', async () => {
     const item = editor()
     await item.initialize()
+    beginDrag(item)
     mocks.invokes.get(composerDragMove)!.mockResolvedValue(true)
     mocks.move!({ x: 560, y: 420 }, { x: 160, y: 120 })
     await vi.waitFor(() => expect(item.dragOverReturnTarget.value).toBe(true))
@@ -118,7 +166,7 @@ describe('detached editor close and image lifecycle', () => {
     mocks.cancel!()
 
     expect(item.dragOverReturnTarget.value).toBe(false)
-    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0 })
+    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith(expect.objectContaining({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0, gestureId: expect.any(String) }))
     expect(mocks.invokes.get(composerDragReturn)).not.toHaveBeenCalled()
     expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
   })
@@ -126,17 +174,19 @@ describe('detached editor close and image lifecycle', () => {
   it('clears the source return highlight when the editor scope is disposed', async () => {
     const item = editor()
     await item.initialize()
+    beginDrag(item)
 
-    scopes[scopes.length - 1]!.stop()
+    scopes.at(-1)!.stop()
 
     expect(item.dragOverReturnTarget.value).toBe(false)
-    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0 })
+    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith(expect.objectContaining({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0, gestureId: expect.any(String) }))
     expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
   })
 
   it('preserves a detached draft when a drop misses the actual composer region', async () => {
     const item = editor()
     await item.initialize()
+    beginDrag(item)
     mocks.invokes.get(composerDragReturn)!.mockResolvedValue(false)
     await mocks.drop!({ x: 300, y: 300 }, { x: 100, y: 100 })
     expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
@@ -148,6 +198,7 @@ describe('detached editor close and image lifecycle', () => {
     let finish!: (value: boolean) => void
     const item = editor()
     await item.initialize()
+    beginDrag(item)
     mocks.invokes.get(composerDragReturn)!.mockImplementation(() => new Promise(resolve => finish = resolve))
     const dropping = mocks.drop!({ x: 300, y: 600 }, { x: 100, y: 100 })
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
@@ -169,6 +220,42 @@ describe('detached editor close and image lifecycle', () => {
     expect(item.draft.value.text).toBe('Original')
     expect(item.error.value).toBe('stage.chat.composer.sync-failed')
     expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges a durable discard response before the editor may close', async () => {
+    const item = editor()
+    await item.initialize()
+
+    await item.discard()
+
+    expect(mocks.invokes.get(composerDiscard)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 0 })
+    expect(mocks.invokes.get(composerEditorCloseAck)).toHaveBeenCalledWith({ leaseId: 'lease-a', version: 1, action: 'discard' })
+  })
+
+  it('retries a failed release acknowledgement without releasing its old lease again', async () => {
+    mocks.invokes.get(composerEditorCloseAck)!.mockRejectedValueOnce(new Error('IPC unavailable.'))
+    const item = editor()
+    await item.initialize()
+
+    await item.close()
+    await item.close()
+
+    expect(mocks.invokes.get(composerRelease)).toHaveBeenCalledTimes(1)
+    expect(mocks.invokes.get(composerEditorCloseAck)).toHaveBeenCalledTimes(2)
+    expect(mocks.invokes.get(composerEditorCloseAck)!.mock.calls[1][0]).toEqual({ leaseId: 'lease-a', version: 0, action: 'release' })
+  })
+
+  it('retries a failed discard acknowledgement without discarding a second time', async () => {
+    mocks.invokes.get(composerEditorCloseAck)!.mockRejectedValueOnce(new Error('IPC unavailable.'))
+    const item = editor()
+    await item.initialize()
+
+    await item.discard()
+    await item.discard()
+
+    expect(mocks.invokes.get(composerDiscard)).toHaveBeenCalledTimes(1)
+    expect(mocks.invokes.get(composerEditorCloseAck)).toHaveBeenCalledTimes(2)
+    expect(mocks.invokes.get(composerEditorCloseAck)!.mock.calls[1][0]).toEqual({ leaseId: 'lease-a', version: 1, action: 'discard' })
   })
 
   it('tracks a source action by its lease, version and request id until the source confirms it', async () => {

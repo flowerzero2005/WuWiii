@@ -220,12 +220,12 @@ describe('source composer lifecycle', () => {
     let acknowledge!: (value: unknown) => void
     mocks.invokes.get(composerSourceCheckpoint)!.mockImplementationOnce(() => new Promise(resolve => acknowledge = resolve))
     const scope = mocks.invokes.get(composerSourceRead)!.mock.calls[0][0]
-    mocks.handlers.get(composerFlushSource)!({ body: { sourceGeneration: scope.sourceGeneration } })
+    mocks.handlers.get(composerFlushSource)!({ body: { sourceGeneration: scope.sourceGeneration, closeAttemptId: 'close-a' } })
     await vi.waitFor(() => expect(acknowledge).toBeTypeOf('function'))
     expect(mocks.invokes.get(composerSourceCloseAck)).not.toHaveBeenCalled()
     expect(mocks.invokes.get(composerSourceCheckpoint)!.mock.calls.at(-1)![0].draft.text).toBe('Last source character!')
     acknowledge({ version: 2 })
-    await vi.waitFor(() => expect(mocks.invokes.get(composerSourceCloseAck)).toHaveBeenCalledWith({ sourceGeneration: scope.sourceGeneration }))
+    await vi.waitFor(() => expect(mocks.invokes.get(composerSourceCloseAck)).toHaveBeenCalledWith({ sourceGeneration: scope.sourceGeneration, closeAttemptId: 'close-a' }))
   })
 
   it('keeps unknown recovered outcomes read only without importing or replaying them', async () => {
