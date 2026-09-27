@@ -2,6 +2,7 @@ import type { ComposerDraft, ComposerSnapshot } from '../../shared/detached-comp
 import type { ComposerSourceAction, ComposerSourceActionName, ComposerSourceActionStatus } from '../../shared/detached-composer-events'
 
 import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { VISION_IMAGE_LIMITS_I18N_PARAMS, VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES, VISION_MAX_TOTAL_IMAGE_BYTES } from '@proj-airi/stage-ui/libs/vision-limits'
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot, validateComposerDraft } from '../../shared/detached-composer'
@@ -24,7 +25,7 @@ export function composerSourceActionKey(action: Pick<ComposerSourceAction, 'leas
 const SOURCE_ACTION_TIMEOUT_MS = 10_000
 
 /** An editor has no provider or chat runtime; it only commits acknowledged drafts. */
-export function useDetachedComposerEditor(t: (key: string) => string, imageReader = readImage) {
+export function useDetachedComposerEditor(t: (key: string, params?: Record<string, number>) => string, imageReader = readImage) {
   const key = 'stage.chat.composer'
   const context = useElectronEventaContext()
   const read = useElectronEventaInvoke(composerRead)
@@ -181,8 +182,16 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
     const leaseId = state.value.scope.leaseId
     const epoch = imageEpoch
     try {
+      const currentBytes = draft.value.images.reduce((sum, image) => {
+        const padding = image.data.endsWith('==') ? 2 : image.data.endsWith('=') ? 1 : 0
+        return sum + image.data.length * 3 / 4 - padding
+      }, 0)
+      if (draft.value.images.length + files.length > VISION_MAX_IMAGES
+        || currentBytes + files.reduce((sum, file) => sum + file.size, 0) > VISION_MAX_TOTAL_IMAGE_BYTES) {
+        throw new Error('Attachment limit exceeded.')
+      }
       for (const file of files) {
-        if (file.size > 10 * 1024 * 1024)
+        if (file.size > VISION_MAX_IMAGE_BYTES)
           throw new Error('Image too large.')
         const data = await imageReader(file)
         if (disposed || imageEpoch !== epoch || state.value?.scope.leaseId !== leaseId || state.value.busy || state.value.uncertain || closing.value)
@@ -191,7 +200,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       }
     }
     catch {
-      error.value = t(`${key}.image-failed`)
+      error.value = t(`${key}.image-failed`, VISION_IMAGE_LIMITS_I18N_PARAMS)
     }
   }
   async function initialize() {
@@ -277,7 +286,8 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       const leaseId = state.value.scope.leaseId
       const version = state.value.version
       if (!await dragReturn({ leaseId, version, gestureId, origin, point })) {
-        error.value = t(`${key}.return-target-unavailable`)
+        // Missing the drop target only cancels this drag. The draft remains
+        // editable, and the explicit return button does not use this path.
         return
       }
       if (disposed || state.value.scope.leaseId !== leaseId || state.value.status !== 'detached' || state.value.busy || state.value.uncertain)

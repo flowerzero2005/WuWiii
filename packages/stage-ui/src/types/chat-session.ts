@@ -1,4 +1,5 @@
 import type { GroupRoomScriptState } from '../stores/chat/group-script'
+import type { AiriPersonaRuntimeSnapshot } from '../stores/chat/persona-runtime-store'
 import type { ChatHistoryItem } from './chat'
 
 export interface ChatRoomParticipantSnapshot {
@@ -17,6 +18,14 @@ export interface ChatSessionMeta {
   participants?: ChatRoomParticipantSnapshot[]
   primaryCharacterId?: string
   title?: string
+  lastMessagePreview?: string
+  lastMessagePreviewVersion?: number
+  lastMessageAt?: number
+  starred?: boolean
+  starredUpdatedAt?: number
+  /** User renames win over stale windows persisting message updates. */
+  titleUpdatedAt?: number
+  historyRevision?: number
   roomScriptRevision?: number
   createdAt: number
   updatedAt: number
@@ -26,6 +35,7 @@ export interface ChatSessionRecord {
   meta: ChatSessionMeta
   messages: ChatHistoryItem[]
   roomScript?: GroupRoomScriptState
+  personaRuntime?: AiriPersonaRuntimeSnapshot
 }
 
 export interface ChatCharacterSessionsIndex {

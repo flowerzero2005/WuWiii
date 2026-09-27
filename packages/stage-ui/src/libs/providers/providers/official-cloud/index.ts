@@ -16,12 +16,15 @@ import {
   createTranscriptionProviderWithExtraOptions,
   merge,
 } from '@xsai-ext/providers/utils'
+import { getActivePinia } from 'pinia'
 import { toast } from 'vue-sonner'
 import { z } from 'zod'
 
 import { isChatDiagnosticsEnabled } from '../../../../stores/chat/chat-diagnostics'
+import { getOfficialCloudChatError } from '../../../../utils/chat-error'
 import { clampSearchResultsCount, extractDomain, inferTopics } from '../../web-search-utils'
 import { defineProvider } from '../registry'
+import { createOfficialChatCooldown, OFFICIAL_CHAT_MAX_COOLDOWN_WAIT_MS, parseOfficialRetryAfter } from './chat-cooldown'
 import {
   OFFICIAL_CLOUD_DELIVERY_ACK_HEADER,
   OFFICIAL_CLOUD_DELIVERY_ACK_VERSION,
@@ -51,6 +54,18 @@ const CHAT_DELIVERY_STAGES = new Set([
   'tool-execution',
   'tool-router',
 ])
+const FOREGROUND_CHAT_STAGES = new Set(['chat-primary', 'tool-execution', 'tool-conclusion'])
+const officialChatCooldown = createOfficialChatCooldown(() => globalThis.localStorage)
+
+function getOfficialChatCooldownScope(input: RequestInfo | URL) {
+  // Read the existing store without initializing auth or starting a session fetch.
+  const auth = getActivePinia()?.state.value.auth
+  const userId = auth?.user?.id
+  if (typeof userId !== 'string' || !userId || !auth?.session)
+    return undefined
+  const origin = new URL(input instanceof Request ? input.url : input.toString(), SERVER_URL).origin
+  return JSON.stringify([origin, userId, 'chat'])
+}
 
 export const OFFICIAL_CLOUD_SPEECH_MODEL = 'airi-speech'
 export const OFFICIAL_CLOUD_TRANSCRIPTION_MODEL = 'airi-transcription'
@@ -211,7 +226,7 @@ function getOfficialCloudFetchDelegate(): typeof fetch {
   return electronFetch || globalThis.fetch.bind(globalThis)
 }
 
-function getOfficialCloudErrorMessage(errorCode: string, fallbackMessage?: string, diagnostics?: string) {
+function getOfficialCloudErrorMessage(errorCode: string, fallbackMessage?: string, details?: Record<string, unknown>, status?: number) {
   if (errorCode === 'UNAUTHORIZED' || errorCode === '401')
     return 'Please sign in before using the official cloud model. Open Account & Points, sign in, then try again.'
 
@@ -221,25 +236,36 @@ function getOfficialCloudErrorMessage(errorCode: string, fallbackMessage?: strin
   if (errorCode === 'OFFICIAL_MODEL_NOT_CONFIGURED')
     return 'The official cloud model is not configured yet. Please contact the operator to check the server model settings.'
 
-  if (errorCode === 'OFFICIAL_MODEL_UPSTREAM_ERROR' || errorCode === '502' || errorCode === '503')
-    return `Provider returned 502 Bad Gateway. The official cloud model is temporarily unavailable. Please try again later.${diagnostics ? ` ${diagnostics}` : ''}`
-
-  if (errorCode === 'INTERNAL_SERVER_ERROR' || errorCode === '500')
-    return 'The official cloud service is temporarily unavailable. Please try again later.'
-
   if (errorCode === 'MODEL_NOT_AVAILABLE')
     return 'The selected official model is not available. Please update the app or try again later.'
 
   if (errorCode === 'MODEL_REQUIRED')
     return 'The official model setting is incomplete. Please reopen the app and try again.'
 
-  return fallbackMessage || 'The official cloud model request failed. Please try again later.'
+  const classified = getOfficialCloudChatError({ code: errorCode, details, message: fallbackMessage, status })
+  const publicMessages: Record<string, string> = {
+    'connection-failed': 'Unable to connect to the official cloud service. Please check the network or try again later.',
+    'content-filtered': 'The reply was stopped by the content filter. Please revise your message.',
+    'context-too-long': 'The conversation is too long for this request. Please shorten it or start a new conversation.',
+    'delivery-failed': 'The reply could not be delivered. Please try again later.',
+    'empty-response': 'The model returned no visible reply. Please retry.',
+    'invalid-response': 'The service returned an invalid reply. Please try again later.',
+    'rate-limited': 'Too many requests. Please wait a moment before trying again.',
+    'request-timeout': 'The reply request timed out. Please try again later.',
+    'truncated-response': 'The reply reached its output limit before it was complete. Please shorten the request.',
+  }
+  // Existing tool fallback uses this transport marker. Keep it stable while
+  // presenting the structured failure in the chat UI.
+  const transportPrefix = errorCode === 'OFFICIAL_MODEL_UPSTREAM_ERROR' || errorCode === '502' || errorCode === '503'
+    ? 'Provider returned 502 Bad Gateway. '
+    : ''
+  return `${transportPrefix}${publicMessages[classified.key] || 'The official cloud request failed. Please try again later.'}${classified.diagnostics}`
 }
 
 async function readOfficialCloudError(response: Response) {
   const text = await response.text()
   if (!text)
-    return { code: String(response.status), message: getOfficialCloudErrorMessage(String(response.status)) }
+    return { code: String(response.status), message: getOfficialCloudErrorMessage(String(response.status), undefined, undefined, response.status) }
 
   try {
     const body = JSON.parse(text) as OfficialCloudErrorBody
@@ -248,18 +274,14 @@ async function readOfficialCloudError(response: Response) {
     const details = body.details && typeof body.details === 'object'
       ? body.details as Record<string, unknown>
       : undefined
-    const diagnostics = [
-      typeof details?.upstreamStatus === 'number' ? `Upstream status: ${details.upstreamStatus}.` : '',
-      typeof details?.traceId === 'string' ? `Trace ID: ${details.traceId}.` : '',
-    ].filter(Boolean).join(' ')
     return {
       code: errorCode,
       details,
-      message: getOfficialCloudErrorMessage(errorCode, fallbackMessage, diagnostics),
+      message: getOfficialCloudErrorMessage(errorCode, fallbackMessage, details, response.status),
     }
   }
   catch {
-    return { code: String(response.status), message: getOfficialCloudErrorMessage(String(response.status)) }
+    return { code: String(response.status), message: getOfficialCloudErrorMessage(String(response.status), undefined, undefined, response.status) }
   }
 }
 
@@ -397,10 +419,31 @@ export async function reportOfficialCloudReplyDisplayFailure(requestId: string) 
 }
 
 export async function officialCloudFetch(input: RequestInfo | URL, init?: RequestInit) {
-  const headers = new Headers(init?.headers)
+  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
   const clientFeature = headers.get(OFFICIAL_CLOUD_FEATURE_HEADER)
   const isChatCompletion = isOfficialCloudChatCompletionRequest(input)
   const requestStage = headers.get('x-airi-request-stage')?.trim()
+  const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+  const cooldownScope = isChatCompletion ? getOfficialChatCooldownScope(input) : undefined
+  signal?.throwIfAborted()
+  if (cooldownScope) {
+    const canWait = !clientFeature && (!requestStage || FOREGROUND_CHAT_STAGES.has(requestStage))
+    const retryAfterSeconds = canWait
+      ? await officialChatCooldown.wait(cooldownScope, {
+          isCurrentScope: () => cooldownScope === getOfficialChatCooldownScope(input),
+          maxWaitMs: OFFICIAL_CHAT_MAX_COOLDOWN_WAIT_MS,
+          signal: signal ?? undefined,
+        })
+      : officialChatCooldown.remaining(cooldownScope)
+    if (retryAfterSeconds > 0) {
+      throw new OfficialCloudRequestError(getOfficialCloudErrorMessage('RATE_LIMITED', undefined, undefined, 429), {
+        code: 'RATE_LIMITED',
+        details: { reason: 'rate-limited', retryAfterSeconds },
+        retryAfterSeconds,
+        status: 429,
+      })
+    }
+  }
   headers.delete(OFFICIAL_CLOUD_FEATURE_HEADER)
   let body = init?.body
   if ((clientFeature === 'inner-voice-note' || clientFeature === 'workbench') && typeof body === 'string') {
@@ -425,6 +468,9 @@ export async function officialCloudFetch(input: RequestInfo | URL, init?: Reques
     && CHAT_DELIVERY_STAGES.has(requestStage)) {
     headers.set(OFFICIAL_CLOUD_DELIVERY_ACK_HEADER, OFFICIAL_CLOUD_DELIVERY_ACK_VERSION)
   }
+  signal?.throwIfAborted()
+  if (cooldownScope && cooldownScope !== getOfficialChatCooldownScope(input))
+    throw new DOMException('The account changed before the request was sent.', 'AbortError')
   let response: Response
   try {
     response = await getOfficialCloudFetchDelegate()(input, {
@@ -438,8 +484,8 @@ export async function officialCloudFetch(input: RequestInfo | URL, init?: Reques
     if (isOfficialCloudUsageRequest(input))
       refreshCommerceAccountState()
 
-    if (init?.signal?.aborted)
-      throw init.signal.reason ?? error
+    if (signal?.aborted)
+      throw signal.reason ?? error
 
     const officialCloudError = new Error('Unable to connect to the official cloud service. Please check the network or try again later.')
     officialCloudError.cause = error
@@ -451,13 +497,12 @@ export async function officialCloudFetch(input: RequestInfo | URL, init?: Reques
 
   if (!response.ok) {
     const parsed = await readOfficialCloudError(response)
-    const retryAfterHeader = Number.parseInt(response.headers.get('retry-after') ?? '', 10)
-    const retryAfterDetail = parsed.details?.retryAfterSeconds
-    const retryAfterSeconds = Number.isSafeInteger(retryAfterHeader) && retryAfterHeader > 0
-      ? retryAfterHeader
-      : typeof retryAfterDetail === 'number' && Number.isSafeInteger(retryAfterDetail) && retryAfterDetail > 0
-        ? retryAfterDetail
-        : undefined
+    const retryAfterSeconds = parseOfficialRetryAfter(response.headers.get('retry-after'), parsed.details?.retryAfterSeconds)
+    const rateLimited = response.status === 429
+      || parsed.details?.reason === 'rate-limited'
+      || parsed.details?.upstreamStatus === 429
+    if (cooldownScope && rateLimited && retryAfterSeconds)
+      officialChatCooldown.remember(cooldownScope, retryAfterSeconds)
     throw new OfficialCloudRequestError(parsed.message, {
       code: parsed.code,
       details: parsed.details,

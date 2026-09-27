@@ -1,3 +1,5 @@
+import { VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES, VISION_MAX_TOTAL_IMAGE_BYTES } from '@proj-airi/server-shared/vision-limits'
+
 export interface ComposerImage {
   id: string
   mimeType: string
@@ -55,7 +57,7 @@ export interface ComposerRecoveryData {
   drafts: ComposerStoredDraft[]
 }
 export const COMPOSER_MAX_SCOPES = 8
-export const COMPOSER_MAX_TOTAL_IMAGE_BYTES = 40 * 1024 * 1024
+export const COMPOSER_MAX_TOTAL_IMAGE_BYTES = VISION_MAX_TOTAL_IMAGE_BYTES
 const scopeKey = (scope: Pick<ComposerDraftScope, 'userScope' | 'sessionId' | 'surface'>) => JSON.stringify([scope.userScope, scope.surface, scope.sessionId])
 
 export function validateComposerScope(value: ComposerDraftScope) {
@@ -98,7 +100,7 @@ export function mergeComposerSnapshot(current: ComposerSnapshot | undefined, inc
     return current.status === 'returned' ? incoming : current
   if (incoming.version < current.version)
     return current
-  if ((current.status === 'orphaned' || current.status === 'returned') && incoming.status === 'detached')
+  if (((current.status === 'orphaned' && current.scope.sourceGeneration === incoming.scope.sourceGeneration) || current.status === 'returned') && incoming.status === 'detached')
     return { ...incoming, status: current.status, busy: false, uncertain: current.uncertain || incoming.uncertain, commandId: current.commandId ?? incoming.commandId }
   if (incoming.version === current.version && current.uncertain && !incoming.uncertain)
     return current
@@ -110,18 +112,22 @@ const BASE64_RE = /^[A-Z0-9+/]*={0,2}$/i
 
 export function validateComposerDraft(value: ComposerDraft, group: boolean): ComposerDraft {
   if (!value || typeof value.text !== 'string' || value.text.length > 128_000 || !Array.isArray(value.images)
-    || value.images.length > 4 || (group && value.images.length)) {
+    || value.images.length > VISION_MAX_IMAGES || (group && value.images.length)) {
     throw new Error('Invalid composer draft.')
   }
   const ids = new Set<string>()
+  let totalImageBytes = 0
   const images = value.images.map((image) => {
     const padding = image?.data?.endsWith('==') ? 2 : image?.data?.endsWith('=') ? 1 : 0
     if (!image || typeof image.id !== 'string' || !image.id || image.id.length > 128 || ids.has(image.id)
       || typeof image.mimeType !== 'string' || !IMAGE_MIME_RE.test(image.mimeType)
       || typeof image.data !== 'string' || !image.data || image.data.length % 4 !== 0 || !BASE64_RE.test(image.data)
-      || image.data.length * 3 / 4 - padding > 10 * 1024 * 1024) {
+      || image.data.length * 3 / 4 - padding > VISION_MAX_IMAGE_BYTES) {
       throw new Error('Invalid composer image.')
     }
+    totalImageBytes += image.data.length * 3 / 4 - padding
+    if (totalImageBytes > VISION_MAX_TOTAL_IMAGE_BYTES)
+      throw new Error('Composer draft images exceed the total attachment size limit.')
     ids.add(image.id)
     return { id: image.id, mimeType: image.mimeType, data: image.data }
   })
@@ -274,6 +280,19 @@ export function createComposerState() {
       state.version = (draftVersions.get(key(input)) ?? -1) + 1
       draftVersions.set(key(input), state.version)
       recoveries.delete(key(input))
+      return read()!
+    },
+    rebindSource(sourceWebContentsId: number, input: Omit<ComposerDetach, 'draft' | 'recover'>) {
+      validateComposerScope(input)
+      if (typeof input.sourceGeneration !== 'string' || !input.sourceGeneration || input.sourceGeneration.length > 256)
+        throw new Error('Invalid composer source generation.')
+      if (!state || !['detached', 'orphaned'].includes(state.status) || state.busy || state.uncertain
+        || key(state.scope) !== key(input) || state.scope.group !== input.group) {
+        return read()
+      }
+      state.scope.sourceWebContentsId = sourceWebContentsId
+      state.scope.sourceGeneration = input.sourceGeneration
+      state.status = 'detached'
       return read()!
     },
     edit(input: ComposerVersion & { draft: ComposerDraft }) {

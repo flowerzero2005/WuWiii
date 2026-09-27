@@ -4,7 +4,7 @@ import type { VisionProviderId } from '@proj-airi/stage-ui/stores/modules/vision
 
 import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
-import { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
+import { getVisionAttachmentErrorKey, useVisionStore, VISION_IMAGE_LIMITS_I18N_PARAMS, VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES, VISION_MAX_TOTAL_IMAGE_BYTES } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
 import { Button, FieldCheckbox, FieldInput, FieldRange, FieldSelect } from '@proj-airi/ui'
@@ -45,9 +45,9 @@ const {
 } = storeToRefs(visionStore)
 
 const visionPoints = computed(() => officialPricingStore.getCapability('vision')?.pointsPerRequest)
-const testImage = ref<File>()
+const testImages = ref<File[]>([])
 const testImageInputRef = ref<HTMLInputElement>()
-const testImagePreviewUrl = ref('')
+const testImagePreviewUrls = ref<string[]>([])
 const testResult = ref('')
 const testError = ref('')
 const testPending = ref(false)
@@ -64,15 +64,14 @@ const visionQuote = computed(() => officialCapabilityConsentStore.getQuote('visi
 const visionConsentNeeded = computed(() => officialCapabilityConsentStore.needsConsent(authUser.value?.id, 'vision', visionQuote.value))
 const officialTestBlocked = computed(() => provider.value === 'official-cloud' && (!authUser.value?.id || visionConsentNeeded.value))
 const testActionDisabled = computed(() => !enabled.value || isAnalyzing.value || testPending.value || officialTestBlocked.value)
-watch(() => [enabled.value, provider.value, testImage.value, authUser.value?.id, visionQuote.value?.fingerprint, aliyunApiKey.value, aliyunBaseUrl.value, aliyunModel.value, openAICompatibleApiKey.value, openAICompatibleBaseUrl.value, openAICompatibleModel.value, geminiApiKey.value, geminiBaseUrl.value, geminiModel.value, visionConsentNeeded.value], () => {
+watch(() => [enabled.value, provider.value, testImages.value, authUser.value?.id, visionQuote.value?.fingerprint, aliyunApiKey.value, aliyunBaseUrl.value, aliyunModel.value, openAICompatibleApiKey.value, openAICompatibleBaseUrl.value, openAICompatibleModel.value, geminiApiKey.value, geminiBaseUrl.value, geminiModel.value, visionConsentNeeded.value], () => {
   testController?.abort()
   testResult.value = ''
   testError.value = ''
 }, { flush: 'sync' })
 function clearTestImagePreview() {
-  if (testImagePreviewUrl.value)
-    URL.revokeObjectURL(testImagePreviewUrl.value)
-  testImagePreviewUrl.value = ''
+  testImagePreviewUrls.value.forEach(url => URL.revokeObjectURL(url))
+  testImagePreviewUrls.value = []
 }
 
 onUnmounted(() => {
@@ -111,19 +110,32 @@ function chooseTestImage() {
 
 function handleTestImageChange(event: Event) {
   const input = event.target as HTMLInputElement
-  const image = input.files?.[0]
+  const images = Array.from(input.files ?? [])
   input.value = ''
-  if (!image)
+  if (!images.length)
     return
+  const errorKey = images.length > VISION_MAX_IMAGES
+    ? 'image-limit'
+    : images.some(image => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.type))
+      ? 'image-format'
+      : images.some(image => image.size > VISION_MAX_IMAGE_BYTES)
+        ? 'image-too-large'
+        : images.reduce((sum, image) => sum + image.size, 0) > VISION_MAX_TOTAL_IMAGE_BYTES
+          ? 'images-too-large'
+          : undefined
+  if (errorKey) {
+    testError.value = t(`stage.chat.vision.${errorKey}`, VISION_IMAGE_LIMITS_I18N_PARAMS)
+    return
+  }
   clearTestImagePreview()
-  testImage.value = image
-  testImagePreviewUrl.value = URL.createObjectURL(image)
+  testImages.value = images
+  testImagePreviewUrls.value = images.map(image => URL.createObjectURL(image))
   testResult.value = ''
   testError.value = ''
 }
 
 function clearTestImage() {
-  testImage.value = undefined
+  testImages.value = []
   clearTestImagePreview()
   testResult.value = ''
   testError.value = ''
@@ -174,7 +186,7 @@ async function testVision() {
     return
   testResult.value = ''
   testError.value = ''
-  if (!testImage.value) {
+  if (!testImages.value.length) {
     testError.value = t('settings.pages.modules.vision.test.image-required')
     return
   }
@@ -189,7 +201,7 @@ async function testVision() {
     }
     return
   }
-  const selectedImage = testImage.value
+  const selectedImages = testImages.value
   const selectedProvider = provider.value
   const selectedScope = authUser.value?.id
   const selectedQuote = visionQuote.value?.fingerprint
@@ -197,16 +209,16 @@ async function testVision() {
   testController = controller
   testPending.value = true
   function isCurrent() {
-    return !controller.signal.aborted && enabled.value && selectedImage === testImage.value
+    return !controller.signal.aborted && enabled.value && selectedImages === testImages.value
       && selectedProvider === provider.value && selectedScope === authUser.value?.id
       && selectedQuote === visionQuote.value?.fingerprint
       && (provider.value !== 'official-cloud' || (!!authUser.value?.id && !visionConsentNeeded.value))
   }
   try {
-    const attachment = await readFile(selectedImage)
+    const attachments = await Promise.all(selectedImages.map(readFile))
     if (!isCurrent())
       return
-    const result = await visionStore.analyze(t('settings.pages.modules.vision.test.prompt'), [attachment], {
+    const result = await visionStore.analyze(t('settings.pages.modules.vision.test.prompt'), attachments, {
       signal: controller.signal,
       requestId: `vision:test:${crypto.randomUUID()}`,
       sourceSurface: 'vision-settings-test',
@@ -215,8 +227,10 @@ async function testVision() {
       testResult.value = result?.text ?? t('settings.pages.modules.vision.test.disabled')
   }
   catch (error) {
-    if (isCurrent())
-      testError.value = error instanceof Error ? error.message : String(error)
+    if (isCurrent()) {
+      const errorKey = getVisionAttachmentErrorKey(error)
+      testError.value = errorKey ? t(`stage.chat.vision.${errorKey}`, VISION_IMAGE_LIMITS_I18N_PARAMS) : error instanceof Error ? error.message : String(error)
+    }
   }
   finally {
     if (testController === controller) {
@@ -382,21 +396,25 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
       <input
         ref="testImageInputRef"
         type="file"
+        multiple
         accept="image/png,image/jpeg,image/webp,image/gif"
         class="hidden"
         @change="handleTestImageChange"
       >
       <div :class="['flex flex-wrap items-center gap-3']">
         <Button variant="secondary" :label="t('settings.pages.modules.vision.test.choose-image')" @click="chooseTestImage" />
-        <p v-if="testImage" :class="['min-w-0 truncate text-sm airi-text-muted']" :title="testImage.name">
-          {{ t('settings.pages.modules.vision.test.image-selected', { name: testImage.name }) }}
+        <p v-if="testImages.length" :class="['min-w-0 truncate text-sm airi-text-muted']" :title="testImages.map(image => image.name).join('、')">
+          {{ t('settings.pages.modules.vision.test.images-selected', { count: testImages.length }) }}
         </p>
-        <Button v-if="testImage" size="sm" variant="ghost" :label="t('settings.pages.modules.vision.test.clear-image')" @click="clearTestImage" />
+        <Button v-if="testImages.length" size="sm" variant="ghost" :label="t('settings.pages.modules.vision.test.clear-image')" @click="clearTestImage" />
       </div>
       <p :class="['text-xs airi-text-muted']">
         {{ t('settings.pages.modules.vision.test.selection-local') }}
       </p>
-      <img v-if="testImagePreviewUrl" :src="testImagePreviewUrl" :alt="testImage?.name" :class="['max-h-56 max-w-full rounded-lg border airi-border-subtle object-contain']">
+      <p :class="['text-xs airi-text-muted']">{{ t('stage.chat.composer.image-failed', VISION_IMAGE_LIMITS_I18N_PARAMS) }}</p>
+      <div v-if="testImagePreviewUrls.length" :class="['flex min-w-0 gap-2 overflow-x-auto']">
+        <img v-for="(url, index) in testImagePreviewUrls" :key="url" :src="url" :alt="testImages[index]?.name" :class="['max-h-40 max-w-48 rounded-lg border airi-border-subtle object-contain']">
+      </div>
       <p v-if="officialTestBlocked" :class="['rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300']">
         {{ authUser ? t('settings.pages.modules.vision.test.fee-required') : t('stage.chat.capability-consent.login-required') }}
       </p>

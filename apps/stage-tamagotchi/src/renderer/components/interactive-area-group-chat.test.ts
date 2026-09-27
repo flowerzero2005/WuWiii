@@ -107,8 +107,13 @@ describe('interactive area group chat UI', () => {
     expect(source).toContain('const hasAcceptedSpeakerOutput = () => hasSpeakerResponseMessage(')
   })
 
-  it('renews the 90-second speaker watchdog from real turn progress', () => {
+  it('renews each frozen speaker watchdog from real turn progress', () => {
     expect(source).toContain('GROUP_SPEAKER_IDLE_TIMEOUT_MS')
+    expect(source).toContain('const speakerIdleTimeoutMs = resolveChatTurnIdleTimeoutMs(responderProviderId === \'official-cloud\', GROUP_SPEAKER_IDLE_TIMEOUT_MS)')
+    expect(source).toContain('startGroupSpeaker(activeGroupRun.value, groupTurnId, characterId, Date.now(), speakerIdleTimeoutMs)')
+    expect(source).toContain('const idleTimeoutMs = activeGroupRun.value?.speaker?.idleTimeoutMs ?? GROUP_SPEAKER_IDLE_TIMEOUT_MS')
+    expect(source).toContain('Math.max(1, idleTimeoutMs - (Date.now() - lastProgressAt))')
+    expect(source).toContain('graceMs: idleTimeoutMs')
     expect(source).toContain('onProgress: () => noteGroupTurnProgress(groupTurnId, characterId)')
     expect(source).toContain('interruptActiveTurn(roomSessionId, \'group-speaker-watchdog\', { scope: \'active-turn\' })')
     expect(source).toContain('interruptActiveTurn(groupRun.sessionId, \'chat-interrupt-button\')')

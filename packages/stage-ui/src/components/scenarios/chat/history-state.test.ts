@@ -47,7 +47,10 @@ describe('history-state', () => {
     })).toBe(true)
   })
 
-  it('clears the tool placeholder when the authoritative result is stored on the message', () => {
+  it.each([
+    { typingCompleted: false, showPlaceholder: true },
+    { typingCompleted: true, showPlaceholder: false },
+  ])('keeps resolved tools waiting for a reply until typingCompleted=$typingCompleted', ({ typingCompleted, showPlaceholder }) => {
     expect(shouldShowStreamingPlaceholder({
       role: 'assistant',
       content: '',
@@ -65,9 +68,9 @@ describe('history-state', () => {
         result: '{"completed":true}',
       }],
       metadata: {
-        typingCompleted: false,
+        typingCompleted,
       },
-    })).toBe(false)
+    })).toBe(showPlaceholder)
   })
 
   it('matches assistant messages by id before falling back to createdAt', () => {

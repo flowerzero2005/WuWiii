@@ -96,6 +96,16 @@ function cloneForPersistence<T>(value: T): T {
 }
 
 export const chatSessionsRepo = {
+  async listSessionIds() {
+    // IndexedDB enumeration can include its physical base and uses colons
+    // where callers use slashes. Read the mount, then normalize both forms.
+    const keys = await storage.getKeys('local:')
+    return Array.from(new Set(keys.flatMap((key) => {
+      const match = key.match(/^(?:local:)?(?:airi-local:)?chat[:/]sessions[:/](.+)$/)
+      return match ? [match[1]] : []
+    })))
+  },
+
   async getIndex(userId: string) {
     const key = `local:chat/index/${userId}`
     return await storage.getItemRaw<ChatSessionsIndex>(key)

@@ -11,6 +11,7 @@ export type GroupSpeakerMilestone
 
 export interface GroupTurnSpeakerRun {
   characterId: string
+  idleTimeoutMs?: number
   key: string
   lastProgressAt: number
   messageCommittedAt?: number
@@ -55,6 +56,7 @@ export function startGroupSpeaker(
   runId: string,
   characterId: string,
   now: number,
+  idleTimeoutMs = GROUP_SPEAKER_IDLE_TIMEOUT_MS,
 ): GroupTurnRunState | undefined {
   if (!current || current.runId !== runId || current.phase !== 'running')
     return current
@@ -62,6 +64,7 @@ export function startGroupSpeaker(
   const key = createGroupSpeakerRunKey(runId, characterId)
   const speaker: GroupTurnSpeakerRun = {
     characterId,
+    idleTimeoutMs,
     key,
     lastProgressAt: now,
     phase: 'running',
@@ -138,14 +141,14 @@ export function isGroupSpeakerIdle(
   runId: string,
   characterId: string,
   now: number,
-  timeoutMs = GROUP_SPEAKER_IDLE_TIMEOUT_MS,
+  timeoutMs?: number,
 ): boolean {
   return Boolean(current
     && current.runId === runId
     && current.phase === 'running'
     && current.speaker?.characterId === characterId
     && current.speaker.phase === 'running'
-    && now - current.speaker.lastProgressAt >= timeoutMs)
+    && now - current.speaker.lastProgressAt >= (timeoutMs ?? current.speaker.idleTimeoutMs ?? GROUP_SPEAKER_IDLE_TIMEOUT_MS))
 }
 
 /** Marks one timed-out speaker as draining while the group run retains ownership. */

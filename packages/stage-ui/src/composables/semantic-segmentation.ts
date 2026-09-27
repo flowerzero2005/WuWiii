@@ -1,3 +1,6 @@
+import { removeLeakedToolProtocol } from './llm-marker-parser'
+import { removeInternalResponseTags } from './response-categoriser'
+
 const EXPLICIT_SEGMENT_MARKER = '<|SEGMENT|>'
 const TRANSITION_PREFIXES = [
   '另外',
@@ -33,10 +36,10 @@ const AFTERTHOUGHT_PREFIXES = [
 const BOUNDARY_PUNCTUATION = new Set(['。', '！', '？', '!', '?', '…'])
 const CONTINUATION_PUNCTUATION = new Set(['。', '！', '？', '!', '?', '…', '"', '\'', '”', '’', '」', '』', '）', ')', '】', '》', '~', '～'])
 const MEMORY_CAPTURE_MARKER_RE = /<\|MEMORY_CAPTURE\b[\s\S]*?(?:\|>|$)/gi
-const INCOMPLETE_ACT_MARKER_RE = /<\|\s*ACT\b(?:(?!\|>)[\s\S])*$/gi
+const INCOMPLETE_MARKER_RE = /<\|[\s\S]*$/g
 const SPECIAL_MARKER_RE = /<\|[\s\S]*?\|>/g
-const ACT_MARKER_RE = /<\|ACT\b[\s\S]*?\}\s*\|{2,}/gi
-const DISPLAY_MARKER_RE = /<\|(?:DELAY|SEGMENT)\b[\s\S]*?\|{2,}/gi
+const ACT_MARKER_RE = /<\|\s*ACT\b(?:(?!\|>)[\s\S])*?\}\s*\|{2,}>?/gi
+const DISPLAY_MARKER_RE = /<\|(?:DELAY|SEGMENT)\b(?:(?!\|>)[\s\S])*?\|{2,}>?/gi
 
 export interface SemanticSegmentationOptions {
   aggressive?: boolean
@@ -64,7 +67,9 @@ interface SegmentationConfig {
 }
 
 export function removeSpecialMarkers(text: string, options?: RemoveSpecialMarkersOptions): string {
-  let result = text
+  let result = removeInternalResponseTags(removeLeakedToolProtocol(text))
+    .replaceAll('<{\'|\'}', '<|')
+    .replaceAll('{\'|\'}>', '|>')
   let previous = ''
   let iterations = 0
 
@@ -74,12 +79,12 @@ export function removeSpecialMarkers(text: string, options?: RemoveSpecialMarker
     // envelope through EOF as well, otherwise parser.end() can expose model
     // protocol (and potentially a secret) in the final bubble/TTS.
     result = result.replace(MEMORY_CAPTURE_MARKER_RE, '')
-      .replace(SPECIAL_MARKER_RE, '')
-      // ACT has the same private-envelope rule. A provider can finish its
-      // stream before closing the marker, so consume it through EOF.
-      .replace(INCOMPLETE_ACT_MARKER_RE, '')
       .replace(ACT_MARKER_RE, '')
       .replace(DISPLAY_MARKER_RE, '')
+      .replace(SPECIAL_MARKER_RE, '')
+      // Truncated marker names (including '<|A') are private too. Strip
+      // complete malformed closers first so their following prose survives.
+      .replace(INCOMPLETE_MARKER_RE, '')
     iterations++
   }
 
@@ -119,6 +124,9 @@ function normalizeSegmentText(text: string): string {
 }
 
 function splitExplicitSegments(text: string): string[] {
+  // Strip private bodies before splitting; a SEGMENT inside <think> must
+  // never detach its trailing reasoning from the opening envelope.
+  text = removeInternalResponseTags(removeLeakedToolProtocol(text))
   if (!text.includes(EXPLICIT_SEGMENT_MARKER))
     return []
 

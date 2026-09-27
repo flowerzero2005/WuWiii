@@ -13,6 +13,15 @@
     "useDefineForClassFields": true,
     "baseUrl": "./src/renderer",
     "paths": {
+      "@proj-airi/server-shared/vision-limits": [
+        "../../../../packages/server-shared/src/vision-limits.ts"
+      ],
+      "@proj-airi/electron-screen-capture": [
+        "../../../../packages/electron-screen-capture/src/index.ts"
+      ],
+      "@proj-airi/electron-screen-capture/*": [
+        "../../../../packages/electron-screen-capture/src/*"
+      ],
       "@proj-airi/stage-ui/*": [
         "../../packages/stage-ui/src/*"
       ],
@@ -42,6 +51,10 @@
     ]
   },
   "include": [
+    "../../packages/server-shared/src/vision-limits.ts",
+    "../../packages/electron-screen-capture/src/index.ts",
+    "../../packages/electron-screen-capture/src/renderer.ts",
+    "../../packages/electron-screen-capture/src/vue/**/*.ts",
     "src/renderer/**/*.ts",
     "src/renderer/**/*.d.ts",
     "src/renderer/**/*.tsx",

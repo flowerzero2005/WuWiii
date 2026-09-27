@@ -5,6 +5,7 @@ import type {
 
 import { nanoid } from 'nanoid'
 
+import { isSessionMemoryWorkCancelled } from '../../stores/chat/session-memory-lifecycle'
 import { storage } from '../storage'
 
 const LOCAL_STORAGE_PREFIX = 'local:'
@@ -125,7 +126,13 @@ export const innerVoiceNotesRepo = {
       moodTags: note.moodTags?.length ? [...note.moodTags] : undefined,
     } satisfies AiriAssistantInnerVoiceNote
 
+    if (isSessionMemoryWorkCancelled(note.sessionId))
+      throw new Error('Inner voice source session was deleted')
     await storage.setItemRaw(noteKey(nextNote.sessionId, nextNote.messageId), nextNote)
+    if (isSessionMemoryWorkCancelled(note.sessionId)) {
+      await storage.removeItem(noteKey(nextNote.sessionId, nextNote.messageId))
+      throw new Error('Inner voice source session was deleted')
+    }
     return nextNote
   },
 

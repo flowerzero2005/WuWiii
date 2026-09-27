@@ -11,6 +11,8 @@ import { useMemorySettingsStore } from '../settings/memory'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
 import { calculateSimilarity, findDuplicates, mergeDuplicates } from './memory-deduplication'
 import { validateMemoryExtractionCandidates } from './memory-extractor'
+import { completeMemoryWork, journalCompletedMemoryWork, readPendingMemoryWork } from './memory-work-journal'
+import { isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 
 const RECENT_PROCESSED_TURN_TTL_MS = 60_000
 const MAX_RECENT_PROCESSED_TURNS = 40
@@ -407,6 +409,19 @@ export const useMemoryManager = defineStore('memory-manager', () => {
   const recentProcessedTurnKeys = new Map<string, number>()
   const processingByScope = new Map<string, Promise<unknown>>()
 
+  // Recovery only persists the last completion's stored candidates. It never
+  // invokes a model, replays a message, or retries a paid extraction request.
+  void Promise.resolve().then(async () => {
+    for (const turn of readPendingMemoryWork()) {
+      try {
+        await processCompletedChatTurnForMemory(turn)
+      }
+      catch (error) {
+        console.warn('[MemoryManager] Pending memory work remains recoverable:', error)
+      }
+    }
+  }).catch(error => console.warn('[MemoryManager] Memory recovery unavailable:', error))
+
   // 确保 notebook store 已加载
   if (!notebookStore.isLoaded) {
     notebookStore.loadFromStorage().catch((err) => {
@@ -470,6 +485,8 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     }
 
     let scopedEntries = await notebookStore.getMemoryEntriesForScope(memoryScope)
+    if (isSessionMemoryWorkCancelled(options?.sourceTrace?.sourceSessionId))
+      return
 
     // 输入验证
     if (!userMessage || !assistantMessage || typeof userMessage !== 'string' || typeof assistantMessage !== 'string') {
@@ -532,7 +549,14 @@ export const useMemoryManager = defineStore('memory-manager', () => {
         updated?: boolean
       }> = []
 
-      for (const { memoryResult, structuredCandidate } of memoryItems) {
+      let candidateFailed = false
+      for (const [candidateIndex, { memoryResult, structuredCandidate }] of memoryItems.entries()) {
+        if (isSessionMemoryWorkCancelled(options?.sourceTrace?.sourceSessionId))
+          return
+        const candidateKey = `${processedTurnKey}:${candidateIndex}`
+        if (scopedEntries.some(entry => Array.isArray(entry.metadata?.appliedMemoryCandidateKeys)
+          && entry.metadata.appliedMemoryCandidateKeys.includes(candidateKey)))
+          continue
         // A malformed or temporarily unwritable candidate must not prevent
         // the remaining model-approved memories from being persisted.
         try {
@@ -571,6 +595,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
               entry.tags = Array.from(new Set([...(entry.tags ?? []), ...memoryResult.tags]))
               entry.metadata = {
                 ...entry.metadata,
+                appliedMemoryCandidateKeys: [...(Array.isArray(entry.metadata?.appliedMemoryCandidateKeys) ? entry.metadata.appliedMemoryCandidateKeys : []), candidateKey],
                 importance: nextImportance,
                 reason: memoryResult.reason,
                 extractedAt: Date.now(),
@@ -591,7 +616,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
                   : {}),
                 ...compactTraceMetadata(options?.sourceTrace),
               }
-            })
+            }, options?.sourceTrace?.sourceSessionId)
             emitLog('success', `已更新相似记忆: ${memoryResult.summary.slice(0, 50)}...`)
             if (!updatedEntry)
               throw new Error('Memory target disappeared before it could be persisted.')
@@ -604,6 +629,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
 
           const sourceMetadata = compactTraceMetadata(options?.sourceTrace)
           const memoryMetadata = {
+            appliedMemoryCandidateKeys: [candidateKey],
             importance: memoryResult.importance,
             reason: memoryResult.reason,
             extractedAt: Date.now(),
@@ -652,10 +678,14 @@ export const useMemoryManager = defineStore('memory-manager', () => {
           scopedEntries = await notebookStore.getMemoryEntriesForScope(memoryScope)
         }
         catch (error) {
+          candidateFailed = true
           emitLog('warning', '一个记忆条目保存失败，继续处理其他条目')
           console.warn('[MemoryManager] Failed to persist one memory candidate:', error)
         }
       }
+
+      if (candidateFailed)
+        throw new Error('Some completed-turn memories remain pending')
 
       if (persistedFeedback.length === 0)
         return { success: false, skipped: true, reason: 'no-persisted-candidates' }
@@ -671,13 +701,6 @@ export const useMemoryManager = defineStore('memory-manager', () => {
         memories: persistedFeedback,
       }
 
-      // 每 3 条记忆进行一次去重（更积极的去重策略）
-      // 使用 85% 的相似度阈值来识别包含关系
-      if (notebookStore.entries.length > 0 && notebookStore.entries.length % 3 === 0) {
-        emitLog('info', '开始去重检查...')
-        await deduplicateMemories(0.85)
-      }
-
       return feedback
     }
     catch (error) {
@@ -685,6 +708,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
       emitLog('warning', `记忆提取失败: ${errorMessage}`)
       recentProcessedTurnKeys.delete(processedTurnKey)
       console.error('[MemoryManager] Failed to process conversation:', error)
+      throw error
     }
   }
 
@@ -704,7 +728,17 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     const previous = processingByScope.get(scopeKey) ?? Promise.resolve()
     const run = previous
       .catch(() => undefined)
-      .then(() => runConversationTurn(userMessage, assistantMessage, memoryScope, options))
+      .then(async () => {
+        const process = async () => {
+          // Another window may have applied a journal candidate already.
+          // Refresh while owning the turn lock before checking its source key.
+          if (notebookStore.characterId === scopeKey)
+            await notebookStore.loadFromStorage({ force: true })
+          return runConversationTurn(userMessage, assistantMessage, memoryScope, options)
+        }
+        const locks = globalThis.navigator?.locks
+        return locks ? locks.request(`airi-memory-turn:${scopeKey}`, process) : process()
+      })
 
     // Serialize one memory owner's turns instead of dropping every request
     // received while a global isProcessing flag is true. Distinct scopes can
@@ -722,8 +756,20 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     }
   }
 
+  function stageCompletedChatTurnForMemory(turn: CompletedChatTurnForMemory) {
+    if (!memorySettings.settings.enabled || !memorySettings.settings.autoExtract)
+      return
+    journalCompletedMemoryWork({ ...turn, ...notebookStore.resolveMemoryScope(turn) })
+  }
+
   async function processCompletedChatTurnForMemory(turn: CompletedChatTurnForMemory) {
-    return processConversationTurn(turn.userMessage, turn.assistantMessage, {
+    const scope = notebookStore.resolveMemoryScope(turn)
+    turn = { ...turn, ...scope }
+    if (!memorySettings.settings.enabled || !memorySettings.settings.autoExtract || isSessionMemoryWorkCancelled(turn.sourceSessionId))
+      return
+    if (turn.sourceAssistantMessageId && !journalCompletedMemoryWork(turn))
+      return
+    const result = await processConversationTurn(turn.userMessage, turn.assistantMessage, {
       trace: turn.trace,
       extractionRuntime: turn.extractionRuntime,
       sourceTrace: {
@@ -739,6 +785,8 @@ export const useMemoryManager = defineStore('memory-manager', () => {
         memoryScope: turn.memoryScope,
       },
     })
+    completeMemoryWork(turn)
+    return result
   }
 
   async function deleteMemoriesForSourceMessage(input: DeleteMemoriesForSourceMessageInput) {
@@ -1011,50 +1059,52 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     }
   }
 
-  async function solidifyPersonaGrowthCandidate(entryId: string) {
-    const entry = notebookStore.entries.find(item => item.id === entryId)
-    if (!entry || entry.metadata?.memoryKind !== PERSONA_GROWTH_CANDIDATE_MEMORY_KIND)
-      return undefined
-
-    const now = Date.now()
-    entry.text = entry.text.replace(PERSONA_GROWTH_CANDIDATE_PREFIX_RE, '人格成长记忆：')
-    entry.tags = Array.from(new Set([
-      ...(entry.tags ?? []).filter(tag => tag !== '未固化' && tag !== '已忽略'),
-      '人格成长记忆',
-      '已固化',
-    ]))
-    entry.metadata = {
-      ...entry.metadata,
-      importance: 'medium',
-      lastReinforcedAt: now,
-      memoryKind: PERSONA_GROWTH_MEMORY_KIND,
-      personaGrowthSolidifiedAt: now,
-      personaGrowthStatus: 'solidified',
-    }
-
-    await notebookStore.saveToStorage()
-    return entry
+  async function solidifyPersonaGrowthCandidate(entryId: string, scope?: Partial<NotebookMemoryScope>) {
+    const targetScope = notebookStore.resolveMemoryScope(scope)
+    let changed = false
+    const updated = await notebookStore.updateMemoryEntryInScope(entryId, targetScope, (entry) => {
+      if (entry.metadata?.memoryKind !== PERSONA_GROWTH_CANDIDATE_MEMORY_KIND)
+        return
+      changed = true
+      const now = Date.now()
+      entry.text = entry.text.replace(PERSONA_GROWTH_CANDIDATE_PREFIX_RE, '人格成长记忆：')
+      entry.tags = Array.from(new Set([
+        ...(entry.tags ?? []).filter(tag => tag !== '未固化' && tag !== '已忽略'),
+        '人格成长记忆',
+        '已固化',
+      ]))
+      entry.metadata = {
+        ...entry.metadata,
+        importance: 'medium',
+        lastReinforcedAt: now,
+        memoryKind: PERSONA_GROWTH_MEMORY_KIND,
+        personaGrowthSolidifiedAt: now,
+        personaGrowthStatus: 'solidified',
+      }
+    })
+    return changed ? updated : undefined
   }
 
-  async function disablePersonaGrowthCandidate(entryId: string) {
-    const entry = notebookStore.entries.find(item => item.id === entryId)
-    if (!entry || entry.metadata?.memoryKind !== PERSONA_GROWTH_CANDIDATE_MEMORY_KIND)
-      return undefined
-
-    const now = Date.now()
-    entry.tags = Array.from(new Set([
-      ...(entry.tags ?? []).filter(tag => tag !== '已固化'),
-      '已忽略',
-    ]))
-    entry.metadata = {
-      ...entry.metadata,
-      lastReinforcedAt: now,
-      personaGrowthDisabledAt: now,
-      personaGrowthStatus: 'disabled',
-    }
-
-    await notebookStore.saveToStorage()
-    return entry
+  async function disablePersonaGrowthCandidate(entryId: string, scope?: Partial<NotebookMemoryScope>) {
+    const targetScope = notebookStore.resolveMemoryScope(scope)
+    let changed = false
+    const updated = await notebookStore.updateMemoryEntryInScope(entryId, targetScope, (entry) => {
+      if (entry.metadata?.memoryKind !== PERSONA_GROWTH_CANDIDATE_MEMORY_KIND)
+        return
+      changed = true
+      const now = Date.now()
+      entry.tags = Array.from(new Set([
+        ...(entry.tags ?? []).filter(tag => tag !== '已固化'),
+        '已忽略',
+      ]))
+      entry.metadata = {
+        ...entry.metadata,
+        lastReinforcedAt: now,
+        personaGrowthDisabledAt: now,
+        personaGrowthStatus: 'disabled',
+      }
+    })
+    return changed ? updated : undefined
   }
 
   function markMemoriesReferenced(entries: Array<{ id: string, metadata?: Record<string, unknown> }>, trace: MemoryReferenceTrace) {
@@ -1406,6 +1456,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     lastDeduplicationAt,
     processConversationTurn,
     processCompletedChatTurnForMemory,
+    stageCompletedChatTurnForMemory,
     deleteMemoriesForSourceMessage,
     disablePersonaGrowthCandidate,
     getPersonaGrowthCandidateMemories,

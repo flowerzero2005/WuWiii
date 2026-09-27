@@ -15,6 +15,7 @@ chat:
     screen-source-unavailable: Không thể chụp nguồn này. Hãy chọn lại màn hình hoặc cửa sổ khả dụng.
     screen-thumbnail-unavailable: Nguồn đã chọn không cung cấp hình ảnh. Hãy kiểm tra quyền ghi màn hình rồi chọn lại.
     screen-timeout: Yêu cầu chụp màn hình đã hết thời gian chờ. Hãy thử lại.
+    screen-system-unavailable: Yêu cầu chụp màn hình của hệ thống chưa kết thúc. Hãy thử lại; nếu vẫn lỗi, hãy khởi động lại Wuwiii.
     screen-permission-denied: Hệ thống đã từ chối quyền ghi màn hình. Hãy cho phép Wuwiii ghi màn hình trong cài đặt hệ thống rồi thử lại.
     screen-no-sources: Không có màn hình hoặc cửa sổ khả dụng.
 message: Nói gì đó...

@@ -19,7 +19,13 @@ export function shouldShowStreamingPlaceholder(message?: StreamingAssistantMessa
   const slices = message?.slices ?? []
   const content = message?.content
 
-  if (slices.length === 0 && !content) {
+  // Empty text deltas, completed tool calls and speech staging are not visible
+  // replies. An unfinished stream keeps its loader while awaiting real text;
+  // completed historical tool-only rows must not regain a placeholder.
+  if (message?.metadata?.speechDisplayPending === true
+    || ((message?.metadata?.typingCompleted === false || slices.every(slice => slice.type === 'text'))
+      && !slices.some(slice => slice.type === 'text' && slice.text.trim())
+      && (typeof content === 'string' ? !content.trim() : !content?.length))) {
     return true
   }
 

@@ -1,5 +1,6 @@
 import type { OfficialCloudRequestError } from './index'
 
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { acknowledgeOfficialCloudChatDelivery } from './delivery-ack'
@@ -83,7 +84,62 @@ describe('providerOfficialCloud', () => {
   afterEach(() => {
     fetchAccountStateMock.mockReset()
     toastInfoMock.mockReset()
+    setActivePinia(undefined)
+    vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it('remembers a chat 429 for background requests without replaying the rejected request', async () => {
+    vi.useFakeTimers()
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    pinia.state.value.auth = { user: { id: 'cooldown-background-account' }, session: { id: 'session' } }
+    const fetchMock = vi.fn(async () => Response.json({ error: 'RATE_LIMITED' }, { status: 429, headers: { 'retry-after': '17' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const url = 'http://127.0.0.1:3000/api/model-gateway/v1/chat/completions'
+    const init = { headers: { 'x-airi-request-stage': 'recommended-replies' }, method: 'POST' }
+    await expect(officialCloudFetch(url, init)).rejects.toMatchObject({ status: 429, retryAfterSeconds: 17 })
+    await vi.advanceTimersByTimeAsync(3_000)
+    await expect(officialCloudFetch(url, init)).rejects.toMatchObject({ status: 429, retryAfterSeconds: 14 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // Audio has its own capacity and must not inherit the chat cooldown.
+    await expect(officialCloudFetch('http://127.0.0.1:3000/api/model-gateway/v1/audio/speech')).rejects.toMatchObject({ status: 429 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits before the next foreground tool conclusion and sends it only once', async () => {
+    vi.useFakeTimers()
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    pinia.state.value.auth = { user: { id: 'cooldown-foreground-account' }, session: { id: 'session' } }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ error: 'RATE_LIMITED' }, { status: 429, headers: { 'retry-after': '2' } }))
+      .mockResolvedValueOnce(Response.json({ choices: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const url = 'http://127.0.0.1:3000/api/model-gateway/v1/chat/completions'
+    await expect(officialCloudFetch(url)).rejects.toMatchObject({ status: 429 })
+    const waiting = officialCloudFetch(url, { headers: { 'x-airi-request-stage': 'tool-conclusion' } })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(waiting).resolves.toMatchObject({ status: 200 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('isolates account cooldowns and accepts an explicitly wrapped upstream 429', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    pinia.state.value.auth = { user: { id: 'cooldown-wrapped-account-a' }, session: { id: 'session-a' } }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ error: 'UPSTREAM_ERROR', details: { reason: 'rate-limited', upstreamStatus: 429, retryAfterSeconds: 120 } }, { status: 502 }))
+      .mockResolvedValueOnce(Response.json({ choices: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const url = 'http://127.0.0.1:3000/api/model-gateway/v1/chat/completions'
+    await expect(officialCloudFetch(url)).rejects.toMatchObject({ status: 502, retryAfterSeconds: 120 })
+    await expect(officialCloudFetch(url)).rejects.toMatchObject({ status: 429, retryAfterSeconds: 120 })
+    pinia.state.value.auth = { user: { id: 'cooldown-wrapped-account-b' }, session: { id: 'session-b' } }
+    await expect(officialCloudFetch(url)).resolves.toMatchObject({ status: 200 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('lists every alias from the official cloud models endpoint', async () => {
@@ -458,7 +514,7 @@ describe('providerOfficialCloud', () => {
 
     await expect(officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions', {
       method: 'POST',
-    })).rejects.toThrow('Provider returned 502 Bad Gateway. The official cloud model is temporarily unavailable. Please try again later. Upstream status: 503. Trace ID: trace-test.')
+    })).rejects.toThrow('Provider returned 502 Bad Gateway. The official cloud request failed. Please try again later. (HTTP 503; ID: trace-test)')
   })
 
   it('preserves structured rate-limit details and retry timing', async () => {

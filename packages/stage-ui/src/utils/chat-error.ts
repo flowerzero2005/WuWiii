@@ -5,6 +5,81 @@ const UPSTREAM_ERROR_PATTERN = /Bad Gateway|upstream request failed|upstream_err
 const TOOL_STREAM_TIMEOUT_PATTERN = /Tool stream timed out before first response event/i
 const MAX_CHAT_ERROR_MESSAGE_LENGTH = 700
 
+/** Classify public cloud failures without displaying upstream payloads. */
+export function getOfficialCloudChatError(error: unknown) {
+  let current = error
+  let code = ''
+  let reason = ''
+  let status: number | undefined
+  let upstreamStatus: number | undefined
+  let traceId: string | undefined
+  let retryAfterSeconds: number | undefined
+  const messages: string[] = []
+  for (let depth = 0; depth < 4 && current; depth++) {
+    if (typeof current === 'string') {
+      messages.push(current)
+      break
+    }
+    if (typeof current !== 'object')
+      break
+    const record = current as Record<string, unknown>
+    const details = record.details && typeof record.details === 'object' ? record.details as Record<string, unknown> : undefined
+    code ||= typeof record.code === 'string' ? record.code : ''
+    reason ||= typeof details?.reason === 'string' ? details.reason : ''
+    status ??= typeof record.status === 'number' ? record.status : undefined
+    upstreamStatus ??= typeof details?.upstreamStatus === 'number' ? details.upstreamStatus : undefined
+    const retryAfter = record.retryAfterSeconds ?? details?.retryAfterSeconds
+    if (retryAfterSeconds === undefined && typeof retryAfter === 'number' && Number.isSafeInteger(retryAfter) && retryAfter > 0)
+      retryAfterSeconds = retryAfter
+    if (!traceId && typeof details?.traceId === 'string' && /^[\w-]{1,96}$/.test(details.traceId))
+      traceId = details.traceId
+    if (typeof record.message === 'string')
+      messages.push(record.message)
+    current = record.cause
+  }
+  const message = messages.join(' ').toLowerCase()
+  let key = 'request-failed'
+  if (code === 'UNAUTHORIZED' || code === '401' || status === 401 || /sign in|login|unauthorized/.test(message))
+    key = 'login-required'
+  else if (code === 'INSUFFICIENT_POINTS' || /not enough points|insufficient points/.test(message))
+    key = 'insufficient-points'
+  else if (code === 'OFFICIAL_MODEL_NOT_CONFIGURED' || code === 'MODEL_REQUIRED' || /not configured|setting is incomplete/.test(message))
+    key = 'not-configured'
+  else if (code === 'MODEL_NOT_AVAILABLE' || message.includes('selected official model is not available'))
+    key = 'unavailable'
+  else if (TOOL_STREAM_TIMEOUT_PATTERN.test(message) || message.includes('tool response timed out'))
+    key = 'tool-timeout'
+  else if (reason === 'delivery-failed' || code === 'DELIVERY_ACK_UNAVAILABLE')
+    key = 'delivery-failed'
+  else if (reason === 'empty-response' || code === 'LLM_EMPTY_RESULT' || message.includes('model returned no visible reply'))
+    key = 'empty-response'
+  else if (reason === 'truncated-response')
+    key = 'truncated-response'
+  else if (reason === 'content-filtered')
+    key = 'content-filtered'
+  else if (reason === 'invalid-response')
+    key = 'invalid-response'
+  else if (reason === 'timeout' || status === 408 || status === 504 || upstreamStatus === 408 || upstreamStatus === 504 || /timed out|timeout/.test(message))
+    key = 'request-timeout'
+  else if (reason === 'rate-limited' || status === 429 || upstreamStatus === 429 || code === '429' || code.endsWith('_RATE_LIMITED'))
+    key = 'rate-limited'
+  else if (code === 'CONTEXT_TOO_LONG' || status === 413)
+    key = 'context-too-long'
+  else if (reason === 'connection-failed' || /unable to connect|no route matched/.test(message))
+    key = 'connection-failed'
+
+  // Only allow bounded identifiers and numeric HTTP statuses into visible diagnostics.
+  const diagnostics = [
+    upstreamStatus != null && Number.isInteger(upstreamStatus) && upstreamStatus >= 100 && upstreamStatus <= 599 ? `HTTP ${upstreamStatus}` : '',
+    traceId ? `ID: ${traceId}` : '',
+  ].filter(Boolean).join('; ')
+  return {
+    key,
+    diagnostics: diagnostics ? ` (${diagnostics})` : '',
+    ...(key === 'rate-limited' && retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+  }
+}
+
 function extractErrorMessage(error: unknown) {
   if (error instanceof Error)
     return error.message || String(error)
@@ -69,10 +144,10 @@ export function getChatErrorMessage(error: unknown) {
   const cloudflareError = isCloudflareChatErrorMessage(rawMessage)
   const upstreamError = UPSTREAM_ERROR_PATTERN.test(rawMessage)
 
-  // Tool-mode timeouts are internal transport details. They do not establish
-  // that an app action ran, so keep the user-facing error explicit about that.
+  // A timeout can also occur while generating a reply after an action ran.
+  // Do not claim that no action completed or describe the model as unavailable.
   if (TOOL_STREAM_TIMEOUT_PATTERN.test(rawMessage))
-    return 'The tool service is temporarily unavailable. No action was completed; please retry shortly or switch provider/model.'
+    return 'The tool response timed out. Check the action status before trying again.'
 
   if (cloudflareError || (htmlError && remoteStatus) || (remoteStatus === '502' && upstreamError)) {
     const statusLabel = remoteStatus === '502'

@@ -14,6 +14,7 @@ export function useElectronScreenCapture(ipcRenderer: IpcRenderer, sourcesOption
   const context = createContext(ipcRenderer).context
 
   const invokeGetSources = defineInvoke(context, screenCapture.getSources)
+  const invokeGetSourceImage = defineInvoke(context, screenCapture.getSourceImage)
   const setSource = defineInvoke(context, screenCapture.setSource)
   const resetSource = defineInvoke(context, screenCapture.resetSource)
 
@@ -22,6 +23,10 @@ export function useElectronScreenCapture(ipcRenderer: IpcRenderer, sourcesOption
 
   async function getSources() {
     return invokeGetSources(toRaw(toValue(sourcesOptions)))
+  }
+
+  async function getSourceImage(sourceId: string, options: SourcesOptions) {
+    return invokeGetSourceImage({ sourceId, options: toRaw(options) })
   }
 
   async function selectWithSource<R>(
@@ -50,6 +55,7 @@ export function useElectronScreenCapture(ipcRenderer: IpcRenderer, sourcesOption
 
   return {
     getSources,
+    getSourceImage,
     setSource,
     resetSource,
     selectWithSource,

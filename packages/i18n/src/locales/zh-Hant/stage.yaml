@@ -15,6 +15,7 @@ chat:
     screen-source-unavailable: 無法擷取此來源，請重新選擇可用的螢幕或視窗。
     screen-thumbnail-unavailable: 所選來源沒有提供可用畫面。請在系統設定中檢查螢幕錄製權限，然後重新選擇。
     screen-timeout: 螢幕擷取要求逾時，請稍後再試。
+    screen-system-unavailable: 系統擷取要求一直沒有結束。請重試；如果持續失敗，請重新啟動 Wuwiii。
     screen-permission-denied: 系統拒絕了螢幕錄製權限。請在系統設定中允許 Wuwiii 錄製螢幕，然後重試。
     screen-no-sources: 暫無可用的螢幕或視窗。
 message: 說點什麼...

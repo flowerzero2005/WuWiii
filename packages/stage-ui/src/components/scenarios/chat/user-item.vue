@@ -2,7 +2,9 @@
 import type { ChatMessage } from '../../../types/chat'
 
 import { useTheme } from '@proj-airi/ui'
+import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import ChatMessageAvatar from './message-avatar.vue'
 
@@ -20,6 +22,7 @@ const props = withDefaults(defineProps<{
 
 const appearanceStore = useChatAppearanceSettingsStore()
 const { isDark } = useTheme()
+const { t } = useI18n()
 
 const content = computed(() => {
   const raw = props.message.content
@@ -48,9 +51,20 @@ const imageUrls = computed(() => {
   })
 })
 const expandedImage = ref<string>()
+const imageTrigger = ref<HTMLButtonElement>()
+
+function openImage(imageUrl: string, event: MouseEvent) {
+  imageTrigger.value = event.currentTarget as HTMLButtonElement
+  expandedImage.value = imageUrl
+}
+
+function restoreImageFocus(event: Event) {
+  event.preventDefault()
+  imageTrigger.value?.focus()
+}
 
 const containerClasses = computed(() => [
-  'flex items-start gap-2',
+  'flex min-w-0 items-start gap-2',
   props.variant === 'mobile' ? 'ml-0 flex-row' : props.variant === 'compact' ? 'ml-7 flex-row-reverse' : 'ml-12 flex-row-reverse',
 ])
 
@@ -69,46 +83,70 @@ const presentation = computed(() => resolveChatBubblePresentation(
   <div v-if="message.role === 'user'" :class="containerClasses" class="ph-no-capture">
     <ChatMessageAvatar class="mt-1" :avatar-url="avatarUrl" :label="label" />
     <div
-      flex="~ col"
-      min-w-20 h="unset <sm:fit"
-      :class="[...boxClasses, 'min-w-0 max-w-full']"
-      :style="presentation.bubbleStyle"
+      :class="['flex min-w-0 max-w-full flex-col gap-1.5', variant === 'mobile' ? 'items-start' : 'items-end']"
     >
       <div
-        v-if="presentation.imageStyle"
-        aria-hidden="true"
-        :class="['pointer-events-none absolute inset-0 -z-1']"
-        :style="presentation.imageStyle"
-      />
-      <div :class="['relative z-1 flex flex-col']" :style="presentation.contentStyle">
-        <div>
-          <span class="inline text-sm font-normal opacity-65 <sm:hidden">{{ label }}</span>
-        </div>
-        <MarkdownRenderer
-          v-if="content"
-          :content="content as string"
-          class="break-words"
-        />
-        <div v-if="imageUrls.length" :class="['mt-2 grid gap-1.5', imageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2']">
+        v-if="imageUrls.length"
+        :class="['flex min-w-0 max-w-full flex-wrap gap-1.5', variant === 'mobile' ? 'justify-start' : 'justify-end']"
+      >
+        <button
+          v-for="(imageUrl, index) in imageUrls"
+          :key="`${index}-${imageUrl.slice(0, 48)}`"
+          type="button"
+          aria-haspopup="dialog"
+          :class="[
+            'max-w-full shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-solid border-[var(--airi-border-subtle)] bg-[var(--airi-surface-control-muted)] p-0',
+            'outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--airi-accent-focus)] motion-reduce:transition-none',
+            variant === 'compact' ? 'size-14' : 'size-16',
+          ]"
+          @click="openImage(imageUrl, $event)"
+        >
           <img
-            v-for="(imageUrl, index) in imageUrls"
-            :key="`${index}-${imageUrl.slice(0, 48)}`"
             :src="imageUrl"
-            alt="User uploaded image"
-            :class="['cursor-zoom-in rounded-lg object-cover transition-opacity hover:opacity-90', imageUrls.length === 1 ? 'max-h-52 max-w-full' : 'aspect-square w-24']"
-            @click="expandedImage = imageUrl"
+            :alt="t('stage.chat.composer.image')"
+            :class="['block size-full object-cover']"
           >
+        </button>
+      </div>
+      <div
+        v-if="content.trim()"
+        :class="[...boxClasses, 'flex min-w-0 max-w-full flex-col']"
+        :style="presentation.bubbleStyle"
+      >
+        <div
+          v-if="presentation.imageStyle"
+          aria-hidden="true"
+          :class="['pointer-events-none absolute inset-0 -z-1']"
+          :style="presentation.imageStyle"
+        />
+        <div :class="['relative z-1 flex flex-col']" :style="presentation.contentStyle">
+          <div>
+            <span :class="['inline text-sm font-normal opacity-65 <sm:hidden']">{{ label }}</span>
+          </div>
+          <MarkdownRenderer :content="content" class="break-words" />
         </div>
       </div>
     </div>
-    <button
-      v-if="expandedImage"
-      type="button"
-      class="fixed inset-0 z-100 grid cursor-zoom-out place-items-center bg-black/70 p-6"
-      aria-label="Close enlarged image"
-      @click="expandedImage = undefined"
-    >
-      <img :src="expandedImage" alt="User uploaded image" class="max-h-full max-w-full rounded-xl object-contain shadow-2xl">
-    </button>
+    <DialogRoot :open="!!expandedImage" @update:open="open => !open && (expandedImage = undefined)">
+      <DialogPortal>
+        <DialogOverlay :class="['fixed inset-0 z-100 bg-black/70']" />
+        <DialogContent
+          :aria-describedby="undefined"
+          :class="['ph-no-capture fixed inset-0 z-101 flex items-center justify-center p-4 outline-none']"
+          @close-auto-focus="restoreImageFocus"
+        >
+          <DialogTitle :class="['sr-only']">{{ t('stage.chat.composer.image') }}</DialogTitle>
+          <DialogClose as-child>
+            <button
+              type="button"
+              :aria-label="t('stage.actions.cancel')"
+              :class="['flex size-full min-h-0 min-w-0 cursor-zoom-out items-center justify-center rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent-focus)]']"
+            >
+              <img v-if="expandedImage" :src="expandedImage" :alt="t('stage.chat.composer.image')" :class="['max-h-full max-w-full rounded-xl object-contain shadow-2xl']">
+            </button>
+          </DialogClose>
+        </DialogContent>
+      </DialogPortal>
+    </DialogRoot>
   </div>
 </template>

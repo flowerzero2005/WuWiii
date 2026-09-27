@@ -1,11 +1,13 @@
-import type { SerializableDesktopCapturerSource } from '@proj-airi/electron-screen-capture'
+import type { ScreenCaptureSourceImageResult, SerializableDesktopCapturerSource } from '@proj-airi/electron-screen-capture'
 import type { VisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 
 import { VisionScreenSourceUnavailableError } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 
 export const VISION_SCREEN_SOURCE_TIMEOUT_MS = 6_000
 export const VISION_SCREEN_FALLBACK_TIMEOUT_MS = 3_000
-export const VISION_SCREEN_CAPTURE_TIMEOUT_MS = 10_000
+export const VISION_SCREEN_CAPTURE_TIMEOUT_MS = 15_000
+export const VISION_SCREEN_CAPTURE_RECOVERY_TIMEOUT_MS = 6_000
+const VISION_SCREEN_CAPTURE_SIZE = { width: 1280, height: 720 }
 
 export class VisionScreenSourceTimeoutError extends Error {
   constructor(request: 'capture' | 'listing') {
@@ -44,6 +46,8 @@ function isNativePermissionError(error: unknown) {
 }
 
 export function getVisionScreenCaptureErrorKey(error: unknown) {
+  if (error && typeof error === 'object' && 'name' in error && error.name === 'DesktopCapturerUnavailableError')
+    return 'screen-system-unavailable'
   if (error instanceof VisionScreenCapturePermissionError)
     return 'screen-permission-denied'
   if (error instanceof VisionScreenSourceThumbnailUnavailableError)
@@ -78,12 +82,21 @@ function withSourceTimeout<T>(request: Promise<T>, timeoutMs: number, requestTyp
   })
 }
 
-export function createDesktopVisionScreenCapture(
-  getSources: (options: { types: Array<'screen' | 'window'>, thumbnailSize: { width: number, height: number } }) => Promise<SerializableDesktopCapturerSource[]>,
-  timeoutMs = VISION_SCREEN_SOURCE_TIMEOUT_MS,
+interface DesktopVisionScreenCaptureOptions {
+  captureTimeoutMs?: number
+  getPermissionStatus?: () => Promise<VisionScreenCapturePermissionStatus>
+  getSourceImage: (sourceId: string, options: { types: Array<'screen' | 'window'>, thumbnailSize: { width: number, height: number } }) => Promise<ScreenCaptureSourceImageResult>
+  getSources: (options: { types: Array<'screen' | 'window'>, thumbnailSize: { width: number, height: number } }) => Promise<SerializableDesktopCapturerSource[]>
+  sourceTimeoutMs?: number
+}
+
+export function createDesktopVisionScreenCapture({
+  getSources,
+  getSourceImage,
+  sourceTimeoutMs: timeoutMs = VISION_SCREEN_SOURCE_TIMEOUT_MS,
   captureTimeoutMs = VISION_SCREEN_CAPTURE_TIMEOUT_MS,
-  getPermissionStatus?: () => Promise<VisionScreenCapturePermissionStatus>,
-): VisionScreenCapture {
+  getPermissionStatus,
+}: DesktopVisionScreenCaptureOptions): VisionScreenCapture {
   let lastSourceListFallback = false
 
   async function assertScreenRecordingPermission() {
@@ -108,6 +121,28 @@ export function createDesktopVisionScreenCapture(
       throw error
     }
   }
+
+  async function sourceImage(
+    sourceId: string,
+    options: { types: Array<'screen' | 'window'>, thumbnailSize: { width: number, height: number } },
+    requestTimeoutMs = captureTimeoutMs,
+  ) {
+    try {
+      return await withSourceTimeout(getSourceImage(sourceId, options), requestTimeoutMs, 'capture')
+    }
+    catch (error) {
+      if (isNativePermissionError(error))
+        throw new VisionScreenCapturePermissionError('denied')
+      if (getVisionScreenCaptureErrorKey(error) === 'screen-failed') {
+        // Do not log source identifiers, window titles or captured image data.
+        console.warn('[vision-screen-capture] Selected-source image request failed', {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        })
+      }
+      throw error
+    }
+  }
+
   return {
     async listSources() {
       let listed: SerializableDesktopCapturerSource[]
@@ -136,17 +171,26 @@ export function createDesktopVisionScreenCapture(
       let lastResult: 'missing' | 'empty-thumbnail' = 'missing'
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          const source = (await sources(1920, 1080, [type], 'capture', captureTimeoutMs)).find(source => source.id === sourceId)
-          if (source?.thumbnail?.length)
-            return { data: jpegData(source.thumbnail), mimeType: 'image/jpeg', type: 'image' }
-          lastResult = source ? 'empty-thumbnail' : 'missing'
+          const options: Parameters<typeof sourceImage>[1] = {
+            types: [type],
+            thumbnailSize: VISION_SCREEN_CAPTURE_SIZE,
+          }
+          const result = await sourceImage(
+            sourceId,
+            options,
+            attempt === 0 ? captureTimeoutMs : Math.min(captureTimeoutMs, VISION_SCREEN_CAPTURE_RECOVERY_TIMEOUT_MS),
+          )
+          if (result.thumbnail?.length)
+            return { data: jpegData(result.thumbnail), mimeType: 'image/jpeg', type: 'image' }
+          lastResult = result.sourceAvailable ? 'empty-thumbnail' : 'missing'
         }
         catch (error) {
           if (error instanceof VisionScreenCapturePermissionError)
             throw error
-          // A native enumeration can fail briefly while windows change. Retry
-          // with a fresh capture, but never start a second hanging request.
-          if (error instanceof VisionScreenSourceTimeoutError || attempt === 1)
+          // A native enumeration can fail briefly while windows change. The
+          // main process admits at most one bounded recovery, so retry once
+          // rather than making the user reopen the picker after a timeout.
+          if (attempt === 1)
             throw error
         }
       }

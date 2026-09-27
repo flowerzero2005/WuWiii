@@ -76,6 +76,7 @@ const pendingPaymentOrder = {
 
 function signInForTest() {
   const auth = useAuthStore()
+  auth.ready = true
   auth.user = {
     id: 'user-1',
     name: 'Test User',
@@ -136,6 +137,8 @@ describe('commerce store check-in', () => {
   it('claims daily check-in and refreshes account points', async () => {
     signInForTest()
     vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: true, nextRewardPoints: 1000 })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         checkIn: {
           rewardPoints: 1000,
@@ -153,15 +156,210 @@ describe('commerce store check-in', () => {
     const store = useCommerceStore()
     await store.claimDailyCheckIn()
 
-    expect(fetch).toHaveBeenNthCalledWith(1, 'https://server.test/api/commerce/check-in/claim', {
+    expect(fetch).toHaveBeenNthCalledWith(3, 'https://server.test/api/commerce/check-in/claim', {
       method: 'POST',
       credentials: 'include',
+      signal: expect.any(AbortSignal),
     })
-    expect(fetch).toHaveBeenNthCalledWith(2, 'https://server.test/api/commerce/me', {
+    expect(fetch).toHaveBeenNthCalledWith(4, 'https://server.test/api/commerce/me', {
       credentials: 'include',
+      signal: expect.any(AbortSignal),
     })
     expect(store.checkInState?.claimedToday).toBe(true)
     expect(store.availablePoints).toBe(1000)
+  })
+
+  it('keeps the latest check-in status when reads finish out of order', async () => {
+    signInForTest()
+    const earlier = deferred<Response>()
+    const latest = deferred<Response>()
+    vi.mocked(fetch)
+      .mockReturnValueOnce(earlier.promise)
+      .mockReturnValueOnce(latest.promise)
+    const store = useCommerceStore()
+    const earlierRead = store.fetchCheckInState()
+    const latestRead = store.fetchCheckInState()
+    expect(store.isLoadingCheckIn).toBe(true)
+
+    latest.resolve(new Response(JSON.stringify({ claimedToday: true, canClaim: false, nextRewardPoints: 0 })))
+    await latestRead
+    expect(store.isLoadingCheckIn).toBe(false)
+    earlier.resolve(new Response(JSON.stringify({ claimedToday: false, canClaim: true, nextRewardPoints: 1000 })))
+    await earlierRead
+
+    expect(store.checkInState?.claimedToday).toBe(true)
+    expect(store.checkInState?.nextRewardPoints).toBe(0)
+  })
+
+  it('preserves a completed claim against an earlier status read and skips reads during the claim', async () => {
+    signInForTest()
+    const earlier = deferred<Response>()
+    const claimResponse = deferred<Response>()
+    const postStarted = deferred<void>()
+    vi.mocked(fetch)
+      .mockReturnValueOnce(earlier.promise)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: true, nextRewardPoints: 1000 })))
+      .mockImplementationOnce(() => {
+        postStarted.resolve()
+        return claimResponse.promise
+      })
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+    const store = useCommerceStore()
+    const earlierRead = store.fetchCheckInState()
+    const claim = store.claimDailyCheckIn()
+    await postStarted.promise
+    await store.fetchCheckInState()
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(store.isClaimingCheckIn).toBe(true)
+    expect(store.isLoadingCheckIn).toBe(false)
+
+    claimResponse.resolve(new Response(JSON.stringify({
+      checkIn: { rewardPoints: 1000 },
+      state: { claimedToday: true, canClaim: false, nextRewardPoints: 0 },
+    })))
+    await claim
+    earlier.resolve(new Response(JSON.stringify({ claimedToday: false, canClaim: true, nextRewardPoints: 1000 })))
+    await earlierRead
+
+    expect(store.checkInState?.claimedToday).toBe(true)
+    expect(store.checkInState?.canClaim).toBe(false)
+    expect(store.isClaimingCheckIn).toBe(false)
+  })
+
+  it('shares concurrent manual and automatic claims and emits a receipt only after a reward', async () => {
+    signInForTest()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: true, nextRewardPoints: 1000 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        checkIn: { rewardPoints: 1000 },
+        state: { canClaim: false, claimedToday: true, nextRewardPoints: 0 },
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+    const store = useCommerceStore()
+    const automatic = store.claimDailyCheckIn({ isCurrent: () => store.autoCheckInEnabled })
+    const manual = store.claimDailyCheckIn()
+    await Promise.all([automatic, manual])
+    expect(vi.mocked(fetch).mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+    expect(store.checkInRefreshSignal).toEqual({ userId: 'user-1', revision: expect.any(String) })
+  })
+
+  it.each([
+    { canClaim: false, capReached: true, nextRewardPoints: 0 },
+    { canClaim: false, claimedToday: true, nextRewardPoints: 0 },
+    { canClaim: true, capReached: true, nextRewardPoints: 1000 },
+  ])('does not POST when the authoritative state has no claimable capacity: %o', async (state) => {
+    signInForTest()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(state)))
+    const store = useCommerceStore()
+    store.checkInRefreshSignal = null
+    const result = await store.claimDailyCheckIn()
+    expect(result.checkIn.rewardPoints).toBe(0)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(fetch).mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+    expect(store.checkInRefreshSignal).toBeNull()
+  })
+
+  it('allows a same-day membership upgrade when the server offers a new reward', async () => {
+    signInForTest()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: true, claimedToday: true, upgradeRefreshAvailable: true, nextRewardPoints: 2000 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ checkIn: { rewardPoints: 2000 }, state: { canClaim: false, claimedToday: true, nextRewardPoints: 0 } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+    const result = await useCommerceStore().claimDailyCheckIn()
+    expect(result.checkIn.rewardPoints).toBe(2000)
+  })
+
+  it('can claim later when spending opens capacity without marking the full account claimed', async () => {
+    signInForTest()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: false, capReached: true, claimedToday: false, nextRewardPoints: 0 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ canClaim: true, capReached: false, claimedToday: false, nextRewardPoints: 1000 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ checkIn: { rewardPoints: 1000 }, state: { canClaim: false, claimedToday: true, nextRewardPoints: 0 } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+    const store = useCommerceStore()
+    expect((await store.claimDailyCheckIn()).checkIn.rewardPoints).toBe(0)
+    expect((await store.claimDailyCheckIn()).checkIn.rewardPoints).toBe(1000)
+    expect(vi.mocked(fetch).mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('rejects a cookie account mismatch before publishing account data or posting a claim', async () => {
+    signInForTest()
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      ...accountState,
+      balance: { ...accountState.balance, userId: 'another-user' },
+    })))
+    const store = useCommerceStore()
+    await expect(store.claimDailyCheckIn()).rejects.toMatchObject({ status: 401 })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(store.account).toBeUndefined()
+  })
+
+  it('preserves the account and pending claim when the same user object is refreshed', async () => {
+    signInForTest()
+    const eligibility = deferred<Response>()
+    const readStarted = deferred<void>()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockImplementationOnce(() => {
+        readStarted.resolve()
+        return eligibility.promise
+      })
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        checkIn: { rewardPoints: 1000 },
+        state: { canClaim: false, claimedToday: true, nextRewardPoints: 0 },
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+    const store = useCommerceStore()
+    const claim = store.claimDailyCheckIn()
+    await readStarted.promise
+    const auth = useAuthStore()
+    auth.user = { ...auth.user!, name: 'Refreshed profile' }
+    auth.session = { ...auth.session! }
+    expect(store.availablePoints).toBe(1000)
+    expect(store.isClaimingCheckIn).toBe(true)
+    eligibility.resolve(new Response(JSON.stringify({ canClaim: true, nextRewardPoints: 1000 })))
+    await expect(claim).resolves.toMatchObject({ checkIn: { rewardPoints: 1000 } })
+    expect(store.availablePoints).toBe(1000)
+    expect(store.isClaimingCheckIn).toBe(false)
+  })
+
+  it.each(['account-change', 'disabled', 'reset'])('rejects late eligibility before POST after %s', async (reason) => {
+    signInForTest()
+    const eligibility = deferred<Response>()
+    const readStarted = deferred<void>()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(accountState)))
+      .mockImplementationOnce(() => {
+        readStarted.resolve()
+        return eligibility.promise
+      })
+    const store = useCommerceStore()
+    let enabled = true
+    const claim = store.claimDailyCheckIn({ isCurrent: () => enabled })
+    const rejection = expect(claim).rejects.toMatchObject({ name: 'AbortError' })
+    await readStarted.promise
+    if (reason === 'account-change') {
+      const auth = useAuthStore()
+      auth.user = { ...auth.user!, id: 'user-2' }
+    }
+    else if (reason === 'reset') {
+      store.reset()
+    }
+    else {
+      enabled = false
+    }
+    eligibility.resolve(new Response(JSON.stringify({ canClaim: true, nextRewardPoints: 1000 })))
+    await rejection
+    expect(vi.mocked(fetch).mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+    expect(store.checkInError).toBeNull()
+    expect(store.checkInState).toBeUndefined()
   })
 
   it('appends older ledger records without duplicates', async () => {

@@ -4,15 +4,28 @@ import { computed, ref, watch } from 'vue'
 
 import { SERVER_URL } from '../../libs/auth'
 import { officialCloudFetch } from '../../libs/providers/providers/official-cloud'
+import { VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES, VISION_MAX_TOTAL_IMAGE_BYTES } from '../../libs/vision-limits'
 import { VISION_DEFAULT_SETTINGS, VISION_SCREENSHOT_INTERVAL_MAX_SECONDS, VISION_SCREENSHOT_INTERVAL_MIN_SECONDS } from '../../libs/vision-settings'
 import { useAuthStore } from '../auth'
 import { useOfficialCapabilityConsentStore } from '../settings/official-capability-consent'
 
-export const VISION_MAX_IMAGE_BYTES = 10 * 1024 * 1024
-export const VISION_MAX_IMAGES = 4
+export { VISION_IMAGE_LIMITS_I18N_PARAMS, VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES, VISION_MAX_TOTAL_IMAGE_BYTES } from '../../libs/vision-limits'
 export { VISION_SCREENSHOT_INTERVAL_MAX_SECONDS, VISION_SCREENSHOT_INTERVAL_MIN_SECONDS } from '../../libs/vision-settings'
 
 export type VisionProviderId = 'official-cloud' | 'aliyun' | 'openai-compatible' | 'gemini'
+
+export type VisionAttachmentErrorKey = 'image-limit' | 'image-too-large' | 'images-too-large' | 'image-format'
+
+export class VisionAttachmentValidationError extends Error {
+  constructor(readonly code: VisionAttachmentErrorKey, message: string) {
+    super(message)
+    this.name = 'VisionAttachmentValidationError'
+  }
+}
+
+export function getVisionAttachmentErrorKey(error: unknown): VisionAttachmentErrorKey | undefined {
+  return error instanceof VisionAttachmentValidationError ? error.code : undefined
+}
 
 export interface VisionAttachment {
   data: string
@@ -53,15 +66,20 @@ function getDataByteLength(data: string) {
 
 export function assertVisionAttachments(attachments: readonly VisionAttachment[]) {
   if (attachments.length === 0)
-    throw new Error('Select at least one image for visual understanding.')
+    throw new VisionAttachmentValidationError('image-format', 'Select at least one image for visual understanding.')
   if (attachments.length > VISION_MAX_IMAGES)
-    throw new Error(`Visual understanding accepts up to ${VISION_MAX_IMAGES} images at once.`)
+    throw new VisionAttachmentValidationError('image-limit', `Visual understanding accepts up to ${VISION_MAX_IMAGES} images at once.`)
 
+  let totalBytes = 0
   for (const attachment of attachments) {
     if (!SUPPORTED_IMAGE_MIME_TYPES.has(attachment.mimeType))
-      throw new Error('Only PNG, JPEG, WebP, and GIF images are supported.')
-    if (!attachment.data || getDataByteLength(attachment.data) > VISION_MAX_IMAGE_BYTES)
-      throw new Error('Each image must be smaller than 10 MB.')
+      throw new VisionAttachmentValidationError('image-format', 'Only PNG, JPEG, WebP, and GIF images are supported.')
+    const imageBytes = getDataByteLength(attachment.data)
+    if (!attachment.data || imageBytes > VISION_MAX_IMAGE_BYTES)
+      throw new VisionAttachmentValidationError('image-too-large', `Each image must be at most ${VISION_MAX_IMAGE_BYTES / 1024 / 1024} MB.`)
+    totalBytes += imageBytes
+    if (totalBytes > VISION_MAX_TOTAL_IMAGE_BYTES)
+      throw new VisionAttachmentValidationError('images-too-large', `Images must total at most ${VISION_MAX_TOTAL_IMAGE_BYTES / 1024 / 1024} MB.`)
   }
 }
 

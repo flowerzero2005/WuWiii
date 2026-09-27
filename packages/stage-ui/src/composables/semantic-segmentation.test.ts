@@ -38,6 +38,18 @@ describe('semantic-segmentation', () => {
     expect(removeSpecialMarkers('好。<|ACT {"actionCardId":"small-wave"')).toBe('好。')
   })
 
+  it('removes private bodies before interpreting their segment markers', () => {
+    const result = segmentAssistantReply('Hello <think>private<|SEGMENT|>still private</think> there<|SEGMENT|>Goodbye')
+    expect(result.segments).toEqual(['Hello  there', 'Goodbye'])
+    expect(segmentAssistantReply('Hello <think>private<|SEGMENT|>still private').segments).toEqual(['Hello'])
+  })
+
+  it('preserves prose after an ACT envelope with a doubled-pipe closer', () => {
+    expect(removeSpecialMarkers('Hi <|ACT {"actionCardId":"wave"}|| there')).toBe('Hi  there')
+    expect(removeSpecialMarkers('Hi <|ACT {"actionCardId":"wave"}|> there <|ACT {"actionCardId":"nod"}|| again')).toBe('Hi  there  again')
+    expect(removeSpecialMarkers('Hi <|DELAY:1|| there')).toBe('Hi  there')
+  })
+
   it('can preserve whitespace for the live transcript', () => {
     expect(removeSpecialMarkers('  第一行\n\n第二行  ', { trim: false })).toBe('  第一行\n\n第二行  ')
     expect(removeSpecialMarkers('  第一行\n\n第二行  ')).toBe('第一行\n\n第二行')

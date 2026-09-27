@@ -121,6 +121,11 @@ export const useChatContextStore = defineStore('chat-context', () => {
     activeContexts.value = {}
   }
 
+  function clearContextsForSession(sessionId: string) {
+    for (const contextId of Object.keys(activeContexts.value))
+      clearContext(contextId, { type: 'session', sessionId })
+  }
+
   function clearContext(contextId: string, scope?: ChatContextScope) {
     if (!activeContexts.value[contextId])
       return
@@ -161,6 +166,7 @@ export const useChatContextStore = defineStore('chat-context', () => {
   return {
     ingestContextMessage,
     resetContexts,
+    clearContextsForSession,
     clearContext,
     getContextsSnapshot,
   }

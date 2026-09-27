@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   getIndex: vi.fn(),
   getCardRuntime: vi.fn(),
   getSession: vi.fn(),
+  listSessionIds: vi.fn().mockResolvedValue([]),
   isAuthenticated: false,
   postSync: vi.fn(),
   saveIndex: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock('../../database/repos/chat-sessions.repo', () => ({
     deleteSession: mocks.deleteSession,
     getIndex: mocks.getIndex,
     getSession: mocks.getSession,
+    listSessionIds: mocks.listSessionIds,
     saveIndex: mocks.saveIndex,
     saveSession: mocks.saveSession,
   },
@@ -118,6 +120,16 @@ vi.mock('./inner-voice-notes', () => ({
   }),
 }))
 
+beforeEach(() => {
+  const values = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  })
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
 describe('chat session sync conflicts', () => {
   const records = new Map<string, ChatSessionRecord>()
 
@@ -144,6 +156,98 @@ describe('chat session sync conflicts', () => {
       records.set(sessionId, structuredClone(record))
     })
     mocks.postSync.mockResolvedValue(new Response(null, { status: 200 }))
+  })
+
+  it('reuses an empty direct conversation and keeps previous history when starting another', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const first = store.activeSessionId
+    expect(await store.createDirectSession('character-1')).toBe(first)
+    store.getSessionMessages(first).push({ id: 'first-user', role: 'user', content: 'My original conversation' })
+    await store.persistSessionMessages(first, { immediate: true })
+    const next = await store.createDirectSession('character-1')
+    expect(next).not.toBe(first)
+    expect(await store.createDirectSession('character-1')).toBe(next)
+    expect(store.getSessionMessages(next).some(message => message.role === 'user')).toBe(false)
+    expect(records.get(first)?.messages.some(message => message.id === 'first-user')).toBe(true)
+    expect(store.directSessions.map(meta => meta.sessionId)).toEqual(expect.arrayContaining([first, next]))
+    expect(records.get(first)?.meta.title).toBe('My original conversation')
+  })
+
+  it('starts fresh when an existing conversation only has proactive assistant content', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const original = store.activeSessionId
+    store.getSessionMessages(original).push({
+      id: 'proactive-greeting', role: 'assistant', content: 'Welcome back.', slices: [], tool_results: [],
+    })
+    await store.persistSessionMessages(original, { immediate: true })
+    const next = await store.createDirectSession('character-1')
+    expect(next).not.toBe(original)
+    expect(store.getSessionMessages(next).every(message => message.role === 'system')).toBe(true)
+    expect(records.get(original)?.messages.some(message => message.id === 'proactive-greeting')).toBe(true)
+  })
+
+  it('does not reuse a shell with unsaved assistant content or an active stream', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const original = store.activeSessionId
+    store.getSessionMessages(original).push({
+      id: 'unsaved-assistant', role: 'assistant', content: 'A draft reply.', slices: [], tool_results: [],
+    })
+    const next = await store.createDirectSession('character-1')
+    expect(next).not.toBe(original)
+    expect(store.getSessionMessages(original).some(message => message.id === 'unsaved-assistant')).toBe(true)
+    const stream = (await import('./stream-store')).useChatStreamStore()
+    stream.beginStream(next)
+    const third = await store.createDirectSession('character-1')
+    expect(third).not.toBe(next)
+    expect(stream.streamingSessionId).toBe(next)
+  })
+
+  it('inspects cold history without selecting it or mutating its prompt', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const original = store.activeSessionId
+    const other = await store.createDirectSession('character-2')
+    await store.activateDirectSession(original)
+    const before = structuredClone(records.get(other))
+    mocks.saveSession.mockClear()
+    const snapshot = await store.readSessionForInspection(other)
+    expect(store.activeSessionId).toBe(original)
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+    expect(snapshot).toEqual(before)
+    snapshot!.messages.length = 0
+    expect(records.get(other)).toEqual(before)
+  })
+
+  it('activates the historical persona without changing the global stage card', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const card = (await import('../modules/airi-card')).useAiriCardStore()
+    const other = await store.createDirectSession('character-2')
+    await store.activateDirectSession(other)
+    expect(card.activeCardId).toBe('character-1')
+    expect(store.getSessionMeta(store.activeSessionId)?.characterId).toBe('character-2')
+    expect(store.getSessionMessages(other)[0].content).toContain('character-2 private prompt')
+  })
+
+  it('preserves a manual conversation title when a stale window persists a message', async () => {
+    const first = useChatSessionStore()
+    await first.initialize()
+    const sessionId = first.activeSessionId
+    const other = useChatSessionStore(createPinia())
+    await other.initialize()
+    await first.renameDirectSession(sessionId, 'A lasting title')
+    other.getSessionMessages(sessionId).push({ id: 'stale-user', role: 'user', content: 'A different auto title' })
+    await other.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.get(sessionId)?.meta.title).toBe('A lasting title')
+    const capturedGeneration = first.getSessionGeneration(sessionId)
+    await first.deleteSession(sessionId)
+    expect(first.getSessionGeneration(sessionId)).toBeGreaterThan(capturedGeneration)
+    other.setSessionMessages(sessionId, [{ id: 'late-user', role: 'user', content: 'Late completion' }])
+    await other.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.has(sessionId)).toBe(false)
   })
 
   it('assigns new message ids when forking a session', async () => {

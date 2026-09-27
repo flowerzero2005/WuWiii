@@ -6,6 +6,8 @@ import { ref, watch } from 'vue'
 
 import { useCharacterNotebookStore, useCharacterStore } from '../'
 import { useChatOrchestratorStore } from '../../chat'
+import { isSessionMemoryWorkCancelled } from '../../chat/session-memory-lifecycle'
+import { useChatSessionStore } from '../../chat/session-store'
 import { useLLM } from '../../llm'
 import { useModsServerChannelStore } from '../../mods/api/channel-server'
 import { useConsciousnessStore } from '../../modules/consciousness'
@@ -52,6 +54,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
   const { activeProvider, activeModel } = storeToRefs(useConsciousnessStore())
   const providersStore = useProvidersStore()
   const chatOrchestrator = useChatOrchestratorStore()
+  const chatSession = useChatSessionStore()
   const characterStore = useCharacterStore()
   const notebookStore = useCharacterNotebookStore()
   const { systemPrompt } = storeToRefs(characterStore)
@@ -81,6 +84,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
   let proactiveTopicWaitIntervalMs: number | undefined
   let proactiveTopicWaitStartedAt: number | undefined
   let proactiveTopicGenerationInFlight = false
+  let proactiveTopicAbort: AbortController | undefined
   let proactiveTopicRestartRequested = false
   let proactiveTopicActivityTrackingStarted = false
   let proactiveTopicPriority = 0
@@ -377,11 +381,30 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     if (!activeProviderId || !activeModelId)
       return false
 
+    const sessionId = chatSession.activeSessionId
+    const scopeId = notebookStore.characterId
+    const timerVersion = proactiveTopicTimerVersion
+    const activityAt = readLastConversationActivityAt()
+    const sessionMeta = chatSession.getSessionMeta(sessionId)
+    const history = chatSession.getSessionMessages(sessionId)
+    if (!sessionMeta || sessionMeta.kind === 'room' || chatOrchestrator.sending
+      || !history.some(message => message.role === 'user') || isSessionMemoryWorkCancelled(sessionId))
+      return false
+    const latestMessageId = history.at(-1)?.id
+    const controller = new AbortController()
+    proactiveTopicAbort = controller
     const prompt = createProactiveTopicPrompt(now)
     const chatProvider = await providersStore.getProviderInstance<ChatProvider>(activeProviderId)
+    if (controller.signal.aborted || timerVersion !== proactiveTopicTimerVersion
+      || sessionId !== chatSession.activeSessionId || scopeId !== notebookStore.characterId
+      || activityAt !== readLastConversationActivityAt() || chatOrchestrator.sending
+      || latestMessageId !== chatSession.getSessionMessages(sessionId).at(-1)?.id
+      || isSessionMemoryWorkCancelled(sessionId))
+      return false
     lastProactiveTopicTime.value = now
 
     await chatOrchestrator.ingest(prompt, {
+      abortSignal: controller.signal,
       model: activeModelId,
       chatProvider,
       hiddenUserMessage: true,
@@ -396,7 +419,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
           textRaw: prompt,
         },
       },
-    })
+    }, sessionId)
 
     recordConversationActivity(Date.now())
     return true
@@ -546,6 +569,20 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
       return
 
     proactiveTopicActivityTrackingStarted = true
+    watch(() => [chatSession.activeSessionId, notebookStore.characterId], () => {
+      proactiveTopicAbort?.abort('proactive-owner-changed')
+      proactiveTopicRestartRequested = proactiveTopicGenerationInFlight
+      resetProactiveTopicWait()
+    }, { flush: 'sync' })
+    watch(() => chatSession.getSessionMessages(chatSession.activeSessionId)
+      .filter(message => message.role === 'user').at(-1)?.id, () => {
+      proactiveTopicAbort?.abort('user-message-arrived')
+      recordConversationActivity()
+    }, { flush: 'sync' })
+    watch(() => chatSession.getSessionMessages(chatSession.activeSessionId).at(-1)?.createdAt, (createdAt) => {
+      if (createdAt)
+        recordConversationActivity(Math.max(Date.now(), createdAt))
+    })
     chatOrchestrator.onBeforeSend(async (_message, context) => {
       if (!context.internal?.hiddenUserMessage)
         recordConversationActivity()
@@ -600,6 +637,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
   }
 
   function stopProactiveTopicTimer() {
+    proactiveTopicAbort?.abort('proactive-timer-stopped')
     proactiveTopicTimerVersion += 1
     proactiveTopicRestartRequested = false
     if (proactiveTopicTimer) {

@@ -9,7 +9,9 @@ import { themeColorFromValue, useThemeColor } from '@proj-airi/stage-layouts/com
 import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
 import { OnboardingDialog } from '@proj-airi/stage-ui/components'
 import { client } from '@proj-airi/stage-ui/composables/api'
+import { useAutomaticDailyCheckIn } from '@proj-airi/stage-ui/composables/use-automatic-daily-check-in'
 import { isVisionScreenshotOwnerHash, useAutomaticVisionScreenshot } from '@proj-airi/stage-ui/composables/use-automatic-vision-screenshot'
+import { provideConversationNavigation } from '@proj-airi/stage-ui/composables/use-conversation-navigation'
 import { provideDisplayModelFilePicker } from '@proj-airi/stage-ui/composables/use-display-model-file-dialog'
 import { provideVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useMcpRuntimeStatusStore } from '@proj-airi/stage-ui/stores/mcp-runtime'
@@ -26,6 +28,7 @@ import { toast, Toaster } from 'vue-sonner'
 
 import ResizeHandler from './components/ResizeHandler.vue'
 
+import { conversationOpen, conversationSelectionRead } from '../shared/conversation-navigation'
 import {
   electronAppQuit,
   electronButlerRendererRuntimeReady,
@@ -82,6 +85,25 @@ const serverChannelSettingsStore = useServerChannelSettingsStore()
 const router = useRouter()
 const route = useRoute()
 const quitApp = useElectronEventaInvoke(electronAppQuit)
+const readConversationSelection = useElectronEventaInvoke(conversationSelectionRead)
+const openSelectedConversation = useElectronEventaInvoke(conversationOpen)
+// Load chat state only when a settings user explicitly inspects or opens a
+// conversation; auxiliary renderers should not initialize it at bootstrap.
+async function navigationUserId() {
+  const { useChatSessionStore } = await import('@proj-airi/stage-ui/stores/chat/session-store')
+  const sessions = useChatSessionStore()
+  await sessions.initializeForInspection()
+  return sessions.sessionUserId
+}
+provideConversationNavigation({
+  async getCurrentConversation() {
+    const selection = await readConversationSelection({ userId: await navigationUserId() })
+    return selection?.sessionId
+  },
+  async openConversation(sessionId) {
+    return await openSelectedConversation({ sessionId, userId: await navigationUserId() })
+  },
+})
 const DEVTOOLS_FLOATING_SELECTORS = [
   '#__vue-devtools-container__ > .vue-devtools__anchor',
   '#vue-devtools-container > .vue-devtools__anchor',
@@ -184,15 +206,20 @@ const notifyButlerRendererRuntimeReady = useElectronEventaInvoke(electronButlerR
 const notifyQuickChatRendererRuntimeReady = useElectronEventaInvoke(quickChatRendererRuntimeReady)
 provideDisplayModelFilePicker(createDesktopDisplayModelFilePicker(pickDisplayModelFile))
 let visionCaptureOptions = { types: ['screen', 'window'] as Array<'screen' | 'window'>, thumbnailSize: { width: 480, height: 270 } }
-const { checkMacOSPermission: checkVisionScreenRecordingPermission, getSources: getVisionScreenSources } = useElectronScreenCapture(window.electron.ipcRenderer, () => visionCaptureOptions)
-const visionScreenCapture = createDesktopVisionScreenCapture((options) => {
-  visionCaptureOptions = options
-  return getVisionScreenSources()
-}, undefined, undefined, isMacOS ? checkVisionScreenRecordingPermission : undefined)
+const { checkMacOSPermission: checkVisionScreenRecordingPermission, getSourceImage: getVisionScreenSourceImage, getSources: getVisionScreenSources } = useElectronScreenCapture(window.electron.ipcRenderer, () => visionCaptureOptions)
+const visionScreenCapture = createDesktopVisionScreenCapture({
+  getSources(options) {
+    visionCaptureOptions = options
+    return getVisionScreenSources()
+  },
+  getSourceImage: getVisionScreenSourceImage,
+  getPermissionStatus: isMacOS ? checkVisionScreenRecordingPermission : undefined,
+})
 provideVisionScreenCapture(visionScreenCapture)
 // Capture the window role before routing initializes; auxiliary windows must
 // not acquire ownership while their route temporarily looks like the stage.
 const isMainStageWindow = isVisionScreenshotOwnerHash(window.location.hash)
+useAutomaticDailyCheckIn(isMainStageWindow)
 useAutomaticVisionScreenshot(visionScreenCapture, isMainStageWindow, isStageRoute)
 const {
   state: autoUpdaterState,
@@ -724,10 +751,15 @@ watch(themeColorsHueDynamic, () => {
   document.documentElement.classList.toggle('dynamic-hue', themeColorsHueDynamic.value)
 }, { immediate: true })
 
+watch(isComposerRoute, composer => {
+  document.documentElement.classList.toggle('composer-window-surface', composer)
+}, { immediate: true })
+
 onUnmounted(() => {
   devtoolsFloatingObserver?.disconnect()
   devtoolsFloatingObserver = undefined
   document.documentElement.classList.remove('hide-vue-devtools-floating')
+  document.documentElement.classList.remove('composer-window-surface')
   if (productNoticesRefreshTimer !== undefined)
     window.clearInterval(productNoticesRefreshTimer)
   productNoticesRefreshTimer = undefined
@@ -740,7 +772,7 @@ onUnmounted(() => {
 
 <template>
   <Toaster />
-  <ResizeHandler v-if="!isStageRoute" />
+  <ResizeHandler v-if="!isStageRoute && !isComposerRoute" />
   <ChatSpeechRuntime v-if="shouldMountChatSpeechRuntime" />
   <OnboardingDialog
     v-if="isStageRoute && runtimeReady && !requiredUpdateRelease"
@@ -831,9 +863,9 @@ onUnmounted(() => {
     :aria-hidden="shouldShowRuntimeBootstrap"
   >
     <BackgroundProvider
-      v-if="(isChatRoute || isComposerRoute || isSettingsRoute || isWorkbenchRoute) && selectedBackground"
+      v-if="(isChatRoute || isSettingsRoute || isWorkbenchRoute) && selectedBackground"
       :background="selectedBackground"
-      :class="isComposerRoute ? 'composer-background-frame' : 'h-full min-h-0'"
+      class="h-full min-h-0"
     >
       <RouterView />
     </BackgroundProvider>
@@ -957,14 +989,6 @@ onUnmounted(() => {
 
 .dynamic-hue {
   animation: hue-anim 10s linear infinite;
-}
-
-.composer-background-frame {
-  height: calc(100% - 0.75rem);
-  min-height: 0;
-  margin: 0.375rem;
-  overflow: hidden;
-  border-radius: 1.4rem;
 }
 
 .runtime-bootstrap-enter-active,

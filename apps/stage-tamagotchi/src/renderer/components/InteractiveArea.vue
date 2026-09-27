@@ -28,8 +28,10 @@ import { removeSpecialMarkers, segmentAssistantReply } from '@proj-airi/stage-ui
 import { useGroupScriptJobs } from '@proj-airi/stage-ui/composables/use-group-script-jobs'
 import { useUserSpeakingState } from '@proj-airi/stage-ui/composables/use-user-speaking-state'
 import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
+import { resolveChatTurnIdleTimeoutMs } from '@proj-airi/stage-ui/constants/chat-timeouts'
 import { fetchSession } from '@proj-airi/stage-ui/libs/auth'
 import { reportOfficialCloudReplyDisplayFailure } from '@proj-airi/stage-ui/libs/official-cloud'
+import { waitForChatRetryDelay } from '@proj-airi/stage-ui/libs/providers/providers/official-cloud/chat-cooldown'
 import { useVAD } from '@proj-airi/stage-ui/stores/ai/models/vad'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useChatOrchestratorStore } from '@proj-airi/stage-ui/stores/chat'
@@ -49,7 +51,7 @@ import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { assertVisionAttachments, useVisionStore, VISION_MAX_IMAGES } from '@proj-airi/stage-ui/stores/modules/vision'
+import { assertVisionAttachments, getVisionAttachmentErrorKey, useVisionStore, VISION_IMAGE_LIMITS_I18N_PARAMS, VISION_MAX_IMAGE_BYTES, VISION_MAX_IMAGES } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useVisionScreenContextStore } from '@proj-airi/stage-ui/stores/modules/vision-screen-context'
 import { useWebSearchStore } from '@proj-airi/stage-ui/stores/modules/web-search'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
@@ -77,6 +79,7 @@ import { useSpeechRuntimeStore } from '@proj-airi/stage-ui/stores/speech-runtime
 import { useUserIdentityStore } from '@proj-airi/stage-ui/stores/user-identity'
 import { detectStageChatToolIntent } from '@proj-airi/stage-ui/tools/chat-tool-bundles'
 import { allocateWholeReplySpeechTimings, buildAssistantSegmentMessageIds, getChatErrorMessage, getSpeechSyncedSegmentTypingSpeedMs } from '@proj-airi/stage-ui/utils'
+import { getOfficialCloudChatError } from '@proj-airi/stage-ui/utils/chat-error'
 import { BasicTextarea, useTheme } from '@proj-airi/ui'
 import { until, useBroadcastChannel } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -88,8 +91,10 @@ import { toast } from 'vue-sonner'
 
 import ChatModelSwitcher from './chat-model-switcher.vue'
 import ChatSpeechSwitcher from './chat-speech-switcher.vue'
+import DirectConversationList from './direct-conversation-list.vue'
 import GroupMentionPicker from './group-mention-picker.vue'
 
+import { conversationOpenRequested, conversationOpenResult, conversationSelectionReport } from '../../shared/conversation-navigation'
 import { createDesktopFeatureManifest } from '../../shared/desktop-feature-manifest'
 import { composerSourceAction, composerSourceActionStatus, composerSourceReturnTargetState, composerSourceReveal, composerSourceTextAppend } from '../../shared/detached-composer-events'
 import { electronOpenSettings } from '../../shared/eventa'
@@ -177,6 +182,8 @@ const RECOMMENDED_REPLY_REQUEST_TIMEOUT_MS = 30_000
 // budget. Four sequential speakers can legitimately outlive the old 60s cache.
 const COMPLETED_GROUP_TURN_RESPONSE_TTL_MS = 10 * 60_000
 const recommendedReplyAttachTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const recommendedReplyControllers = new Map<string, AbortController>()
+let recommendedRepliesDisposed = false
 interface CompletedGroupTurnResponse {
   createdAt?: number
   expiryTimer: ReturnType<typeof setTimeout>
@@ -227,22 +234,32 @@ function setRecommendedReplyStatus(sessionId: string, status: RecommendedReplySt
   }
 }
 
-function withRecommendedReplyTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+function withRecommendedReplyTimeout<T>(promise: Promise<T>, timeoutMs: number, controller: AbortController) {
   return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer)
+      controller.signal.removeEventListener('abort', abort)
+      reject(controller.signal.reason ?? new DOMException('Request cancelled.', 'AbortError'))
+    }
     const timer = setTimeout(() => {
       const timeoutError = Object.assign(
         new Error(`Recommended replies timed out after ${timeoutMs}ms.`),
         { code: 'recommendations_timeout' },
       )
-      reject(timeoutError)
+      controller.abort(timeoutError)
     }, timeoutMs)
+    controller.signal.addEventListener('abort', abort, { once: true })
+    if (controller.signal.aborted)
+      abort()
     void promise.then(
       (value) => {
         clearTimeout(timer)
+        controller.signal.removeEventListener('abort', abort)
         resolve(value)
       },
       (error) => {
         clearTimeout(timer)
+        controller.signal.removeEventListener('abort', abort)
         reject(error)
       },
     )
@@ -331,20 +348,49 @@ const screenPickerOpen = ref(false)
 const screenSources = ref<VisionScreenSource[]>([])
 const selectedScreenSourceId = ref('')
 const screenCaptureLoading = ref(false)
+const screenCaptureCountdown = ref(0)
+const screenCapturePending = ref(false)
 const screenCaptureError = ref('')
+let cancelScreenCaptureCountdown: (() => void) | undefined
 let screenPickerRevision = 0
 let screenPickerSessionId: string | undefined
 const selectedScreenSource = computed(() => screenSources.value.find(source => source.id === selectedScreenSourceId.value))
 
 function closeScreenPicker() {
   screenPickerRevision += 1
+  cancelScreenCaptureCountdown?.()
   screenPickerOpen.value = false
   screenSources.value = []
   screenCaptureLoading.value = false
+  screenCapturePending.value = false
+}
+
+function waitForScreenCaptureCountdown() {
+  return new Promise<boolean>((resolve) => {
+    const deadline = Date.now() + 3_000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = (completed: boolean) => {
+      clearTimeout(timer)
+      screenCaptureCountdown.value = 0
+      cancelScreenCaptureCountdown = undefined
+      resolve(completed)
+    }
+    cancelScreenCaptureCountdown = () => finish(false)
+    const tick = () => {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) {
+        finish(true)
+        return
+      }
+      screenCaptureCountdown.value = Math.ceil(remaining / 1_000)
+      timer = setTimeout(tick, Math.min(remaining, 1_000))
+    }
+    tick()
+  })
 }
 
 function screenCaptureFailure(cause: unknown) {
-  return t(`stage.chat.vision.${getVisionScreenCaptureErrorKey(cause)}`)
+  return t(`stage.chat.vision.${getVisionAttachmentErrorKey(cause) ?? getVisionScreenCaptureErrorKey(cause)}`, VISION_IMAGE_LIMITS_I18N_PARAMS)
 }
 
 async function openScreenPicker() {
@@ -378,26 +424,48 @@ async function openScreenPicker() {
 async function attachSelectedScreen() {
   if (isComposerReadonly())
     return
-  if (!screenCapture || !selectedScreenSource.value || screenCaptureLoading.value)
+  if (!screenCapture || !visionStore.enabled || !screenPickerOpen.value || !selectedScreenSource.value || screenCaptureLoading.value)
     return
+  if (attachments.value.length >= VISION_MAX_IMAGES) {
+    screenCaptureError.value = t('stage.chat.vision.image-limit', { count: VISION_MAX_IMAGES })
+    return
+  }
   const revision = screenPickerRevision
   const sourceId = selectedScreenSource.value.id
+  const sessionId = activeSessionId.value
+  const isCurrentCapture = () => revision === screenPickerRevision
+    && screenPickerOpen.value
+    && activeSessionId.value === sessionId
+    && sessionId === screenPickerSessionId
+    && selectedScreenSourceId.value === sourceId
+    && visionStore.enabled
+    && !isComposerReadonly()
   screenCaptureLoading.value = true
+  screenCapturePending.value = true
+  screenCaptureError.value = ''
   try {
-    const image = await screenCapture.capture(sourceId)
-    if (revision !== screenPickerRevision || activeSessionId.value !== screenPickerSessionId || !visionStore.enabled)
+    if (!await waitForScreenCaptureCountdown() || !isCurrentCapture())
       return
+    const image = await screenCapture.capture(sourceId)
+    if (!isCurrentCapture())
+      return
+    if (attachments.value.length >= VISION_MAX_IMAGES) {
+      screenCaptureError.value = t('stage.chat.vision.image-limit', { count: VISION_MAX_IMAGES })
+      return
+    }
     assertVisionAttachments([...attachments.value, image])
     attachments.value.push({ ...image, url: `data:${image.mimeType};base64,${image.data}` })
     closeScreenPicker()
   }
   catch (cause) {
-    if (revision === screenPickerRevision)
+    if (isCurrentCapture())
       screenCaptureError.value = screenCaptureFailure(cause)
   }
   finally {
-    if (revision === screenPickerRevision)
+    if (revision === screenPickerRevision) {
       screenCaptureLoading.value = false
+      screenCapturePending.value = false
+    }
   }
 }
 const memoryAdvancedSettingsStore = useMemoryAdvancedSettingsStore()
@@ -443,6 +511,9 @@ const { activeModel, activeProvider } = storeToRefs(consciousnessStore)
 const isComposing = ref(false)
 const isInitialized = ref(false)
 const personaContactsDrawerOpen = ref(false)
+const personaSidebarView = ref<'roles' | 'conversations'>('roles')
+const conversationActionPending = ref(false)
+const conversationActionError = ref('')
 const personaContactsDesktopCollapsed = ref(false)
 const voiceCallStarting = ref(false)
 const voiceCallSessionActive = ref(false)
@@ -1196,6 +1267,7 @@ watch(shouldInterruptPlayback, (shouldInterrupt) => {
 watch(activeSessionId, () => {
   cancelManualSend()
   closeScreenPicker()
+  speechRuntimeStore.interrupt('conversation-switched')
   groupResponderIds.value = []
   groupMentionedIds.value = []
   groupMentionOpen.value = false
@@ -1214,9 +1286,14 @@ const activeHistoryRatio = computed(() => isWidgetSurface.value
   ? chatLayoutSettingsStore.widgetHistoryRatio
   : chatLayoutSettingsStore.pageHistoryRatio)
 const composerDetached = ref(false)
-const composerMinimumHeight = computed(() => isWidgetSurface.value
-  ? CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT
-  : CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)
+const composerMinimumHeight = computed(() => {
+  const inputMinimumHeight = isWidgetSurface.value
+    ? CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT
+    : CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT
+  // The attachment strip shares the composer row with the input and toolbar.
+  const attachmentHeight = attachments.value.length > 0 && !isCollapsed.value && !composerDetached.value ? 64 : 0
+  return inputMinimumHeight + attachmentHeight
+})
 const isChatLayoutTooShort = computed(() => !composerDetached.value
   && !isCollapsed.value
   && chatLayoutRootHeight.value <= composerMinimumHeight.value + CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT)
@@ -1588,10 +1665,11 @@ watch(composerDetachUnavailable, (unavailable) => {
 }, { immediate: true, flush: 'sync' })
 detachFromResize = point => void detachedComposer.detach(false, point)
 function isComposerReadonly() {
-  return detachedComposer.readonly.value
+  return detachedComposer.readonly.value || conversationActionPending.value
 }
 const canSend = computed(() => isInitialized.value
   && !detachedComposer.readonly.value
+  && !conversationActionPending.value
   && !manualSendPending.value
   && !requiresOfficialCloudLogin.value
   && !isComposing.value
@@ -1975,10 +2053,14 @@ function getParticipantDisplayName(characterId: string, fallback: string) {
 async function selectPersonaContact(contact: PersonaChatContact) {
   if (groupAddMode.value)
     return
-  await chatSession.selectOrCreateSessionForCharacter(contact.characterId)
-  groupResponderIds.value = []
-  groupMentionedIds.value = []
-  personaContactsDrawerOpen.value = false
+  await runConversationAction(async () => {
+    const existing = chatSession.directSessions.find(session => session.sessionId === contact.sessionId)
+      ?? chatSession.directSessions.find(session => session.characterId === contact.characterId)
+    if (existing)
+      await chatSession.activateDirectSession(existing.sessionId)
+    else
+      await chatSession.createDirectSession(contact.characterId)
+  })
 }
 
 function openGroupAddList() {
@@ -2035,13 +2117,12 @@ async function createGroupChat() {
   if (participants.length < GROUP_CHAT_MIN_PARTICIPANTS)
     return
 
-  await chatSession.createGroupSession(participants, groupCreateTitle.value.trim() || undefined)
-  groupResponderIds.value = []
-  groupMentionedIds.value = []
-  groupCreateCharacterIds.value = []
-  groupCreateTitle.value = ''
-  groupCreateOpen.value = false
-  personaContactsDrawerOpen.value = false
+  await runConversationAction(async () => {
+    await chatSession.createGroupSession(participants, groupCreateTitle.value.trim() || undefined)
+    groupCreateCharacterIds.value = []
+    groupCreateTitle.value = ''
+    groupCreateOpen.value = false
+  })
 }
 
 async function addContactToActiveGroup(characterId: string) {
@@ -2105,13 +2186,151 @@ async function removeContactFromActiveGroup(characterId: string) {
   }
 }
 
-function selectGroupSession(room: ChatSessionMeta) {
-  chatSession.setActiveSession(room.sessionId)
-  groupResponderIds.value = []
-  groupMentionedIds.value = []
-  groupMentionOpen.value = false
-  personaContactsDrawerOpen.value = false
+async function selectGroupSession(room: ChatSessionMeta) {
+  await runConversationAction(async () => {
+    await chatSession.loadSession(room.sessionId)
+    chatSession.setActiveSession(room.sessionId)
+  })
 }
+
+function openConversations() {
+  if (isCollapsed.value)
+    requestWidgetExpand()
+  personaSidebarView.value = activeGroupMeta.value ? 'roles' : 'conversations'
+  personaContactsDesktopCollapsed.value = false
+  personaContactsDrawerOpen.value = true
+}
+
+async function runConversationAction(action: () => Promise<unknown>) {
+  if (conversationActionPending.value)
+    return
+  conversationActionPending.value = true
+  conversationActionError.value = ''
+  try {
+    if (!await prepareConversationSwitch())
+      return
+    await action()
+    groupResponderIds.value = []
+    groupMentionedIds.value = []
+    groupMentionOpen.value = false
+    personaSidebarView.value = activeGroupMeta.value ? 'roles' : 'conversations'
+    personaContactsDrawerOpen.value = false
+  }
+  catch {
+    conversationActionError.value = t('stage.chat.conversations.action-failed')
+  }
+  finally {
+    conversationActionPending.value = false
+  }
+}
+
+async function createDirectConversation(characterId: string) {
+  await runConversationAction(() => chatSession.createDirectSession(characterId))
+}
+
+async function selectDirectConversation(sessionId: string) {
+  if (sessionId === activeSessionId.value) {
+    personaContactsDrawerOpen.value = false
+    return
+  }
+  await runConversationAction(() => chatSession.activateDirectSession(sessionId))
+}
+
+async function deleteDirectConversation(sessionId: string) {
+  await runConversationAction(async () => {
+    interruptActiveTurn(sessionId, 'conversation-deleted')
+    await chatSession.deleteSession(sessionId)
+  })
+}
+
+// Navigation flushes the current editor through its owner before changing
+// scope. A send or voice capture keeps its original scope until it completes.
+async function prepareConversationSwitch(): Promise<boolean> {
+  if (composerSourceIsBusy() || voiceCallStarting.value || isComposing.value) {
+    conversationActionError.value = t('stage.chat.conversations.busy')
+    toast.info(conversationActionError.value)
+    return false
+  }
+  const sourceSessionId = activeSessionId.value
+  const sourceUserScope = composerUserScope.value
+  if (!await detachedComposer.prepareSessionSwitch()
+    || sourceSessionId !== activeSessionId.value || sourceUserScope !== composerUserScope.value) {
+    conversationActionError.value = t('stage.chat.conversations.switch-failed')
+    toast.info(conversationActionError.value)
+    return false
+  }
+  if (composerSourceIsBusy() || voiceCallStarting.value || isComposing.value) {
+    conversationActionError.value = t('stage.chat.conversations.busy')
+    toast.info(conversationActionError.value)
+    return false
+  }
+  closeScreenPicker()
+  speechRuntimeStore.interrupt('conversation-switched')
+  return true
+}
+
+const reportConversationSelection = useElectronEventaInvoke(conversationSelectionReport)
+const reportConversationOpenResult = useElectronEventaInvoke(conversationOpenResult)
+
+function reportCurrentConversation() {
+  const meta = chatSession.getSessionMeta(activeSessionId.value)
+  if (!isInitialized.value || !meta || meta.userId !== chatSession.sessionUserId)
+    return
+  void reportConversationSelection({ userId: meta.userId, sessionId: meta.sessionId }).catch(() => undefined)
+}
+
+watch([activeSessionId, () => chatSession.sessionUserId, isInitialized], reportCurrentConversation, { flush: 'post' })
+const offConversationOpenRequested = composerActionContext.value.on(conversationOpenRequested, async ({ body }) => {
+  if (!body)
+    return
+  let accepted = false
+  let ownsAction = false
+  const sourceSessionId = activeSessionId.value
+  const sourceUserScope = composerUserScope.value
+  const requestIsCurrent = () => isInitialized.value
+    && body.userId === chatSession.sessionUserId && Date.now() < body.expiresAt
+  const canActivate = () => requestIsCurrent() && activeSessionId.value === sourceSessionId
+    && composerUserScope.value === sourceUserScope && !composerSourceIsBusy()
+    && !voiceCallStarting.value && !isComposing.value
+  try {
+    if (!requestIsCurrent() || conversationActionPending.value)
+      return
+    if (body.sessionId === activeSessionId.value && chatSession.getSessionMeta(body.sessionId)?.userId === body.userId) {
+      accepted = true
+      return
+    }
+    conversationActionPending.value = true
+    conversationActionError.value = ''
+    ownsAction = true
+    if (activeSessionId.value !== body.sessionId && !await prepareConversationSwitch())
+      return
+    const record = await chatSession.readSessionForInspection(body.sessionId)
+    if (!record || !canActivate())
+      return
+    if (record.meta.kind === 'room') {
+      await chatSession.loadSession(body.sessionId)
+      if (!canActivate() || !chatSession.getSessionMeta(body.sessionId))
+        return
+      chatSession.setActiveSession(body.sessionId)
+    }
+    else {
+      await chatSession.activateDirectSession(body.sessionId, canActivate)
+    }
+    personaContactsDrawerOpen.value = false
+    personaSidebarView.value = record.meta.kind === 'room' ? 'roles' : 'conversations'
+    accepted = true
+    reportCurrentConversation()
+  }
+  catch {
+    conversationActionError.value = t('stage.chat.conversations.action-failed')
+  }
+  finally {
+    if (ownsAction)
+      conversationActionPending.value = false
+    void reportConversationOpenResult({ requestId: body.requestId, accepted }).catch(() => undefined)
+  }
+})
+onUnmounted(offConversationOpenRequested)
 
 function requestGroupDelete(room: ChatSessionMeta) {
   if (!groupSending.value) {
@@ -2374,26 +2593,14 @@ function isOfficialCloudAccountError(message: string) {
 
 function getLocalizedChatErrorMessage(error: unknown) {
   const message = getChatErrorMessage(error)
-  if (activeProvider.value !== 'official-cloud' || !locale.value.toLowerCase().startsWith('zh'))
+  if (activeProvider.value !== 'official-cloud')
     return message
 
-  const normalizedMessage = message.toLowerCase()
-  // Empty model output is a completed provider response, not an upstream
-  // availability failure. Check it before broad "temporarily unavailable"
-  // matching so the user sees the actionable empty-reply message.
-  if (normalizedMessage.includes('model returned no visible reply'))
-    return '模型没有返回可显示的内容，请重试。'
-  if (normalizedMessage.includes('sign in') || normalizedMessage.includes('login') || normalizedMessage.includes('unauthorized'))
-    return t('stage.chat.error.official-cloud.login-required')
-  if (normalizedMessage.includes('not enough points') || normalizedMessage.includes('insufficient points'))
-    return t('stage.chat.error.official-cloud.insufficient-points')
-  if (normalizedMessage.includes('not configured') || normalizedMessage.includes('setting is incomplete'))
-    return t('stage.chat.error.official-cloud.not-configured')
-  if (normalizedMessage.includes('not available') || normalizedMessage.includes('temporarily unavailable'))
-    return t('stage.chat.error.official-cloud.unavailable')
-  if (normalizedMessage.includes('unable to connect') || normalizedMessage.includes('no route matched'))
-    return t('stage.chat.error.official-cloud.connection-failed')
-  return message
+  const { key, diagnostics, retryAfterSeconds } = getOfficialCloudChatError(error)
+  const localized = retryAfterSeconds !== undefined
+    ? t('stage.chat.error.official-cloud.rate-limited-wait', { seconds: retryAfterSeconds })
+    : t(`stage.chat.error.official-cloud.${key}`)
+  return `${localized}${diagnostics}`
 }
 
 /**
@@ -2611,6 +2818,7 @@ function hasPendingDesktopTextEditProposal() {
 async function sendConfiguredChatMessage(
   text: string,
   options: {
+    abortSignal?: AbortSignal
     attachments?: Array<{ type: 'image', data: string, mimeType: string, url: string }>
     displayAttachments?: Array<{ type: 'image', data: string, mimeType: string, url: string }>
     disableMessageMerging?: boolean
@@ -2625,8 +2833,10 @@ async function sendConfiguredChatMessage(
     visionContext?: string
   },
 ) {
+  options.abortSignal?.throwIfAborted()
   if (!await ensureEnabledChatCapabilityConsents())
     throw new Error('Required chat capability consent was not granted.')
+  options.abortSignal?.throwIfAborted()
 
   const providerId = options.providerId ?? activeProvider.value
   const modelId = options.modelId ?? activeModel.value
@@ -2704,10 +2914,12 @@ async function sendConfiguredChatMessage(
   })
 
   try {
+    options.abortSignal?.throwIfAborted()
     // Once ingest starts, the provider may accept or charge the turn even if
     // the caller later receives an abort or transport error.
     options.onIngestStart?.()
     await ingest(text, {
+      abortSignal: options.abortSignal,
       model: modelId,
       chatProvider,
       providerConfig,
@@ -2727,6 +2939,7 @@ async function sendConfiguredChatMessage(
       toolBundles,
       visionContext: options.visionContext,
     }, options.targetSessionId)
+    options.abortSignal?.throwIfAborted()
   }
   catch (error) {
     if (agentSessionId && agentRunId) {
@@ -2769,7 +2982,8 @@ function scheduleGroupSpeakerWatchdog(groupTurnId: string, characterId: string) 
   groupTurnWatchdogRunId = groupTurnId
   groupTurnWatchdogSpeakerId = characterId
   const lastProgressAt = activeGroupRun.value?.speaker?.lastProgressAt ?? Date.now()
-  const remainingMs = Math.max(1, GROUP_SPEAKER_IDLE_TIMEOUT_MS - (Date.now() - lastProgressAt))
+  const idleTimeoutMs = activeGroupRun.value?.speaker?.idleTimeoutMs ?? GROUP_SPEAKER_IDLE_TIMEOUT_MS
+  const remainingMs = Math.max(1, idleTimeoutMs - (Date.now() - lastProgressAt))
   const watchdogTimer = setTimeout(() => {
     if (groupTurnWatchdogTimer === watchdogTimer)
       groupTurnWatchdogTimer = null
@@ -2808,7 +3022,7 @@ function scheduleGroupSpeakerWatchdog(groupTurnId: string, characterId: string) 
     activeGroupRun.value = drainGroupSpeaker(activeGroupRun.value, groupTurnId, characterId)
     console.warn('[GroupChat] speaker watchdog: aborting speaker after no progress', {
       characterId,
-      graceMs: GROUP_SPEAKER_IDLE_TIMEOUT_MS,
+      graceMs: idleTimeoutMs,
       groupTurnId,
     })
     groupSpeakerAbortController.value?.abort('group-speaker-watchdog')
@@ -3025,7 +3239,8 @@ async function handleGroupSend(textToSend: string, attachmentCount: number, trac
         userText: textToSend,
       })
 
-      activeGroupRun.value = startGroupSpeaker(activeGroupRun.value, groupTurnId, characterId, Date.now())
+      const speakerIdleTimeoutMs = resolveChatTurnIdleTimeoutMs(responderProviderId === 'official-cloud', GROUP_SPEAKER_IDLE_TIMEOUT_MS)
+      activeGroupRun.value = startGroupSpeaker(activeGroupRun.value, groupTurnId, characterId, Date.now(), speakerIdleTimeoutMs)
       noteGroupTurnProgress(groupTurnId, characterId)
       const speakerAbortController = new AbortController()
       groupSpeakerAbortController.value = speakerAbortController
@@ -3041,7 +3256,7 @@ async function handleGroupSend(textToSend: string, attachmentCount: number, trac
         speakerTimeoutErrorShown = true
         getRoomMessages().push({
           role: 'error',
-          content: `${displayName}: ${getChatErrorMessage(new Error(`Response timed out after ${GROUP_SPEAKER_IDLE_TIMEOUT_MS / 1000} seconds without progress.`))}`,
+          content: `${displayName}: ${getChatErrorMessage(new Error(`Response timed out after ${speakerIdleTimeoutMs / 1000} seconds without progress.`))}`,
         })
       }
       const hasAcceptedSpeakerOutput = () => hasSpeakerResponseMessage(roomSessionId, sourceUserMessageId, characterId)
@@ -3403,7 +3618,7 @@ async function handleSend() {
 }
 
 async function performComposerSend(trackSubmission?: (sessionId: string, messageId: string) => void) {
-  if (manualSendPending.value || isComposing.value || !isInitialized.value || groupSendingForActiveSession.value) {
+  if (conversationActionPending.value || manualSendPending.value || isComposing.value || !isInitialized.value || groupSendingForActiveSession.value) {
     return
   }
 
@@ -3426,7 +3641,7 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     providerId,
   )
   const submittedComposerRevision = composerRevision
-  const visionConfigurationRevision = visionStore.configurationRevision
+  let visionConfigurationRevision = visionStore.configurationRevision
   const collapsedSend = isCollapsed.value
   const nextRecommendationGeneration = (recommendedReplyGenerationBySession.value[targetSessionId] ?? 0) + 1
   recommendedReplyGenerationBySession.value = {
@@ -3511,9 +3726,13 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     return errorMessage
   }
   try {
-    if (shouldUseVisionAnalysis && visionProvider.value === 'official-cloud'
-      && !await ensureOfficialCapabilityConsent('vision')) {
-      return
+    if (shouldUseVisionAnalysis && visionProvider.value === 'official-cloud') {
+      if (!await ensureOfficialCapabilityConsent('vision') || !visionEnabled.value || visionProvider.value !== 'official-cloud')
+        return
+      // Accepting the displayed price legitimately changes the vision
+      // revision. Bind this turn to that accepted configuration, then apply
+      // the unchanged session/account/draft checks below before submission.
+      visionConfigurationRevision = visionStore.configurationRevision
     }
     if (!chatSendLifecycle.isCurrent(run) || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope || composerRevision !== submittedComposerRevision
       || (shouldUseVisionAnalysis && visionStore.configurationRevision !== visionConfigurationRevision)) {
@@ -3535,6 +3754,11 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     // submitted turn before analysis so the user sees their text and images
     // immediately; chat.ts reuses this exact source ID after analysis.
     if (attachmentsToSend.length > 0) {
+      // Image analysis precedes ingest, where text turns normally interrupt
+      // the previous reply. End that reply now so its streaming draft cannot
+      // cover the newly accepted image turn's thinking placeholder.
+      if (activeTurnSessionId.value === targetSessionId || streamingSessionId.value === targetSessionId)
+        interruptActiveTurn(targetSessionId, 'user-new-message')
       chatSession.getSessionMessages(targetSessionId).push({
         role: 'user',
         id: sourceUserMessageId,
@@ -3611,6 +3835,7 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     }
     pendingComposedClear = { sessionId: targetSessionId, userScope: targetUserScope, revision: clearedComposerRevision!, messageId: sourceUserMessageId }
     await sendConfiguredChatMessage(textToSend, {
+      abortSignal: run.controller.signal,
       attachments: useNativeChatVision ? attachmentsToSend : undefined,
       displayAttachments: attachmentsToSend,
       modelId: modelId ?? undefined,
@@ -3677,55 +3902,68 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
 }
 
 async function handleFilePaste(files: File[]) {
-  if (detachedComposer.readonly.value)
+  if (isComposerReadonly())
     return
   const sourceSessionId = activeSessionId.value
   const userScope = composerUserScope.value
   const attachmentEpoch = composerAttachmentEpoch
+  const isCurrentAttachment = () => attachmentEpoch === composerAttachmentEpoch
+    && !isComposerReadonly() && visionEnabled.value
+    && activeSessionId.value === sourceSessionId && composerUserScope.value === userScope
   if (!visionEnabled.value) {
     toast.info(t('stage.chat.vision.disabled'))
     return
   }
 
   for (const file of files) {
+    if (!isCurrentAttachment())
+      return
     if (attachments.value.length >= VISION_MAX_IMAGES) {
       toast.warning(t('stage.chat.vision.image-limit', { count: VISION_MAX_IMAGES }))
       break
     }
     if (file.type.startsWith('image/')) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.warning(t('stage.chat.vision.image-too-large'))
+      if (file.size > VISION_MAX_IMAGE_BYTES) {
+        toast.warning(t('stage.chat.vision.image-too-large', VISION_IMAGE_LIMITS_I18N_PARAMS))
         continue
       }
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        if (attachmentEpoch !== composerAttachmentEpoch || detachedComposer.readonly.value || activeSessionId.value !== sourceSessionId || composerUserScope.value !== userScope)
+      try {
+        // Read in selection order so ten images do not start ten simultaneous
+        // base64 allocations or appear in an unpredictable order in the draft.
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image read returned no data.'))
+          reader.onerror = () => reject(reader.error ?? new Error('Image read failed.'))
+          reader.onabort = () => reject(new Error('Image read was cancelled.'))
+          reader.readAsDataURL(file)
+        })
+        if (!isCurrentAttachment())
           return
-        const base64Data = (e.target?.result as string)?.split(',')[1]
+        const base64Data = dataUrl.split(',')[1]
         if (base64Data) {
           const attachment = {
             type: 'image' as const,
             data: base64Data,
             mimeType: file.type,
-            url: URL.createObjectURL(file),
           }
-          try {
-            assertVisionAttachments([...attachments.value, attachment])
-            attachments.value.push(attachment)
-          }
-          catch (error) {
-            URL.revokeObjectURL(attachment.url)
-            toast.warning(error instanceof Error ? error.message : String(error))
-          }
+          assertVisionAttachments([...attachments.value, attachment])
+          attachments.value.push({ ...attachment, url: URL.createObjectURL(file) })
         }
       }
-      reader.readAsDataURL(file)
+      catch (error) {
+        if (!isCurrentAttachment())
+          return
+        const key = getVisionAttachmentErrorKey(error)
+        toast.warning(t(key ? `stage.chat.vision.${key}` : 'stage.chat.composer.image-failed', VISION_IMAGE_LIMITS_I18N_PARAMS))
+        if (key === 'image-limit')
+          break
+      }
     }
   }
 }
 
 function openAttachmentPicker() {
-  if (detachedComposer.readonly.value)
+  if (isComposerReadonly())
     return
   if (!visionEnabled.value) {
     toast.info(t('stage.chat.vision.disabled'))
@@ -3746,7 +3984,7 @@ function activeChatModelSupportsVision(providerId: string | undefined, modelId: 
 }
 
 function removeAttachment(index: number) {
-  if (detachedComposer.readonly.value)
+  if (isComposerReadonly())
     return
   const attachment = attachments.value[index]
   if (attachment) {
@@ -3845,10 +4083,12 @@ function resetVoiceCallSurface() {
 }
 
 async function toggleVoiceCall(allowDetachedComposer = false) {
-  if (detachedComposer.readonly.value && !allowDetachedComposer)
+  if (conversationActionPending.value || (detachedComposer.readonly.value && !allowDetachedComposer))
     return
   if (activeGroupMeta.value)
     return
+  const sourceSessionId = activeSessionId.value
+  const sourceUserScope = composerUserScope.value
 
   if (voiceCallStarting.value) {
     // Allow the user to cancel a slow microphone/ASR startup instead of
@@ -3889,6 +4129,8 @@ async function toggleVoiceCall(allowDetachedComposer = false) {
   if (activeTranscriptionProvider.value === 'official-cloud-transcription' && !await ensureOfficialCapabilityConsent('transcription'))
     return
   if (!await prepareSpeechEnable())
+    return
+  if (conversationActionPending.value || sourceSessionId !== activeSessionId.value || sourceUserScope !== composerUserScope.value)
     return
 
   if (readHearingStreamOwner() === 'voice-call') {
@@ -4018,14 +4260,17 @@ watch(
 )
 
 async function handleManualSpeechInputToggle(allowDetachedComposer = false) {
-  if (detachedComposer.readonly.value && !allowDetachedComposer)
+  if (conversationActionPending.value || (detachedComposer.readonly.value && !allowDetachedComposer))
     return
+  const sourceSessionId = activeSessionId.value
+  const sourceUserScope = composerUserScope.value
   if (!manualSpeechInput.isDictating.value
     && activeTranscriptionProvider.value === 'official-cloud-transcription'
     && !await ensureOfficialCapabilityConsent('transcription')) {
     return
   }
-  await manualSpeechInput.toggleDictation()
+  if (!conversationActionPending.value && sourceSessionId === activeSessionId.value && sourceUserScope === composerUserScope.value)
+    await manualSpeechInput.toggleDictation()
 }
 
 watch([activeProvider, activeModel], () => {
@@ -4111,6 +4356,10 @@ onUnmounted(() => {
   for (const timer of recommendedReplyAttachTimers.values())
     clearTimeout(timer)
   recommendedReplyAttachTimers.clear()
+  recommendedRepliesDisposed = true
+  for (const controller of recommendedReplyControllers.values())
+    controller.abort(new DOMException('Chat surface closed.', 'AbortError'))
+  recommendedReplyControllers.clear()
   resolveIncomingVoiceCall('missed')
   document.removeEventListener('visibilitychange', refreshAuthSessionWhenVisible)
   window.removeEventListener(QUICK_CHAT_PRESENT_LOCAL_EVENT, handleLocalVoiceCallPresentEvent)
@@ -4405,6 +4654,7 @@ function scheduleRecommendedRepliesWhenAvailable(input: {
 }) {
   const key = `${input.sessionId}:${input.sourceUserMessageId ?? input.afterCreatedAt ?? 'latest'}`
   const requestGeneration = recommendedReplyGenerationBySession.value[input.sessionId] ?? 0
+  const requestUserScope = composerUserScope.value
   const existingTimer = recommendedReplyAttachTimers.get(key)
   if (existingTimer)
     clearTimeout(existingTimer)
@@ -4420,7 +4670,11 @@ function scheduleRecommendedRepliesWhenAvailable(input: {
     modelId: input.model,
   })
   const poll = () => {
-    if (requestGeneration !== (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0)) {
+    if (recommendedRepliesDisposed
+      || requestGeneration !== (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0)
+      || activeSessionId.value !== input.sessionId
+      || composerUserScope.value !== requestUserScope
+      || !quickChatSettings.value.recommendedRepliesEnabled) {
       recommendedReplyAttachTimers.delete(key)
       setRecommendedReplyStatus(input.sessionId, 'cancelled', undefined, requestGeneration)
       return
@@ -4563,6 +4817,29 @@ function scheduleRecommendedReplies(input: {
     setRecommendedReplyStatus(input.sessionId, 'failed', messageId, requestGeneration)
     return
   }
+  const requestUserScope = composerUserScope.value
+  const controller = new AbortController()
+  const isCurrentRequest = () => {
+    if (recommendedRepliesDisposed || controller.signal.aborted
+      || activeSessionId.value !== input.sessionId
+      || composerUserScope.value !== requestUserScope
+      || !quickChatSettings.value.recommendedRepliesEnabled
+      || requestGeneration !== (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0))
+      return false
+    const sessionMessages = chatSession.getSessionMessages(input.sessionId)
+    const targetIndex = sessionMessages.findIndex(message => message.id === messageId)
+    return targetIndex >= 0 && !sessionMessages.slice(targetIndex + 1).some(message => message.role === 'user')
+  }
+  if (!isCurrentRequest()) {
+    setRecommendedReplyStatus(input.sessionId, 'cancelled', messageId, requestGeneration)
+    return
+  }
+  recommendedReplyControllers.get(input.sessionId)?.abort(new DOMException('Recommendations superseded.', 'AbortError'))
+  recommendedReplyControllers.set(input.sessionId, controller)
+  const stopWatchingRequest = watch(isCurrentRequest, (current) => {
+    if (!current)
+      controller.abort(new DOMException('Recommendations no longer belong to the active turn.', 'AbortError'))
+  }, { flush: 'sync' })
   setRecommendedReplyStatus(input.sessionId, 'loading', messageId, requestGeneration)
   const speaker = input.message.metadata?.speaker
   logGroupDiagnostic('recommendations-start', {
@@ -4597,6 +4874,10 @@ function scheduleRecommendedReplies(input: {
         })(),
       })
       for (let attempt = 0; attempt <= RECOMMENDED_REPLY_REQUEST_RETRY_DELAYS_MS.length; attempt += 1) {
+        if (!isCurrentRequest()) {
+          setRecommendedReplyStatus(input.sessionId, 'cancelled', messageId, requestGeneration)
+          return
+        }
         try {
           logGroupDiagnostic('recommendations-request-attempt', {
             sessionId: input.sessionId,
@@ -4606,6 +4887,7 @@ function scheduleRecommendedReplies(input: {
             attempt: attempt + 1,
           })
           replies = await withRecommendedReplyTimeout(generateRecommendedReplies({
+            abortSignal: controller.signal,
             assistantText,
             characterName: speaker?.displayName ?? assistantIdentityName.value,
             chatProvider,
@@ -4623,7 +4905,7 @@ function scheduleRecommendedReplies(input: {
                 ? `${speaker.groupTurnId}:${speaker.characterId}`
                 : speaker?.sourceUserMessageId ?? messageId),
             userText: input.userText,
-          }), RECOMMENDED_REPLY_REQUEST_TIMEOUT_MS)
+          }), RECOMMENDED_REPLY_REQUEST_TIMEOUT_MS, controller)
           logGroupDiagnostic('recommendations-response', {
             sessionId: input.sessionId,
             messageId,
@@ -4636,6 +4918,8 @@ function scheduleRecommendedReplies(input: {
           break
         }
         catch (error) {
+          if (!isCurrentRequest())
+            throw error
           const retryable = isRecommendedRepliesRetryableError(error)
           const delay = RECOMMENDED_REPLY_REQUEST_RETRY_DELAYS_MS[attempt]
           logGroupDiagnostic('recommendations-request-error', {
@@ -4653,8 +4937,12 @@ function scheduleRecommendedReplies(input: {
           })
           if (!retryable || delay === undefined)
             throw error
-          await new Promise<void>(resolve => setTimeout(resolve, delay))
+          await waitForChatRetryDelay(delay, controller.signal)
         }
+      }
+      if (!isCurrentRequest()) {
+        setRecommendedReplyStatus(input.sessionId, 'cancelled', messageId, requestGeneration)
+        return
       }
       if (replies.length === 0) {
         logGroupDiagnostic('recommendations-empty-result', {
@@ -4760,6 +5048,8 @@ function scheduleRecommendedReplies(input: {
       })
       if (!attached) {
         setTimeout(() => {
+          if (!isCurrentRequest())
+            return
           if (attachRecommendedReplies(chatSession.getSessionMessages(input.sessionId), messageId, replies)) {
             void chatSession.persistSessionMessages(input.sessionId, { immediate: true }).then(() => {
               if (recommendationRequestId)
@@ -4770,12 +5060,18 @@ function scheduleRecommendedReplies(input: {
       }
       else if (input.message.metadata?.typingCompleted === false) {
         setTimeout(() => {
+          if (!isCurrentRequest())
+            return
           if (attachRecommendedReplies(chatSession.getSessionMessages(input.sessionId), messageId, replies))
             void chatSession.persistSessionMessages(input.sessionId, { immediate: true })
         }, RECOMMENDED_REPLY_ATTACH_RETRY_MS)
       }
     }
     catch (error) {
+      if (!isCurrentRequest()) {
+        setRecommendedReplyStatus(input.sessionId, 'cancelled', messageId, requestGeneration)
+        return
+      }
       logGroupDiagnostic('recommendations-failed', {
         sessionId: input.sessionId,
         messageId,
@@ -4790,6 +5086,11 @@ function scheduleRecommendedReplies(input: {
         console.warn('[Chat] Failed to generate recommended replies:', error)
       setRecommendedReplyStatus(input.sessionId, 'failed', messageId, requestGeneration)
       toast.error(t('stage.chat.recommended-replies.failed'))
+    }
+    finally {
+      stopWatchingRequest()
+      if (recommendedReplyControllers.get(input.sessionId) === controller)
+        recommendedReplyControllers.delete(input.sessionId)
     }
   })()
 }
@@ -4865,7 +5166,7 @@ const chatSurfaceStyle = computed(() => {
             {{ screenCaptureError }}
           </p>
           <p v-if="screenCaptureLoading" :class="['mt-3 text-sm text-[var(--airi-text-muted)]']" role="status">
-            {{ t('stage.chat.vision.screen-loading') }}
+            {{ screenCaptureCountdown > 0 ? t('stage.chat.vision.screen-countdown', { seconds: screenCaptureCountdown }) : t(screenCapturePending ? 'stage.chat.vision.screen-capturing' : 'stage.chat.vision.screen-loading') }}
           </p>
           <p v-else-if="!screenSources.length && !screenCaptureError" :class="['mt-3 text-sm text-[var(--airi-text-muted)]']">
             {{ t('stage.chat.vision.screen-no-sources') }}
@@ -4888,7 +5189,7 @@ const chatSurfaceStyle = computed(() => {
               {{ t('stage.actions.cancel') }}
             </AlertDialogCancel>
             <button type="button" :disabled="!selectedScreenSource || screenCaptureLoading" :class="['h-9 rounded-md px-3 text-sm airi-overlay-control-primary disabled:opacity-50']" @click="attachSelectedScreen">
-              {{ t('stage.chat.vision.screen-attach') }}
+              {{ screenCaptureCountdown > 0 ? t('stage.chat.vision.screen-attach-countdown', { seconds: screenCaptureCountdown }) : t(screenCapturePending ? 'stage.chat.vision.screen-capturing' : 'stage.chat.vision.screen-attach') }}
             </button>
           </div>
         </AlertDialogContent>
@@ -5141,20 +5442,22 @@ const chatSurfaceStyle = computed(() => {
       </section>
     </Transition>
     <aside
-      v-if="!isWidgetSurface || (personaContactsDrawerOpen && !isCollapsed)"
+      v-if="!isWidgetSurface || personaContactsDrawerOpen"
+      :aria-label="t('stage.chat.conversations.browse')"
       :class="[
-        'absolute inset-y-0 left-0 flex w-64 max-w-[calc(100%-0.5rem)] flex-col gap-2 rounded-lg border border-solid border-[var(--airi-border-subtle)] p-2 shadow-xl backdrop-blur-xl transition-transform duration-200',
+        'absolute inset-y-0 left-0 flex w-64 max-w-[calc(100%-0.5rem)] flex-col gap-2 rounded-lg border border-solid border-[var(--airi-border-subtle)] p-2 shadow-xl backdrop-blur-xl transition-transform duration-200 motion-reduce:transition-none',
         isWidgetSurface ? 'bg-[var(--airi-surface-glass)]' : 'main-chat-panel-surface',
         isWidgetSurface
           ? 'z-50 translate-x-0'
-          : 'z-30 md:relative md:z-auto md:w-56 md:translate-x-0 md:shadow-none',
+          : 'z-30 md:relative md:z-auto md:w-56 md:shrink-0 md:translate-x-0 md:shadow-none',
         !isWidgetSurface && (personaContactsDrawerOpen ? 'translate-x-0 md:translate-x-0' : '-translate-x-[calc(100%+1rem)] md:translate-x-0'),
         !isWidgetSurface && (personaContactsDesktopCollapsed ? 'md:hidden' : 'md:flex'),
       ]"
+      @keydown.esc="closePersonaContactsDrawer"
     >
       <div class="flex items-center justify-between gap-2 px-1">
         <span class="truncate text-xs text-[var(--airi-text-muted)] font-semibold uppercase">
-          {{ groupAddMode ? '添加群聊成员' : t('stage.chat.group.personas') }}
+          {{ groupAddMode ? '添加群聊成员' : t('stage.chat.conversations.browse') }}
         </span>
         <div class="flex items-center gap-1">
           <button
@@ -5168,7 +5471,7 @@ const chatSurfaceStyle = computed(() => {
             <span class="i-lucide:arrow-left size-4" />
           </button>
           <button
-            v-if="!groupAddMode"
+            v-if="!groupAddMode && personaSidebarView === 'roles'"
             type="button"
             :title="t('stage.chat.group.new-room')"
             :aria-label="t('stage.chat.group.new-room')"
@@ -5223,10 +5526,19 @@ const chatSurfaceStyle = computed(() => {
         </div>
       </div>
 
+      <div v-if="!groupAddMode" :class="['grid grid-cols-2 gap-1 rounded-lg bg-[var(--airi-surface-control-muted)] p-1']">
+        <button type="button" :aria-pressed="personaSidebarView === 'roles' || Boolean(activeGroupMeta)" :class="['rounded-md px-2 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]', personaSidebarView === 'roles' || activeGroupMeta ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']" @click="personaSidebarView = 'roles'">
+          {{ t('stage.chat.group.personas') }}
+        </button>
+        <button type="button" :disabled="Boolean(activeGroupMeta)" :aria-pressed="personaSidebarView === 'conversations' && !activeGroupMeta" :class="['rounded-md px-2 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)] disabled:opacity-40', personaSidebarView === 'conversations' && !activeGroupMeta ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']" @click="personaSidebarView = 'conversations'">
+          {{ t('stage.chat.conversations.title') }}
+        </button>
+      </div>
+      <p v-if="conversationActionError" role="alert" :class="['airi-status-danger rounded-md p-2 text-xs']">{{ conversationActionError }}</p>
       <div class="min-h-0 flex-1 overflow-y-auto pr-0.5">
         <section
           v-if="groupCreateOpen"
-          v-show="!groupAddMode"
+          v-show="!groupAddMode && (personaSidebarView === 'roles' || activeGroupMeta)"
           :class="[
             'mb-2 border-y border-[var(--airi-border-subtle)] px-1 py-2',
             'flex flex-col gap-2',
@@ -5294,7 +5606,7 @@ const chatSurfaceStyle = computed(() => {
           </div>
         </section>
 
-        <template v-if="groupSessions.length > 0 && !groupAddMode">
+        <template v-if="groupSessions.length > 0 && !groupAddMode && (personaSidebarView === 'roles' || activeGroupMeta)">
           <div class="px-2 pb-1 pt-1 text-[10px] text-[var(--airi-text-soft)] font-semibold uppercase">
             {{ t('stage.chat.group.rooms') }}
           </div>
@@ -5360,6 +5672,7 @@ const chatSurfaceStyle = computed(() => {
 
         <div
           v-for="contact in personaContacts"
+          v-show="personaSidebarView === 'roles' || activeGroupMeta || groupAddMode"
           :key="contact.characterId"
           :class="[
             'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center rounded-md transition-colors',
@@ -5431,6 +5744,20 @@ const chatSurfaceStyle = computed(() => {
         >
           所有联系人都已加入当前群聊
         </div>
+        <template v-if="personaSidebarView === 'conversations' && !activeGroupMeta && !groupAddMode">
+          <div :class="['mb-3 flex items-center gap-2 px-1 pt-1']">
+            <CharacterAvatarImage :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <span :class="['min-w-0 truncate text-sm font-semibold']">{{ assistantIdentityName }}</span>
+          </div>
+          <DirectConversationList
+            :character-id="assistantIdentityCharacterId"
+            :character-name="assistantIdentityName"
+            :busy="conversationActionPending"
+            @create="createDirectConversation"
+            @select="selectDirectConversation"
+            @delete="deleteDirectConversation"
+          />
+        </template>
       </div>
     </aside>
 
@@ -5458,20 +5785,12 @@ const chatSurfaceStyle = computed(() => {
           :class="['flex', 'shrink-0', 'items-center', 'justify-between', 'gap-2', 'px-2', 'pt-2']"
         >
           <div :class="['flex min-w-0 flex-1 items-center gap-1']">
-            <button
-              type="button"
-              :title="t('stage.chat.actions.open-personas')"
-              :aria-label="t('stage.chat.actions.open-personas')"
-              :class="[
-                '[-webkit-app-region:no-drag] grid size-7 shrink-0 place-items-center rounded-full text-sm outline-none transition-all duration-200 active:scale-95',
-                'airi-overlay-glass shadow-sm shadow-black/5 hover:bg-[var(--airi-accent-surface)]',
-              ]"
-              @click="personaContactsDrawerOpen = true"
-            >
-              <div class="i-lucide:users size-4" />
+            <button type="button" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['[-webkit-app-region:no-drag] min-w-0 flex flex-1 items-center gap-2 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click="openConversations">
+              <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-7 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-7']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+              <span :class="['min-w-0']"><span :class="['block truncate text-xs font-semibold']">{{ activeGroupMeta?.title || assistantIdentityName }}</span><span v-if="!activeGroupMeta" :class="['block truncate text-[10px] text-[var(--airi-text-muted)]']">{{ activeSessionMeta?.title || t('stage.chat.conversations.untitled') }}</span></span>
+              <span class="i-lucide:chevron-down size-3 shrink-0" aria-hidden="true" />
             </button>
             <ChatModelSwitcher side="bottom" />
-            <div class="min-w-0 flex-1" />
             <button
               v-if="requiresOfficialCloudLogin"
               type="button"
@@ -5525,6 +5844,11 @@ const chatSurfaceStyle = computed(() => {
             @click="personaContactsDrawerOpen = true"
           >
             <div class="i-lucide:users size-4" />
+          </button>
+          <button type="button" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['min-w-0 flex flex-1 items-center gap-2 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click="openConversations">
+            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <span :class="['min-w-0']"><span :class="['block truncate text-sm font-semibold']">{{ activeGroupMeta?.title || assistantIdentityName }}</span><span v-if="!activeGroupMeta" :class="['block truncate text-xs text-[var(--airi-text-muted)]']">{{ activeSessionMeta?.title || t('stage.chat.conversations.untitled') }}</span></span>
+            <span class="i-lucide:chevron-down size-3 shrink-0" aria-hidden="true" />
           </button>
           <ChatModelSwitcher side="bottom" />
           <button
@@ -5729,11 +6053,12 @@ const chatSurfaceStyle = computed(() => {
         <div
           v-if="attachments.length > 0 && !isCollapsed && !composerDetached"
           :class="[
-            'max-h-16 flex shrink-0 flex-nowrap gap-2 overflow-x-auto overflow-y-hidden border-t p-2',
+            'h-16 min-h-0 min-w-0 flex flex-nowrap gap-2 overflow-x-auto overflow-y-hidden border-t px-2 py-1 [scrollbar-width:thin]',
+            isChatLayoutTooShort ? 'shrink' : 'shrink-0',
             isWidgetSurface ? 'airi-overlay-glass rounded-[18px]' : 'border-[var(--airi-border-accent)]',
           ]"
         >
-          <div v-for="(attachment, index) in attachments" :key="index" class="relative">
+          <div v-for="(attachment, index) in attachments" :key="index" :class="['relative shrink-0']">
             <img :src="attachment.url" class="h-12 w-12 rounded-md object-cover">
             <button class="absolute right-1 top-1 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-xs text-white" @click="removeAttachment(index)">
               &times;
@@ -5748,7 +6073,7 @@ const chatSurfaceStyle = computed(() => {
             isCollapsed ? 'quick-chat-collapsed-surface' : 'quick-chat-expanded-surface',
             isCollapsed
               ? 'h-12 items-center gap-1 rounded-full border border-solid border-[var(--airi-border-subtle)] px-1 py-1 shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.2)]'
-              : 'min-h-[6.5rem] flex-1 flex-col gap-1.5 rounded-[20px] border border-solid border-[var(--airi-border-subtle)] p-2 shadow-[0_10px_24px_rgba(15,23,42,0.09)] dark:shadow-none',
+              : 'min-h-16 flex-1 flex-col gap-1.5 rounded-[20px] border border-solid border-[var(--airi-border-subtle)] p-2 shadow-[0_10px_24px_rgba(15,23,42,0.09)] dark:shadow-none',
           ]"
           :title="isCollapsed ? t('tamagotchi.settings.pages.system.quick-chat.window-controls.resize') : undefined"
         >
@@ -5786,31 +6111,35 @@ const chatSurfaceStyle = computed(() => {
             <div class="i-ph:plus-bold size-4" />
           </button>
           <button
-            v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"
+            v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.anotherDetached.value || detachedComposer.sourceUnavailable.value || detachedComposer.deliveryFailed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"
             type="button"
-            :title="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : t('stage.chat.composer.source-failed')"
-            :aria-label="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : t('stage.chat.composer.source-failed')"
+            :title="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : detachedComposer.sourceUnavailable.value ? t('stage.chat.composer.source-retrying') : detachedComposer.deliveryFailed.value ? t('stage.chat.composer.send-failed') : detachedComposer.anotherDetached.value ? t('stage.chat.composer.another-detached') : t('stage.chat.composer.source-failed')"
+            :aria-label="detachedComposer.recoveryUncertain.value ? t('stage.chat.composer.view-recovery') : detachedComposer.checkpointFailed.value ? t('stage.chat.composer.checkpoint-failed') : detachedComposer.sourceUnavailable.value ? t('stage.chat.composer.source-retrying') : detachedComposer.deliveryFailed.value ? t('stage.chat.composer.send-failed') : detachedComposer.anotherDetached.value ? t('stage.chat.composer.another-detached') : t('stage.chat.composer.source-failed')"
             :class="['quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid size-9 shrink-0 place-items-center rounded-full text-base outline-none transition-all duration-250 ease-out active:scale-95', 'bg-amber-400/16 text-amber-700 hover:bg-amber-400/24 dark:text-amber-300']"
             data-chat-composer-recovery
             @click.stop="requestWidgetExpand()"
           >
             <div class="i-lucide:triangle-alert size-4" />
           </button>
-          <div :class="isCollapsed ? 'contents' : 'relative order-1 min-h-[3rem] w-full flex-1 self-stretch'">
+          <button v-if="isCollapsed" type="button" :title="`${activeGroupMeta?.title || assistantIdentityName} · ${activeSessionMeta?.title || t('stage.chat.conversations.untitled')}`" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['[-webkit-app-region:no-drag] relative z-20 grid size-8 shrink-0 place-items-center overflow-hidden rounded-full airi-overlay-control-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click.stop="openConversations">
+            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-full text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <span v-else class="i-lucide:users size-4" aria-hidden="true" />
+          </button>
+          <div :class="isCollapsed ? 'contents' : 'relative order-1 min-h-0 w-full flex-1 self-stretch overflow-hidden'">
             <BasicTextarea
               ref="quickChatTextareaRef"
               v-model="messageInput"
               :auto-resize="isCollapsed"
               :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
               :disabled="!isInitialized"
-              :readonly="detachedComposer.readonly.value"
+              :readonly="isComposerReadonly()"
               :autofocus="isWidgetSurface && !isCollapsed"
               :default-height="isCollapsed ? '2.5rem' : undefined"
               :class="[
                 'quick-chat-textarea [-webkit-app-region:no-drag] relative z-20 ph-no-capture min-w-0 flex-1 resize-none font-medium outline-none transition-all duration-250 ease-out',
                 isCollapsed
                   ? '!h-10 !min-h-10 !max-h-10 overflow-hidden border-none bg-transparent px-1.5 !py-0 text-sm !leading-10 text-[var(--airi-text)] shadow-none placeholder:text-[var(--airi-text-soft)]'
-                  : 'h-full min-h-[3rem] max-h-none w-full overflow-y-auto airi-overlay-input rounded-[17px] px-4 py-2.5 pr-12',
+                  : 'h-full min-h-0 max-h-none w-full overflow-y-auto airi-overlay-input rounded-[17px] px-4 py-2.5 pr-12',
               ]"
               @compositionstart="isComposing = true"
               @compositionend="isComposing = false"
@@ -5836,160 +6165,210 @@ const chatSurfaceStyle = computed(() => {
               <div class="i-ph:plus-bold size-4" />
             </button>
           </div>
-          <div v-if="!isCollapsed" class="order-2 w-full flex shrink-0 items-center gap-1 overflow-x-auto">
-            <div v-if="detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.checkpointFailed.value" data-chat-composer-recovery-controls :class="['flex shrink-0 items-center gap-1 text-xs']">
-              <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
-                {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
-              </button>
-              <span v-if="detachedComposer.failed.value" role="alert" :class="['max-w-36 text-amber-600']">{{ t('stage.chat.composer.source-failed') }}</span>
-              <button v-if="detachedComposer.checkpointFailed.value" type="button" :class="['max-w-36 text-amber-600 underline']" @click="detachedComposer.checkpoint().catch(() => undefined)">
-                {{ t('stage.chat.composer.checkpoint-failed') }}
-              </button>
-            </div>
-            <div :class="['mr-auto flex min-w-0 items-center gap-1']">
-              <GroupMentionPicker
-                v-if="activeGroupMeta"
-                v-model:open="groupMentionOpen"
-                v-model:selected-ids="groupMentionedIds"
-                :participants="activeGroupMentionParticipants"
-                :disabled="groupSendBlockedForActiveSession"
-                placement="top-start"
-                @confirm="handleGroupMentionConfirm"
-              />
-              <ChatSpeechSwitcher compact side="top" :before-enable="prepareSpeechEnable" />
-              <button
-                type="button"
-                :title="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
-                :aria-label="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
-                :aria-expanded="additionalCapabilitiesOpen"
-                :class="[
-                  '[-webkit-app-region:no-drag] grid size-8 shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95',
-                  'airi-overlay-control-muted',
-                ]"
-                @click="additionalCapabilitiesOpen = !additionalCapabilitiesOpen"
-              >
-                <span :class="[additionalCapabilitiesOpen ? 'i-lucide:chevron-left' : 'i-lucide:chevron-right', 'size-4']" />
-              </button>
-              <div v-if="additionalCapabilitiesOpen" :class="['flex min-w-0 items-center gap-1']">
+          <div
+            v-if="!isCollapsed && (detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.anotherDetached.value || detachedComposer.sourceUnavailable.value || detachedComposer.deliveryFailed.value || detachedComposer.checkpointFailed.value)"
+            data-chat-composer-recovery-controls
+            :class="['order-2 flex w-full shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-xs']"
+          >
+            <button
+              v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value"
+              type="button"
+              :disabled="composerDetachUnavailable"
+              :title="t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover')"
+              :class="['airi-text-muted max-w-full shrink-0 truncate underline']"
+              @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)"
+            >
+              {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
+            </button>
+            <span
+              v-if="detachedComposer.failed.value"
+              role="alert"
+              :title="t('stage.chat.composer.source-failed')"
+              :class="['max-w-full shrink-0 truncate text-amber-600']"
+            >
+              {{ t('stage.chat.composer.source-failed') }}
+            </span>
+            <span
+              v-if="detachedComposer.anotherDetached.value"
+              role="alert"
+              :title="t('stage.chat.composer.another-detached')"
+              :class="['max-w-full shrink-0 truncate text-amber-600']"
+            >
+              {{ t('stage.chat.composer.another-detached') }}
+            </span>
+            <span
+              v-if="detachedComposer.sourceUnavailable.value"
+              role="status"
+              :title="t('stage.chat.composer.source-retrying')"
+              :class="['max-w-full shrink-0 truncate text-amber-600']"
+            >
+              {{ t('stage.chat.composer.source-retrying') }}
+            </span>
+            <span
+              v-if="detachedComposer.deliveryFailed.value"
+              role="alert"
+              :title="t('stage.chat.composer.send-failed')"
+              :class="['max-w-full shrink-0 truncate text-amber-600']"
+            >
+              {{ t('stage.chat.composer.send-failed') }}
+            </span>
+            <button
+              v-if="detachedComposer.checkpointFailed.value"
+              type="button"
+              :title="t('stage.chat.composer.checkpoint-failed')"
+              :class="['max-w-full shrink-0 truncate text-amber-600 underline']"
+              @click="detachedComposer.checkpoint().catch(() => undefined)"
+            >
+              {{ t('stage.chat.composer.checkpoint-failed') }}
+            </button>
+          </div>
+          <div v-if="!isCollapsed" :class="['order-3 w-full flex shrink-0 items-center gap-1']">
+            <div :class="['min-w-0 flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]']">
+              <div :class="['mr-auto flex shrink-0 items-center gap-1']">
+                <GroupMentionPicker
+                  v-if="activeGroupMeta"
+                  v-model:open="groupMentionOpen"
+                  v-model:selected-ids="groupMentionedIds"
+                  :participants="activeGroupMentionParticipants"
+                  :disabled="groupSendBlockedForActiveSession"
+                  placement="top-start"
+                  @confirm="handleGroupMentionConfirm"
+                />
+                <ChatSpeechSwitcher compact side="top" :before-enable="prepareSpeechEnable" />
                 <button
                   type="button"
-                  :title="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
-                  :aria-label="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
-                  :aria-pressed="webSearchEnabled"
+                  :title="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
+                  :aria-label="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
+                  :aria-expanded="additionalCapabilitiesOpen"
                   :class="[
                     '[-webkit-app-region:no-drag] grid size-8 shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95',
-                    webSearchEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
+                    'airi-overlay-control-muted',
                   ]"
-                  @click="toggleWebSearch"
+                  @click="additionalCapabilitiesOpen = !additionalCapabilitiesOpen"
                 >
-                  <span class="i-lucide:globe-2 size-4" />
+                  <span :class="[additionalCapabilitiesOpen ? 'i-lucide:chevron-left' : 'i-lucide:chevron-right', 'size-4']" />
                 </button>
-                <button
-                  type="button"
-                  :title="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
-                  :aria-label="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
-                  :aria-pressed="innerVoiceEnabled"
-                  :class="[
-                    '[-webkit-app-region:no-drag] grid size-8 shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95',
-                    innerVoiceEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
-                  ]"
-                  @click="toggleInnerVoice"
-                >
-                  <span class="i-lucide:notebook-pen size-4" />
-                </button>
+                <div v-if="additionalCapabilitiesOpen" :class="['flex shrink-0 items-center gap-1']">
+                  <button
+                    type="button"
+                    :title="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
+                    :aria-label="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
+                    :aria-pressed="webSearchEnabled"
+                    :class="[
+                      '[-webkit-app-region:no-drag] grid size-8 shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95',
+                      webSearchEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
+                    ]"
+                    @click="toggleWebSearch"
+                  >
+                    <span class="i-lucide:globe-2 size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    :title="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
+                    :aria-label="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
+                    :aria-pressed="innerVoiceEnabled"
+                    :class="[
+                      '[-webkit-app-region:no-drag] grid size-8 shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95',
+                      innerVoiceEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
+                    ]"
+                    @click="toggleInnerVoice"
+                  >
+                    <span class="i-lucide:notebook-pen size-4" />
+                  </button>
+                </div>
               </div>
+              <button
+                v-if="canInterrupt && !isCollapsed"
+                type="button"
+                :title="t('stage.actions.interrupt')"
+                :aria-label="t('stage.actions.interrupt')"
+                :class="[
+                  'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid shrink-0 place-items-center font-medium leading-none outline-none transition-all duration-250 ease-out active:scale-95',
+                  'airi-overlay-control-danger',
+                  'size-8 rounded-xl text-base',
+                ]"
+                @pointerdown.stop
+                @mousedown.stop.prevent
+                @click.stop="handleInterrupt"
+              >
+                <div class="i-solar:stop-circle-line-duotone size-4" />
+              </button>
+              <button
+                v-if="!isCollapsed && !activeGroupMeta"
+                type="button"
+                :title="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
+                :aria-label="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
+                :aria-pressed="voiceCallActive"
+                :disabled="voiceCallPreparing"
+                :class="[
+                  'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid order-3 size-8 shrink-0 place-items-center rounded-xl text-base outline-none transition-all active:scale-95 disabled:cursor-wait disabled:opacity-70',
+                  voiceCallActive ? 'airi-overlay-control-danger' : 'airi-overlay-control-primary',
+                ]"
+                @pointerdown.stop
+                @mousedown.stop.prevent
+                @click.stop="() => toggleVoiceCall()"
+              >
+                <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
+              </button>
+              <button
+                v-if="!isCollapsed"
+                type="button"
+                data-floating-replies-toggle="quick-chat"
+                :title="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
+                :aria-label="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
+                :aria-pressed="quickChatSettings.floatingRepliesEnabled"
+                :class="[
+                  'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid order-3 size-8 shrink-0 place-items-center rounded-xl text-base outline-none transition-all active:scale-95',
+                  quickChatSettings.floatingRepliesEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
+                ]"
+                @pointerdown.stop
+                @mousedown.stop.prevent
+                @click.stop="quickChatSettingsStore.setFloatingRepliesEnabled(!quickChatSettings.floatingRepliesEnabled)"
+              >
+                <div class="i-lucide:message-circle-more size-4" />
+              </button>
+              <button
+                v-if="isCollapsed && requiresOfficialCloudLogin"
+                type="button"
+                :title="t('stage.chat.official-cloud-send-disabled')"
+                :aria-label="t('stage.chat.official-cloud-send-disabled')"
+                :class="[
+                  'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid size-9 shrink-0 place-items-center rounded-full text-base outline-none transition-all duration-250 ease-out active:scale-95',
+                  'bg-amber-400/16 text-amber-700 hover:bg-amber-400/24 dark:text-amber-300',
+                ]"
+                @pointerdown.stop
+                @mousedown.stop.prevent
+                @click.stop="openAccountSettings"
+              >
+                <div class="i-solar:login-3-bold-duotone size-4" />
+              </button>
+              <button
+                v-if="visionEnabled && !activeGroupMeta && screenCapture" type="button"
+                :title="t('stage.chat.vision.screen-capture')" :aria-label="t('stage.chat.vision.screen-capture')"
+                :class="['[-webkit-app-region:no-drag] size-8 grid shrink-0 place-items-center rounded-xl airi-overlay-control-muted']"
+                @pointerdown.stop @mousedown.stop.prevent @click.stop="openScreenPicker"
+              >
+                <span :class="['i-lucide:scan-line size-4']" />
+              </button>
+              <button
+                v-if="!isCollapsed"
+                type="button"
+                :title="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
+                :aria-label="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
+                :class="[
+                  'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid shrink-0 place-items-center font-medium leading-none outline-none transition-all duration-250 ease-out active:scale-95',
+                  isManualSpeechInputDictating
+                    ? 'airi-overlay-control-primary'
+                    : 'airi-overlay-control-muted',
+                  'size-8 rounded-xl text-base',
+                ]"
+                @pointerdown.stop
+                @mousedown.stop.prevent
+                @click.stop="() => handleManualSpeechInputToggle()"
+              >
+                <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" class="size-4" />
+              </button>
             </div>
-            <button
-              v-if="canInterrupt && !isCollapsed"
-              type="button"
-              :title="t('stage.actions.interrupt')"
-              :aria-label="t('stage.actions.interrupt')"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid shrink-0 place-items-center font-medium leading-none outline-none transition-all duration-250 ease-out active:scale-95',
-                'airi-overlay-control-danger',
-                'size-8 rounded-xl text-base',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="handleInterrupt"
-            >
-              <div class="i-solar:stop-circle-line-duotone size-4" />
-            </button>
-            <button
-              v-if="!isCollapsed && !activeGroupMeta"
-              type="button"
-              :title="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
-              :aria-label="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
-              :aria-pressed="voiceCallActive"
-              :disabled="voiceCallPreparing"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid order-3 size-8 shrink-0 place-items-center rounded-xl text-base outline-none transition-all active:scale-95 disabled:cursor-wait disabled:opacity-70',
-                voiceCallActive ? 'airi-overlay-control-danger' : 'airi-overlay-control-primary',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="() => toggleVoiceCall()"
-            >
-              <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
-            </button>
-            <button
-              v-if="!isCollapsed"
-              type="button"
-              data-floating-replies-toggle="quick-chat"
-              :title="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
-              :aria-label="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
-              :aria-pressed="quickChatSettings.floatingRepliesEnabled"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid order-3 size-8 shrink-0 place-items-center rounded-xl text-base outline-none transition-all active:scale-95',
-                quickChatSettings.floatingRepliesEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="quickChatSettingsStore.setFloatingRepliesEnabled(!quickChatSettings.floatingRepliesEnabled)"
-            >
-              <div class="i-lucide:message-circle-more size-4" />
-            </button>
-            <button
-              v-if="isCollapsed && requiresOfficialCloudLogin"
-              type="button"
-              :title="t('stage.chat.official-cloud-send-disabled')"
-              :aria-label="t('stage.chat.official-cloud-send-disabled')"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid size-9 shrink-0 place-items-center rounded-full text-base outline-none transition-all duration-250 ease-out active:scale-95',
-                'bg-amber-400/16 text-amber-700 hover:bg-amber-400/24 dark:text-amber-300',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="openAccountSettings"
-            >
-              <div class="i-solar:login-3-bold-duotone size-4" />
-            </button>
-            <button
-              v-if="visionEnabled && !activeGroupMeta && screenCapture" type="button"
-              :title="t('stage.chat.vision.screen-capture')" :aria-label="t('stage.chat.vision.screen-capture')"
-              :class="['[-webkit-app-region:no-drag] size-8 grid shrink-0 place-items-center rounded-xl airi-overlay-control-muted']"
-              @pointerdown.stop @mousedown.stop.prevent @click.stop="openScreenPicker"
-            >
-              <span :class="['i-lucide:scan-line size-4']" />
-            </button>
-            <button
-              v-if="!isCollapsed"
-              type="button"
-              :title="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
-              :aria-label="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
-              :class="[
-                'quick-chat-send-button [-webkit-app-region:no-drag] relative z-20 grid shrink-0 place-items-center font-medium leading-none outline-none transition-all duration-250 ease-out active:scale-95',
-                isManualSpeechInputDictating
-                  ? 'airi-overlay-control-primary'
-                  : 'airi-overlay-control-muted',
-                'size-8 rounded-xl text-base',
-              ]"
-              @pointerdown.stop
-              @mousedown.stop.prevent
-              @click.stop="() => handleManualSpeechInputToggle()"
-            >
-              <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" class="size-4" />
-            </button>
             <button
               v-if="!isCollapsed"
               type="button"
@@ -6064,116 +6443,134 @@ const chatSurfaceStyle = computed(() => {
         </div>
 
         <template v-else-if="!composerDetached">
-          <div class="order-2 min-w-0 flex shrink-0 items-center gap-1.5 overflow-x-auto px-0.5 py-1.5">
-            <GroupMentionPicker
-              v-if="activeGroupMeta"
-              v-model:open="groupMentionOpen"
-              v-model:selected-ids="groupMentionedIds"
-              :participants="activeGroupMentionParticipants"
-              :disabled="groupSendBlockedForActiveSession"
-              placement="top-start"
-              @confirm="handleGroupMentionConfirm"
-            />
-            <ChatSpeechSwitcher :before-enable="prepareSpeechEnable" />
-            <button
-              type="button"
-              :title="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
-              :aria-label="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
-              :aria-expanded="additionalCapabilitiesOpen"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', 'airi-overlay-control-muted']"
-              @click="additionalCapabilitiesOpen = !additionalCapabilitiesOpen"
-            >
-              <span :class="[additionalCapabilitiesOpen ? 'i-lucide:chevron-left' : 'i-lucide:chevron-right', 'size-4']" />
-            </button>
-            <div v-if="additionalCapabilitiesOpen" class="flex shrink-0 items-center gap-1">
+          <div :class="['order-2 min-w-0 flex shrink-0 items-center gap-1.5 px-0.5 py-1.5']">
+            <div :class="['min-w-0 flex flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]']">
+              <GroupMentionPicker
+                v-if="activeGroupMeta"
+                v-model:open="groupMentionOpen"
+                v-model:selected-ids="groupMentionedIds"
+                :participants="activeGroupMentionParticipants"
+                :disabled="groupSendBlockedForActiveSession"
+                placement="top-start"
+                @confirm="handleGroupMentionConfirm"
+              />
+              <ChatSpeechSwitcher :before-enable="prepareSpeechEnable" />
               <button
                 type="button"
-                :title="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
-                :aria-label="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
-                :aria-pressed="webSearchEnabled"
-                :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', webSearchEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
-                @click="toggleWebSearch"
+                :title="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
+                :aria-label="additionalCapabilitiesOpen ? t('stage.chat.actions.hide-additional-capabilities') : t('stage.chat.actions.show-additional-capabilities')"
+                :aria-expanded="additionalCapabilitiesOpen"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', 'airi-overlay-control-muted']"
+                @click="additionalCapabilitiesOpen = !additionalCapabilitiesOpen"
               >
-                <span class="i-lucide:globe-2 size-4" />
+                <span :class="[additionalCapabilitiesOpen ? 'i-lucide:chevron-left' : 'i-lucide:chevron-right', 'size-4']" />
+              </button>
+              <div v-if="additionalCapabilitiesOpen" class="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  :title="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
+                  :aria-label="webSearchEnabled ? t('stage.chat.actions.disable-web-search') : t('stage.chat.actions.enable-web-search')"
+                  :aria-pressed="webSearchEnabled"
+                  :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', webSearchEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
+                  @click="toggleWebSearch"
+                >
+                  <span class="i-lucide:globe-2 size-4" />
+                </button>
+                <button
+                  type="button"
+                  :title="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
+                  :aria-label="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
+                  :aria-pressed="innerVoiceEnabled"
+                  :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', innerVoiceEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
+                  @click="toggleInnerVoice"
+                >
+                  <span class="i-lucide:notebook-pen size-4" />
+                </button>
+              </div>
+              <div class="min-w-2 flex-1" />
+              <button
+                v-if="!activeGroupMeta"
+                type="button"
+                :title="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
+                :aria-label="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
+                :aria-pressed="voiceCallActive"
+                :disabled="voiceCallPreparing"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-wait disabled:opacity-70', voiceCallActive ? 'airi-overlay-control-danger' : 'airi-overlay-control-primary']"
+                @click="() => toggleVoiceCall()"
+              >
+                <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
               </button>
               <button
                 type="button"
-                :title="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
-                :aria-label="innerVoiceEnabled ? t('stage.chat.actions.disable-inner-voice') : t('stage.chat.actions.enable-inner-voice')"
-                :aria-pressed="innerVoiceEnabled"
-                :class="['size-8 grid shrink-0 place-items-center rounded-md outline-none transition-colors active:scale-95', innerVoiceEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
-                @click="toggleInnerVoice"
+                data-floating-replies-toggle="chat"
+                :title="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
+                :aria-label="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
+                :aria-pressed="quickChatSettings.floatingRepliesEnabled"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95', quickChatSettings.floatingRepliesEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
+                @click="quickChatSettingsStore.setFloatingRepliesEnabled(!quickChatSettings.floatingRepliesEnabled)"
               >
-                <span class="i-lucide:notebook-pen size-4" />
+                <div class="i-lucide:message-circle-more size-4" />
+              </button>
+              <button
+                v-if="canInterrupt"
+                type="button"
+                :title="t('stage.actions.interrupt')"
+                :aria-label="t('stage.actions.interrupt')"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', 'airi-overlay-control-danger']"
+                @click="handleInterrupt"
+              >
+                <div class="i-solar:stop-circle-line-duotone" />
+              </button>
+              <button
+                v-if="isWidgetSurface && visionEnabled && !activeGroupMeta"
+                type="button"
+                :title="t('stage.chat.vision.upload')"
+                :aria-label="t('stage.chat.vision.upload')"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', 'airi-overlay-control-muted']"
+                @click="openAttachmentPicker"
+              >
+                <div class="i-lucide:image-plus" />
+              </button>
+              <button
+                v-if="visionEnabled && !activeGroupMeta && screenCapture" type="button"
+                :title="t('stage.chat.vision.screen-capture')" :aria-label="t('stage.chat.vision.screen-capture')"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md airi-overlay-control-muted']"
+                @click="openScreenPicker"
+              >
+                <span :class="['i-lucide:scan-line size-4']" />
+              </button>
+              <button
+                type="button"
+                :title="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
+                :aria-label="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
+                :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', isManualSpeechInputDictating ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
+                @click="() => handleManualSpeechInputToggle()"
+              >
+                <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" />
               </button>
             </div>
-            <div class="min-w-2 flex-1" />
-            <button
-              v-if="!activeGroupMeta"
-              type="button"
-              :title="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
-              :aria-label="voiceCallPreparing ? t('stage.voice-call.starting') : voiceCallActive ? t('stage.voice-call.end') : t('stage.voice-call.start')"
-              :aria-pressed="voiceCallActive"
-              :disabled="voiceCallPreparing"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-wait disabled:opacity-70', voiceCallActive ? 'airi-overlay-control-danger' : 'airi-overlay-control-primary']"
-              @click="() => toggleVoiceCall()"
-            >
-              <div :class="[voiceCallPreparing ? 'i-svg-spinners:90-ring-with-bg' : voiceCallActive ? 'i-lucide:phone-off' : 'i-lucide:phone', 'size-4']" />
-            </button>
             <button
               type="button"
-              data-floating-replies-toggle="chat"
-              :title="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
-              :aria-label="t('tamagotchi.settings.pages.system.quick-chat.fields.floating-replies-enabled.label')"
-              :aria-pressed="quickChatSettings.floatingRepliesEnabled"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95', quickChatSettings.floatingRepliesEnabled ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
-              @click="quickChatSettingsStore.setFloatingRepliesEnabled(!quickChatSettings.floatingRepliesEnabled)"
+              :title="requiresOfficialCloudLogin ? t('stage.chat.official-cloud-send-disabled') : t('stage.actions.send')"
+              :aria-label="requiresOfficialCloudLogin ? t('stage.chat.official-cloud-send-disabled') : t('stage.actions.send')"
+              :disabled="!canSend"
+              :class="[
+                'size-8 grid shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95',
+                canSend ? 'airi-overlay-control-primary' : 'cursor-not-allowed bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55',
+              ]"
+              @click="handleSend"
             >
-              <div class="i-lucide:message-circle-more size-4" />
-            </button>
-            <button
-              v-if="canInterrupt"
-              type="button"
-              :title="t('stage.actions.interrupt')"
-              :aria-label="t('stage.actions.interrupt')"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', 'airi-overlay-control-danger']"
-              @click="handleInterrupt"
-            >
-              <div class="i-solar:stop-circle-line-duotone" />
-            </button>
-            <button
-              v-if="isWidgetSurface && visionEnabled && !activeGroupMeta"
-              type="button"
-              :title="t('stage.chat.vision.upload')"
-              :aria-label="t('stage.chat.vision.upload')"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', 'airi-overlay-control-muted']"
-              @click="openAttachmentPicker"
-            >
-              <div class="i-lucide:image-plus" />
-            </button>
-            <button
-              v-if="visionEnabled && !activeGroupMeta && screenCapture" type="button"
-              :title="t('stage.chat.vision.screen-capture')" :aria-label="t('stage.chat.vision.screen-capture')"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md airi-overlay-control-muted']"
-              @click="openScreenPicker"
-            >
-              <span :class="['i-lucide:scan-line size-4']" />
-            </button>
-            <button
-              type="button"
-              :title="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
-              :aria-label="isManualSpeechInputDictating ? t('stage.actions.voice-input-stop') : t('stage.actions.voice-input-start')"
-              :class="['size-8 grid shrink-0 place-items-center rounded-md text-lg transition-transform active:scale-95', isManualSpeechInputDictating ? 'airi-overlay-control-primary' : 'airi-overlay-control-muted']"
-              @click="() => handleManualSpeechInputToggle()"
-            >
-              <div :class="isManualSpeechInputDictating ? 'i-solar:stop-circle-line-duotone' : 'i-ph:microphone'" />
+              <div class="i-solar:arrow-up-linear size-4" />
             </button>
           </div>
-          <div v-if="detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.checkpointFailed.value" :class="['order-0 flex items-center gap-3 text-xs']">
+          <div v-if="detachedComposer.recoverable.value || detachedComposer.failed.value || detachedComposer.anotherDetached.value || detachedComposer.sourceUnavailable.value || detachedComposer.deliveryFailed.value || detachedComposer.checkpointFailed.value" :class="['order-0 flex min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap text-xs']">
             <button v-if="detachedComposer.recoverable.value && !detachedComposer.detached.value" type="button" :disabled="composerDetachUnavailable" :class="['airi-text-muted underline']" @click="detachedComposer.recoveryUncertain.value ? detachedComposer.viewRecovery() : detachedComposer.detach(true)">
               {{ t(detachedComposer.recoveryUncertain.value ? 'stage.chat.composer.view-recovery' : 'stage.chat.composer.recover') }}
             </button>
             <span v-if="detachedComposer.failed.value" role="alert" :class="['text-amber-600']">{{ t('stage.chat.composer.source-failed') }}</span>
+            <span v-if="detachedComposer.anotherDetached.value" role="alert" :class="['text-amber-600']">{{ t('stage.chat.composer.another-detached') }}</span>
+            <span v-if="detachedComposer.sourceUnavailable.value" role="status" :class="['max-w-72 shrink truncate text-amber-600']">{{ t('stage.chat.composer.source-retrying') }}</span>
+            <span v-if="detachedComposer.deliveryFailed.value" role="alert" :class="['text-amber-600']">{{ t('stage.chat.composer.send-failed') }}</span>
             <button v-if="detachedComposer.checkpointFailed.value" type="button" :class="['text-amber-600 underline']" @click="detachedComposer.checkpoint().catch(() => undefined)">
               {{ t('stage.chat.composer.checkpoint-failed') }}
             </button>
@@ -6185,10 +6582,10 @@ const chatSurfaceStyle = computed(() => {
               :auto-resize="false"
               :placeholder="isInitialized ? t('stage.chat.composer.placeholder') : t('tamagotchi.stage.bootstrap.conversation')"
               :disabled="!isInitialized"
-              :readonly="detachedComposer.readonly.value"
+              :readonly="isComposerReadonly()"
               :autofocus="isWidgetSurface"
               :class="[
-                'ph-no-capture h-full min-h-0 w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-20 font-medium',
+                'ph-no-capture h-full min-h-0 w-full resize-none overflow-y-auto rounded-xl py-2 pl-2 pr-12 font-medium',
                 'airi-overlay-input main-chat-textarea',
               ]"
               @compositionstart="isComposing = true"
@@ -6209,23 +6606,10 @@ const chatSurfaceStyle = computed(() => {
               :title="t('stage.chat.vision.upload')"
               :aria-label="t('stage.chat.vision.upload')"
               :disabled="detachedComposer.readonly.value"
-              :class="['absolute bottom-2 right-11 size-8 grid place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:opacity-50', 'airi-overlay-control-muted']"
+              :class="['absolute bottom-2 right-2 size-8 grid place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:opacity-50', 'airi-overlay-control-muted']"
               @click="openAttachmentPicker"
             >
               <div class="i-ph:plus-bold size-4" />
-            </button>
-            <button
-              type="button"
-              :title="requiresOfficialCloudLogin ? t('stage.chat.official-cloud-send-disabled') : t('stage.actions.send')"
-              :aria-label="requiresOfficialCloudLogin ? t('stage.chat.official-cloud-send-disabled') : t('stage.actions.send')"
-              :disabled="!canSend"
-              :class="[
-                'absolute bottom-2 right-2 size-8 grid place-items-center rounded-md text-base outline-none transition-all active:scale-95',
-                canSend ? 'airi-overlay-control-primary' : 'cursor-not-allowed bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55',
-              ]"
-              @click="handleSend"
-            >
-              <div class="i-solar:arrow-up-linear size-4" />
             </button>
           </div>
         </template>

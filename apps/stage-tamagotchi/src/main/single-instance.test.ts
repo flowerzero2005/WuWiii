@@ -61,13 +61,13 @@ describe('desktop single-instance startup', () => {
 
   it('claims the lock before primary-only startup and activates through the main window owner', () => {
     const lockIndex = mainEntrypoint.indexOf('setupSingleInstance(app)')
-    const screenCaptureIndex = mainEntrypoint.indexOf('initScreenCaptureForMain()')
+    const screenCaptureIndex = mainEntrypoint.indexOf('initScreenCaptureForMain({ onDiagnostic: desktopDiagnostics.record })')
     const readyIndex = mainEntrypoint.indexOf('app.whenReady().then')
 
     expect(lockIndex).toBeGreaterThanOrEqual(0)
     expect(screenCaptureIndex).toBeGreaterThan(lockIndex)
     expect(readyIndex).toBeGreaterThan(screenCaptureIndex)
-    expect(mainEntrypoint).toContain('if (singleInstance.isPrimary)\n  initScreenCaptureForMain()')
+    expect(mainEntrypoint).toContain('if (singleInstance.isPrimary)\n  initScreenCaptureForMain({ onDiagnostic: desktopDiagnostics.record })')
     expect(mainEntrypoint).toContain('singleInstance.isPrimary && app.whenReady().then')
     expect(mainEntrypoint).toContain('singleInstance.setActivationOwner(() => toggleWindowShow(mainWindow))')
   })

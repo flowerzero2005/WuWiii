@@ -12,9 +12,19 @@ describe('createReadableFinalText', () => {
     expect(createReadableFinalText('Use <b>bold</b> and write <value> literally.')).toBe('Use <b>bold</b> and write <value> literally.')
   })
 
-  it('keeps a visible paragraph after a malformed unclosed reasoning tag', () => {
-    expect(createReadableFinalText('<think>private reasoning\n\n你好，欢迎回来。')).toBe('你好，欢迎回来。')
+  it('keeps every paragraph of an unclosed private envelope out of display and speech', () => {
+    expect(createReadableFinalText('<think>private reasoning\n\n你好，欢迎回来。')).toBe('')
+    expect(createReadableSpeechText('Hello <THINK>private\n\nmore private')).toBe('Hello')
     expect(createReadableFinalText('<think>only private reasoning')).toBe('')
+  })
+
+  it('preserves ordinary discussion of thinking and code', () => {
+    const text = 'I am thinking about this code:\n```ts\nconst thinking = a < b\n```\nUse <thought-experiment> literally.'
+    expect(createReadableFinalText(text)).toBe(text)
+  })
+
+  it('removes nested and mixed-case reasoning envelopes without leaking their tails', () => {
+    expect(createReadableFinalText('Hi <THINK>outer <reasoning>inner</reasoning>still private</ThInK> there')).toBe('Hi there')
   })
 
   it('removes Markdown emphasis markers before display and speech', () => {
@@ -27,5 +37,7 @@ describe('createReadableFinalText', () => {
     const text = '我在这。<|ACT {"actionCardId":"small-wave"'
     expect(createReadableFinalText(text)).toBe('我在这。')
     expect(createReadableSpeechText(text)).toBe('我在这。')
+    expect(createReadableFinalText('我在这。<|A')).toBe('我在这。')
+    expect(createReadableSpeechText('我在这。<|')).toBe('我在这。')
   })
 })

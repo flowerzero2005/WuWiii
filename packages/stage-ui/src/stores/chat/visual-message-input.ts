@@ -10,11 +10,14 @@ export function prepareUserMessageForProvider(
   currentUserMessageId: string | undefined,
   currentTurnContent: CommonContentPart[] | undefined,
 ): Message {
-  if (message.role !== 'user' || !Array.isArray(message.content))
+  if (message.role !== 'user')
     return message
 
   if (messageId && currentUserMessageId && messageId === currentUserMessageId && currentTurnContent)
     return { ...message, content: currentTurnContent }
+
+  if (!Array.isArray(message.content))
+    return message
 
   const hasImage = message.content.some(part => part.type === 'image_url')
   if (!hasImage)

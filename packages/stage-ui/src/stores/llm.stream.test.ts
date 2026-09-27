@@ -63,6 +63,221 @@ describe('llm stream error bridging', () => {
       .toThrow('tool execution failed')
   })
 
+  it.each(['auto', 'eager'] as const)('uses one official request with the selected tools in %s mode', async (toolBundleRoutingMode) => {
+    vi.mocked(streamText).mockImplementationOnce((options: any) => ({
+      fullStream: new ReadableStream(),
+      messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Ready.' }]),
+      reasoningTextStream: new ReadableStream(),
+      steps: Promise.resolve([]),
+      textStream: new ReadableStream(),
+      totalUsage: Promise.resolve(undefined),
+      usage: Promise.resolve(undefined),
+    }))
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'official-cloud', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    await expect(useLLM().stream('official-model', provider, [{ role: 'user', content: 'Help with this task' }], {
+      toolBundleRoutingMode,
+      toolBundles: [
+        { id: 'memory', tools: [{ function: { name: 'search_memory' }, type: 'function' } as any] },
+        { id: 'web-search', tools: [{ function: { name: 'web_search' }, type: 'function' } as any] },
+      ],
+    })).resolves.toBeUndefined()
+    expect(streamText).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(streamText).mock.calls[0]?.[0].tools?.map(tool => tool.function.name)).toEqual(['search_memory', 'web_search'])
+    expect(vi.mocked(streamText).mock.calls[0]?.[0].messages).toEqual([{ role: 'user', content: 'Help with this task' }])
+  })
+
+  it.each(['router', 'bundle', 'direct'] as const)('returns an explicit empty result from a settled %s request', async (mode) => {
+    vi.mocked(streamText).mockImplementationOnce((options: any) => ({
+      fullStream: new ReadableStream(),
+      messages: Promise.resolve([...options.messages, { role: 'assistant', content: '' }]),
+      reasoningTextStream: new ReadableStream(),
+      steps: Promise.resolve([]),
+      textStream: new ReadableStream(),
+      totalUsage: Promise.resolve(undefined),
+      usage: Promise.resolve(undefined),
+    }))
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    const tool = { function: { name: 'read_file' }, type: 'function' } as any
+    const options = mode === 'direct'
+      ? { tools: [tool] }
+      : {
+          toolBundleRoutingMode: 'auto' as const,
+          toolBundles: [
+            { id: 'workspace', tools: [tool] },
+            ...(mode === 'router' ? [{ id: 'memory', tools: [tool] }] : []),
+          ],
+        }
+    await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], options)).resolves.toEqual({
+      type: 'empty-result', reason: 'no-visible-text', completedToolCallIds: [],
+    })
+    expect(streamText).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    { code: 'OFFICIAL_MODEL_UPSTREAM_ERROR', status: 502 },
+    { code: 'OFFICIAL_MODEL_UPSTREAM_ERROR', status: 502, details: { reason: 'empty-response' } },
+    { status: 502, details: { upstreamStatus: 429 } },
+    { status: 502, details: { reason: 'content-filtered' } },
+    { status: 502, details: { reason: 'delivery-failed' } },
+    { status: 401 },
+    { code: 'INSUFFICIENT_POINTS' },
+  ])('does not multiply a structured terminal failure into a no-tools request: %j', async (details) => {
+    const cause = Object.assign(new Error('Remote sent 502 response: Bad Gateway upstream'), details)
+    const failure = new Error('Provider returned 502 Bad Gateway', { cause })
+    vi.mocked(streamText).mockImplementationOnce(() => {
+      const rejected = Promise.reject(failure)
+      return {
+        fullStream: new ReadableStream(), messages: rejected, steps: rejected,
+        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+      }
+    })
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], {
+      tools: [{ function: { name: 'read_file' }, type: 'function' } as any],
+    })).rejects.toThrow()
+    expect(streamText).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops an eager acknowledgement rate limit before starting its tool request', async () => {
+    vi.mocked(streamText).mockImplementationOnce(() => {
+      const rejected = Promise.reject(Object.assign(new Error('Too many requests'), { status: 429 }))
+      return {
+        fullStream: new ReadableStream(), messages: rejected, steps: rejected,
+        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+      }
+    })
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'Set a reminder' }], {
+      toolBundleRoutingMode: 'eager',
+      toolBundles: [{ id: 'butler', tools: [{ function: { name: 'create_reminder' }, type: 'function' } as any] }],
+    })).rejects.toThrow('Too many requests')
+    expect(streamText).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets an official request wait past 15 seconds while parent cancellation stops transport and late tools immediately', async () => {
+    vi.useFakeTimers()
+    try {
+      const execute = vi.fn(() => 'done')
+      const parent = new AbortController()
+      vi.mocked(streamText).mockImplementationOnce(() => ({
+        fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
+        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+      }))
+      const provider = {
+        chat: (model: string) => ({ apiKey: 'official-cloud', baseURL: 'https://example.com/v1/', model }),
+      } as unknown as ChatProvider
+      let settled = false
+      const outcome = useLLM().stream('official-model', provider, [{ role: 'user', content: 'hi' }], {
+        abortSignal: parent.signal,
+        tools: [{ execute, function: { name: 'create_reminder', parameters: {} }, type: 'function' }],
+      }).then(() => { settled = true; return undefined }, (error) => { settled = true; return error })
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(settled).toBe(false)
+      expect(streamText).toHaveBeenCalledTimes(1)
+      const attempt = vi.mocked(streamText).mock.calls[0]![0]
+      expect(attempt.abortSignal?.aborted).toBe(false)
+      parent.abort(new DOMException('Cancelled by user', 'AbortError'))
+      expect((await outcome).name).toBe('AbortError')
+      expect(attempt.abortSignal?.aborted).toBe(true)
+      await expect(attempt.tools![0].execute({}, { messages: [], toolCallId: 'late-tool' })).rejects.toThrow('Cancelled by user')
+      expect(execute).not.toHaveBeenCalled()
+      expect(streamText).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('aborts the underlying official request at its 90-second first-event deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(streamText).mockImplementationOnce(() => ({
+        fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
+        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+      }))
+      const provider = {
+        chat: (model: string) => ({ apiKey: 'official-cloud', baseURL: 'https://example.com/v1/', model }),
+      } as unknown as ChatProvider
+      const result = useLLM().stream('official-model', provider, [{ role: 'user', content: 'hi' }], {
+        emptyOnFirstEventTimeout: true, firstEventTimeoutMs: 5_000,
+      })
+      await vi.advanceTimersByTimeAsync(90_000)
+      await expect(result).resolves.toMatchObject({ type: 'empty-result' })
+      expect(vi.mocked(streamText).mock.calls[0]?.[0].abortSignal?.aborted).toBe(true)
+      expect(streamText).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not apply the result-settle deadline while actual tools are still running', async () => {
+    vi.useFakeTimers()
+    try {
+      const parent = new AbortController()
+      vi.mocked(streamText).mockImplementationOnce((options: any) => {
+        queueMicrotask(() => { void options.onEvent?.({ type: 'finish', finishReason: 'tool_calls' }) })
+        return {
+          fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
+          reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+          totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        }
+      })
+      const provider = {
+        chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+      } as unknown as ChatProvider
+      let settled = false
+      const outcome = useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], {
+        abortSignal: parent.signal,
+        tools: [{ execute: () => 'done', function: { name: 'slow_tool', parameters: {} }, type: 'function' }],
+      }).then(() => { settled = true }, () => { settled = true })
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect(settled).toBe(false)
+      expect(vi.mocked(streamText).mock.calls[0]?.[0].abortSignal?.aborted).toBe(false)
+      parent.abort()
+      await outcome
+      expect(streamText).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not forward already-queued events after the parent cancels', async () => {
+    const parent = new AbortController()
+    const onStreamEvent = vi.fn()
+    vi.mocked(streamText).mockImplementationOnce((options: any) => {
+      void options.onEvent?.({ type: 'text-delta', text: 'queued before cancellation' })
+      void options.onEvent?.({ type: 'finish', finishReason: 'stop' })
+      parent.abort(new DOMException('Cancelled by user', 'AbortError'))
+      return {
+        fullStream: new ReadableStream(), messages: Promise.resolve(options.messages), steps: Promise.resolve([]),
+        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+      }
+    })
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], {
+      abortSignal: parent.signal, onStreamEvent,
+    })).rejects.toThrow('Cancelled by user')
+    expect(onStreamEvent).not.toHaveBeenCalled()
+    expect(vi.mocked(streamText).mock.calls[0]?.[0].abortSignal?.aborted).toBe(true)
+  })
+
   it('does not resend persisted UI error messages to the provider', async () => {
     vi.mocked(streamText)
       .mockImplementationOnce((options: any) => {
@@ -72,7 +287,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -104,7 +319,7 @@ describe('llm stream error bridging', () => {
     })
   })
 
-  it('passes abort signals to streamText requests', async () => {
+  it('links a separate attempt signal and removes the parent listener after completion', async () => {
     vi.mocked(streamText)
       .mockImplementationOnce((options: any) => {
         queueMicrotask(() => {
@@ -113,7 +328,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -136,9 +351,12 @@ describe('llm stream error bridging', () => {
       abortSignal: abortController.signal,
     })).resolves.toBeUndefined()
 
-    expect(vi.mocked(streamText).mock.calls[0]?.[0]).toMatchObject({
-      abortSignal: abortController.signal,
-    })
+    const attemptSignal = vi.mocked(streamText).mock.calls[0]?.[0].abortSignal
+    expect(attemptSignal).toBeInstanceOf(AbortSignal)
+    expect(attemptSignal).not.toBe(abortController.signal)
+    expect(attemptSignal?.aborted).toBe(false)
+    abortController.abort()
+    expect(attemptSignal?.aborted).toBe(false)
   })
 
   it('replays final assistant text when a provider omits text-delta events', async () => {
@@ -149,7 +367,7 @@ describe('llm stream error bridging', () => {
 
       return {
         fullStream: new ReadableStream(),
-        messages: Promise.resolve([{ role: 'assistant', content: 'Recovered group reply.' }]),
+        messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Recovered group reply.' }]),
         reasoningTextStream: new ReadableStream(),
         steps: Promise.resolve([]),
         textStream: new ReadableStream(),
@@ -175,6 +393,44 @@ describe('llm stream error bridging', () => {
     expect(events).toContainEqual({ type: 'text-delta', text: 'Recovered group reply.' })
   })
 
+  it.each(['', '<think>private</think>', '<think>private\n\nstill private'])('does not replay an old answer when the current output has no visible text: %j', async (currentOutput) => {
+    vi.mocked(streamText).mockImplementationOnce((options: any) => {
+      queueMicrotask(() => {
+        void options.onEvent?.({ finishReason: 'stop', type: 'finish' })
+      })
+
+      return {
+        fullStream: new ReadableStream(),
+        messages: Promise.resolve([...options.messages, { role: 'assistant', content: currentOutput }]),
+        reasoningTextStream: new ReadableStream(),
+        steps: Promise.resolve([]),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
+      }
+    })
+
+    const store = useLLM()
+    const provider = {
+      chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
+    } as unknown as ChatProvider
+    const events: StreamEvent[] = []
+
+    await expect(store.stream('test-model', provider, [
+      { role: 'user', content: 'Previous question' },
+      { role: 'assistant', content: 'Previous answer must not replay' },
+      { role: 'user', content: 'Current question' },
+    ], {
+      onStreamEvent: (event) => { events.push(event) },
+    })).resolves.toEqual({
+      completedToolCallIds: [],
+      reason: 'no-visible-text',
+      type: 'empty-result',
+    })
+    expect(events.filter(event => event.type === 'text-delta')).toEqual([])
+    expect(streamText).toHaveBeenCalledTimes(1)
+  })
+
   it('returns a structured empty result when the final messages contain only reasoning', async () => {
     vi.mocked(streamText).mockImplementationOnce((options: any) => {
       queueMicrotask(() => {
@@ -183,7 +439,7 @@ describe('llm stream error bridging', () => {
 
       return {
         fullStream: new ReadableStream(),
-        messages: Promise.resolve([{
+        messages: Promise.resolve([...options.messages, {
           role: 'assistant',
           content: [{ type: 'reasoning', text: 'private chain of thought' }],
         }] as unknown as Message[]),
@@ -243,7 +499,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -349,7 +605,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -394,7 +650,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'Hi.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Hi.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -457,7 +713,7 @@ describe('llm stream error bridging', () => {
       })
       return {
         fullStream: new ReadableStream(),
-        messages: Promise.resolve([{ role: 'assistant', content: 'Found it.' }]),
+        messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Found it.' }]),
         reasoningTextStream: new ReadableStream(),
         steps: Promise.resolve([]),
         textStream: new ReadableStream(),
@@ -497,7 +753,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'Hi.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Hi.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -556,7 +812,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: '' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: '' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -572,7 +828,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'Found it.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Found it.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -636,7 +892,7 @@ describe('llm stream error bridging', () => {
 
           return {
             fullStream: new ReadableStream(),
-            messages: Promise.resolve([{ role: 'assistant', content: '' }]),
+            messages: Promise.resolve([...options.messages, { role: 'assistant', content: '' }]),
             reasoningTextStream: new ReadableStream(),
             steps: Promise.resolve([]),
             textStream: new ReadableStream(),
@@ -660,7 +916,7 @@ describe('llm stream error bridging', () => {
 
           return {
             fullStream: new ReadableStream(),
-            messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+            messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
             reasoningTextStream: new ReadableStream(),
             steps: Promise.resolve([]),
             textStream: new ReadableStream(),
@@ -737,7 +993,7 @@ describe('llm stream error bridging', () => {
 
           return {
             fullStream: new ReadableStream(),
-            messages: Promise.resolve([{ role: 'assistant', content: 'Tool-capable response.' }]),
+            messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Tool-capable response.' }]),
             reasoningTextStream: new ReadableStream(),
             steps: Promise.resolve([]),
             textStream: new ReadableStream(),
@@ -872,7 +1128,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -955,7 +1211,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1008,7 +1264,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1023,7 +1279,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'searched' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'searched' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1095,7 +1351,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'The tool succeeded.' }]),
+          messages: Promise.resolve([...streamOptions.messages, { role: 'assistant', content: 'The tool succeeded.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1148,7 +1404,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1163,7 +1419,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1239,7 +1495,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1306,7 +1562,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1384,7 +1640,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'searched from local context' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'searched from local context' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1465,7 +1721,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'I will set that now.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'I will set that now.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1548,7 +1804,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'Alarm created for 08:30.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'Alarm created for 08:30.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1736,7 +1992,7 @@ describe('llm stream error bridging', () => {
         })
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', output_text: 'The action completed.' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', output_text: 'The action completed.' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -1793,7 +2049,7 @@ describe('llm stream error bridging', () => {
         })
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: [{ type: 'reasoning', text: 'done' }] }] as unknown as Message[]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: [{ type: 'reasoning', text: 'done' }] }] as unknown as Message[]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -2199,7 +2455,7 @@ describe('llm stream error bridging', () => {
 
           return {
             fullStream: new ReadableStream(),
-            messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+            messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
             reasoningTextStream: new ReadableStream(),
             steps: Promise.resolve([]),
             textStream: new ReadableStream(),
@@ -2257,7 +2513,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -2325,7 +2581,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok without tools' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok without tools' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -2340,7 +2596,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'searched' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'searched' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),
@@ -2412,7 +2668,7 @@ describe('llm stream error bridging', () => {
 
         return {
           fullStream: new ReadableStream(),
-          messages: Promise.resolve([{ role: 'assistant', content: 'ok' }]),
+          messages: Promise.resolve([...options.messages, { role: 'assistant', content: 'ok' }]),
           reasoningTextStream: new ReadableStream(),
           steps: Promise.resolve([]),
           textStream: new ReadableStream(),

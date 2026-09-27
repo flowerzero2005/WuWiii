@@ -539,17 +539,9 @@ export function formatAiriEmotionMemoryContext(entries: NotebookEntry[]) {
 
 export async function syncAiriEmotionMemoryThreads(input: AiriEmotionThreadInput) {
   const notebookStore = useCharacterNotebookStore()
-  if (!notebookStore.isLoaded) {
-    await notebookStore.loadFromStorage()
-  }
-
-  const nextEntries = mergeAiriEmotionThreadEntries(
-    notebookStore.entries,
-    collectAiriEmotionThreadRecords({
-      ...input,
-      personaCardId: input.personaCardId ?? notebookStore.activePersonaCardId,
-    }),
-  )
-
-  notebookStore.entries.splice(0, notebookStore.entries.length, ...nextEntries)
+  const scope = notebookStore.resolveMemoryScope(input)
+  const records = collectAiriEmotionThreadRecords({ ...input, ...scope })
+  await notebookStore.updateNotebookForScope(scope, (data) => {
+    data.entries = mergeAiriEmotionThreadEntries(data.entries, records)
+  }, input.sessionId)
 }

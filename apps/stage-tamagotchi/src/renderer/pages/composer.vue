@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { ComposerToolbarAction, ComposerToolbarState } from '../../shared/detached-composer-toolbar'
 
+import { BackgroundProvider } from '@proj-airi/stage-layouts/components/Backgrounds'
+import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
 import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
-import { useVisionStore, VISION_MAX_IMAGES } from '@proj-airi/stage-ui/stores/modules/vision'
+import { assertVisionAttachments, getVisionAttachmentErrorKey, useVisionStore, VISION_IMAGE_LIMITS_I18N_PARAMS, VISION_MAX_IMAGES } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
 import { BasicTextarea } from '@proj-airi/ui'
@@ -14,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
 import DetachedComposerToolbar from '../components/detached-composer-toolbar.vue'
+import ResizeHandler from '../components/ResizeHandler.vue'
 
 import { validateComposerDraft } from '../../shared/detached-composer'
 import { useDetachedComposerEditor } from '../composables/use-detached-composer-editor'
@@ -23,6 +26,7 @@ const { t } = useI18n()
 const key = 'stage.chat.composer'
 const editor = useDetachedComposerEditor(t)
 const { state, draft, dirty, closing, error, busy, dragOverReturnTarget, flush, send: submitDraft, close } = editor
+const { selectedOption: selectedBackground } = storeToRefs(useBackgroundStore())
 const discardConfirmation = ref(false)
 const visionStore = useVisionStore()
 const { enabled: visionEnabled, provider: visionProvider } = storeToRefs(visionStore)
@@ -41,7 +45,11 @@ const screenPickerOpen = ref(false)
 const screenSources = ref<ReturnType<NonNullable<typeof screenCapture>['listSources']> extends Promise<infer Sources> ? Sources : never>([])
 const selectedScreenSourceId = ref('')
 const screenCaptureLoading = ref(false)
+const screenCapturePending = ref(false)
+const screenCaptureCountdown = ref(0)
 const screenCaptureError = ref('')
+let screenCountdownTimer: ReturnType<typeof setTimeout> | undefined
+let resolveScreenCountdown: ((completed: boolean) => void) | undefined
 let screenPickerRevision = 0
 const visionQuote = computed(() => officialCapabilityConsentStore.getQuote('vision'))
 const visionConsentPending = computed(() => draft.value.images.length > 0 && visionProvider.value === 'official-cloud' && !!visionQuote.value
@@ -80,6 +88,12 @@ const selectedScreenSource = computed(() => screenSources.value.find(source => s
 
 function closeScreenPicker() {
   screenPickerRevision += 1
+  clearTimeout(screenCountdownTimer)
+  screenCountdownTimer = undefined
+  resolveScreenCountdown?.(false)
+  resolveScreenCountdown = undefined
+  screenCaptureCountdown.value = 0
+  screenCapturePending.value = false
   screenPickerOpen.value = false
   screenSources.value = []
   selectedScreenSourceId.value = ''
@@ -87,8 +101,13 @@ function closeScreenPicker() {
 }
 
 function screenCaptureFailure(cause: unknown) {
-  return t(`stage.chat.vision.${getVisionScreenCaptureErrorKey(cause)}`)
+  return t(`stage.chat.vision.${getVisionAttachmentErrorKey(cause) ?? getVisionScreenCaptureErrorKey(cause)}`, VISION_IMAGE_LIMITS_I18N_PARAMS)
 }
+
+watch(() => [state.value?.scope.leaseId, state.value?.scope.userScope, state.value?.scope.sessionId, state.value?.scope.sourceGeneration, state.value?.status, busy.value, visionEnabled.value], (values, previous) => {
+  if (screenPickerOpen.value && values.some((value, index) => value !== previous[index]))
+    closeScreenPicker()
+}, { flush: 'sync' })
 
 async function refreshScreenSources(revision: number) {
   if (!screenCapture)
@@ -113,7 +132,7 @@ async function refreshScreenSources(revision: number) {
 }
 
 async function openScreenPicker() {
-  if (!visionEnabled.value || !screenCapture || !state.value || state.value.scope.group || busy.value)
+  if (!visionEnabled.value || !screenCapture || !state.value || state.value.status !== 'detached' || state.value.scope.group || busy.value)
     return
   closeScreenPicker()
   const revision = screenPickerRevision
@@ -123,36 +142,74 @@ async function openScreenPicker() {
 }
 
 async function attachSelectedScreen() {
-  if (!screenCapture || !selectedScreenSource.value || !state.value || busy.value)
+  if (!screenCapture || !selectedScreenSource.value || !state.value || state.value.status !== 'detached' || screenCaptureLoading.value || busy.value)
     return
   if (draft.value.images.length >= VISION_MAX_IMAGES) {
     screenCaptureError.value = t('stage.chat.vision.image-limit', { count: VISION_MAX_IMAGES })
     return
   }
   const revision = screenPickerRevision
+  const sourceId = selectedScreenSource.value.id
+  const scope = { ...state.value.scope }
+  const isCurrent = () => revision === screenPickerRevision && screenPickerOpen.value && visionEnabled.value
+    && !busy.value && state.value?.status === 'detached' && !state.value.scope.group
+    && state.value.scope.leaseId === scope.leaseId && state.value.scope.userScope === scope.userScope
+    && state.value.scope.sessionId === scope.sessionId && state.value.scope.sourceGeneration === scope.sourceGeneration
   screenCaptureLoading.value = true
+  screenCaptureError.value = ''
   try {
-    const image = await screenCapture.capture(selectedScreenSource.value.id)
-    if (revision !== screenPickerRevision || !state.value || state.value.scope.group)
+    screenCaptureCountdown.value = 3
+    const countdownCompleted = await new Promise<boolean>((resolve) => {
+      resolveScreenCountdown = resolve
+      const tick = () => {
+        if (!isCurrent()) {
+          resolveScreenCountdown = undefined
+          resolve(false)
+          return
+        }
+        screenCaptureCountdown.value -= 1
+        if (screenCaptureCountdown.value === 0) {
+          screenCountdownTimer = undefined
+          resolveScreenCountdown = undefined
+          resolve(true)
+          return
+        }
+        screenCountdownTimer = setTimeout(tick, 1000)
+      }
+      screenCountdownTimer = setTimeout(tick, 1000)
+    })
+    if (!countdownCompleted || !isCurrent())
       return
+    screenCapturePending.value = true
+    const image = await screenCapture.capture(sourceId)
+    if (!isCurrent())
+      return
+    const images = [...draft.value.images, { id: crypto.randomUUID(), mimeType: image.mimeType, data: image.data }]
+    assertVisionAttachments(images.map(image => ({ ...image, type: 'image' as const })))
     draft.value = validateComposerDraft({
       text: draft.value.text,
-      images: [...draft.value.images, { id: crypto.randomUUID(), mimeType: image.mimeType, data: image.data }],
+      images,
     }, false)
     closeScreenPicker()
   }
   catch (cause) {
     if (revision === screenPickerRevision) {
-      // A source can vanish between listing and capture. Keep the picker open,
-      // clear the stale selection, and ask the user to choose from a fresh list.
-      selectedScreenSourceId.value = ''
-      screenCaptureError.value = screenCaptureFailure(cause)
-      await refreshScreenSources(revision)
+      const failureKey = getVisionAttachmentErrorKey(cause) ?? getVisionScreenCaptureErrorKey(cause)
+      screenCaptureError.value = t(`stage.chat.vision.${failureKey}`, VISION_IMAGE_LIMITS_I18N_PARAMS)
+      if (failureKey === 'screen-source-unavailable') {
+        // Only a vanished source needs a new listing. Retrying enumeration
+        // after a timeout can leave more native capture requests stalled.
+        selectedScreenSourceId.value = ''
+        await refreshScreenSources(revision)
+      }
     }
   }
   finally {
-    if (revision === screenPickerRevision)
+    if (revision === screenPickerRevision) {
       screenCaptureLoading.value = false
+      screenCapturePending.value = false
+      screenCaptureCountdown.value = 0
+    }
   }
 }
 
@@ -251,28 +308,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main :class="['composer-page min-h-0 flex flex-col', editor.dragging.value ? 'is-dragging' : '']">
-    <header class="composer-drag-rail flex shrink-0 items-center justify-between gap-2 px-3">
-      <div
-        :title="t(`${key}.drag-return`)"
-        :class="['[-webkit-app-region:no-drag] flex min-w-0 touch-none select-none items-center gap-2 cursor-grab', editor.dragging.value ? 'opacity-60' : '']"
-        @pointerdown="editor.startDrag"
-      >
-        <span class="composer-grab i-lucide:grip-horizontal size-4 shrink-0" />
-        <span class="composer-drag-label truncate text-[11px]">{{ t(`${key}.drag-return`) }}</span>
-      </div>
-      <button
-        type="button"
-        :disabled="!!state?.busy || closing"
-        :title="t(`${key}.return`)"
-        :aria-label="t(`${key}.return`)"
-        class="composer-return-button [-webkit-app-region:no-drag] grid size-7 shrink-0 place-items-center rounded-full airi-overlay-control-muted disabled:cursor-not-allowed disabled:opacity-50"
-        @click="close"
-      >
-        <span class="i-lucide:arrow-down-to-line size-3.5" />
-      </button>
-    </header>
-
+  <main :class="['composer-page relative min-h-0 flex flex-col', editor.dragging.value ? 'is-dragging' : '']">
     <p
       v-if="editor.dragging.value"
       :class="['composer-drag-status absolute left-1/2 top-8 z-10 m-0 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] shadow-sm', dragOverReturnTarget ? 'text-[var(--airi-accent-text)]' : 'airi-text-muted']"
@@ -280,7 +316,35 @@ onUnmounted(() => {
       {{ t(dragOverReturnTarget ? `${key}.return-ready` : `${key}.drag-return`) }}
     </p>
 
-    <section class="composer-card mx-2 mb-2 min-h-0 flex flex-1 flex-col border rounded-[18px] p-2">
+    <component
+      :is="selectedBackground ? BackgroundProvider : 'section'"
+      v-bind="selectedBackground ? { background: selectedBackground } : {}"
+      :class="[
+        'composer-card min-h-0 flex flex-1 flex-col border rounded-[18px] p-2',
+        selectedBackground ? 'composer-card-background' : undefined,
+      ]"
+    >
+      <ResizeHandler contained />
+      <header class="composer-drag-rail flex shrink-0 items-center justify-between gap-2 px-1">
+        <div
+          :title="t(`${key}.drag-return`)"
+          :class="['[-webkit-app-region:no-drag] flex min-w-0 touch-none select-none items-center gap-2 cursor-grab', editor.dragging.value ? 'opacity-60' : '']"
+          @pointerdown="editor.startDrag"
+        >
+          <span class="composer-grab i-lucide:grip-horizontal size-4 shrink-0" />
+          <span class="composer-drag-label truncate text-[11px]">{{ t(`${key}.drag-return`) }}</span>
+        </div>
+        <button
+          type="button"
+          :disabled="!!state?.busy || closing"
+          :title="t(`${key}.return`)"
+          :aria-label="t(`${key}.return`)"
+          class="composer-return-button [-webkit-app-region:no-drag] grid size-7 shrink-0 place-items-center rounded-full airi-overlay-control-muted disabled:cursor-not-allowed disabled:opacity-50"
+          @click="close"
+        >
+          <span class="i-lucide:arrow-down-to-line size-3.5" />
+        </button>
+      </header>
       <div class="composer-scroll min-h-0 flex flex-1 flex-col overflow-y-auto overscroll-contain pr-1">
         <p v-if="state?.status === 'orphaned'" class="composer-status mb-2 mt-0 text-xs airi-text-muted">
           {{ t(`${key}.orphaned`) }}
@@ -336,21 +400,11 @@ onUnmounted(() => {
             :readonly="!!state?.uncertain"
             :disabled="!state || !!state.busy || closing"
             :placeholder="t('stage.chat.composer.placeholder')"
-            class="composer-textarea h-full min-h-0 w-full resize-none overflow-y-auto airi-overlay-input rounded-[18px] py-2 pl-3 pr-12 text-sm font-medium"
+            :class="['composer-textarea h-full min-h-0 w-full resize-none overflow-y-auto airi-overlay-input rounded-[18px] px-3 py-2 text-sm font-medium']"
             @keydown.ctrl.enter.prevent="send"
             @paste-file="addPastedImages"
           />
           <input ref="imageInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden" @change="addImages">
-          <button
-            type="button"
-            :title="t('stage.actions.send')"
-            :aria-label="t('stage.actions.send')"
-            :disabled="!state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length)"
-            :class="['absolute bottom-2 right-2 grid size-8 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-not-allowed', !state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length) ? 'bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55' : 'airi-overlay-control-primary']"
-            @click="send"
-          >
-            <span class="i-solar:arrow-up-linear size-4" />
-          </button>
         </div>
       </div>
 
@@ -365,16 +419,28 @@ onUnmounted(() => {
         <p v-if="toolbarError" class="composer-toolbar-error mb-1 truncate text-[11px] text-red-500" :title="toolbarError" role="alert">
           {{ toolbarError }}
         </p>
-        <div class="min-h-8 overflow-x-auto overflow-y-hidden pb-0.5">
-          <DetachedComposerToolbar
-            v-if="state?.status === 'detached' && toolbarState"
-            :state="toolbarState"
-            :pending="toolbarPending?.action"
-            @action="handleToolbarAction"
-          />
+        <div :class="['min-h-8 flex items-center gap-1 pb-0.5']">
+          <div :class="['min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]']">
+            <DetachedComposerToolbar
+              v-if="state?.status === 'detached' && toolbarState"
+              :state="toolbarState"
+              :pending="toolbarPending?.action"
+              @action="handleToolbarAction"
+            />
+          </div>
+          <button
+            type="button"
+            :title="t('stage.actions.send')"
+            :aria-label="t('stage.actions.send')"
+            :disabled="!state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length)"
+            :class="['grid size-8 shrink-0 place-items-center rounded-md text-base outline-none transition-all active:scale-95 disabled:cursor-not-allowed', !state || state.status !== 'detached' || busy || (!draft.text.trim() && !draft.images.length) ? 'bg-[var(--airi-surface-control-muted)] text-[var(--airi-text-soft)] opacity-55' : 'airi-overlay-control-primary']"
+            @click="send"
+          >
+            <span class="i-solar:arrow-up-linear size-4" />
+          </button>
         </div>
       </footer>
-    </section>
+    </component>
 
     <button
       v-if="expandedImage"
@@ -400,7 +466,7 @@ onUnmounted(() => {
             {{ screenCaptureError }}
           </p>
           <p v-if="screenCaptureLoading" class="mt-3 text-sm text-[var(--airi-text-muted)]" role="status">
-            {{ t('stage.chat.vision.screen-loading') }}
+            {{ screenCaptureCountdown > 0 ? t('stage.chat.vision.screen-countdown', { seconds: screenCaptureCountdown }) : t(screenCapturePending ? 'stage.chat.vision.screen-capturing' : 'stage.chat.vision.screen-loading') }}
           </p>
           <p v-else-if="!screenSources.length && !screenCaptureError" class="mt-3 text-sm text-[var(--airi-text-muted)]">
             {{ t('stage.chat.vision.screen-no-sources') }}
@@ -424,7 +490,7 @@ onUnmounted(() => {
               {{ t('stage.actions.cancel') }}
             </AlertDialogCancel>
             <button type="button" :disabled="!selectedScreenSource || screenCaptureLoading" class="h-9 airi-overlay-control-primary rounded-md px-3 text-sm disabled:opacity-50" @click="attachSelectedScreen">
-              {{ t('stage.chat.vision.screen-attach') }}
+              {{ screenCaptureCountdown > 0 ? t('stage.chat.vision.screen-attach-countdown', { seconds: screenCaptureCountdown }) : t(screenCapturePending ? 'stage.chat.vision.screen-capturing' : 'stage.chat.vision.screen-attach') }}
             </button>
           </div>
         </AlertDialogContent>
@@ -436,17 +502,11 @@ onUnmounted(() => {
 <style scoped>
 .composer-page {
   --airi-chat-field-surface: color-mix(in srgb, var(--airi-surface-field-base, var(--airi-surface-field)) var(--airi-chat-surface-opacity-pct, 35%), transparent);
+  width: 100%;
   height: 100%;
   margin: 0;
+  background: transparent;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--airi-border-subtle) 82%, transparent);
-  border-radius: 1.4rem;
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--airi-accent) 18%, transparent), transparent 34%),
-    radial-gradient(circle at 92% 100%, color-mix(in srgb, var(--airi-accent-soft) 30%, transparent), transparent 40%),
-    color-mix(in srgb, var(--airi-surface-base, var(--airi-surface-panel)) 92%, transparent);
-  box-shadow: 0 12px 28px rgb(15 23 42 / 0.14);
-  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
 .composer-drag-rail {
@@ -465,8 +525,28 @@ onUnmounted(() => {
 
 .composer-card {
   position: relative;
-  border-color: transparent;
-  background: transparent;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--airi-border-subtle) 82%, transparent);
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--airi-accent) 18%, transparent), transparent 34%),
+    radial-gradient(circle at 92% 100%, color-mix(in srgb, var(--airi-accent-soft) 30%, transparent), transparent 40%),
+    color-mix(in srgb, var(--airi-surface-base, var(--airi-surface-panel)) 72%, transparent);
+  box-shadow: 0 12px 28px rgb(15 23 42 / 0.14);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.composer-card-background {
+  width: 100%;
+  height: 100%;
+  min-height: 0 !important;
+}
+
+.composer-card-background > :deep(.relative.z-10) {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .composer-card::before {
@@ -477,13 +557,22 @@ onUnmounted(() => {
   background: linear-gradient(135deg, color-mix(in srgb, var(--airi-accent-soft) 5%, transparent), transparent 34%);
 }
 
-.composer-card > * {
+.composer-card:not(.composer-card-background) > :not(.resize-handles) {
   position: relative;
 }
 
 .composer-scroll {
   min-width: 0;
-  scrollbar-gutter: stable;
+  scrollbar-width: none;
+}
+
+.composer-scroll::-webkit-scrollbar,
+.composer-input-area :deep(textarea::-webkit-scrollbar) {
+  display: none;
+}
+
+.composer-input-area :deep(textarea) {
+  scrollbar-width: none;
 }
 
 .composer-textarea {
@@ -540,9 +629,12 @@ onUnmounted(() => {
 }
 
 .composer-page.is-dragging {
+  transform: translateY(-1px);
+}
+
+.composer-page.is-dragging .composer-card {
   border-color: color-mix(in srgb, var(--airi-accent) 72%, var(--airi-border-subtle));
   box-shadow: 0 14px 32px color-mix(in srgb, var(--airi-accent) 22%, transparent);
-  transform: translateY(-1px);
 }
 
 .composer-return-button:active:not(:disabled) {
@@ -581,7 +673,7 @@ onUnmounted(() => {
   }
 }
 
-.dark .composer-page {
+.dark .composer-card {
   box-shadow: 0 12px 28px rgb(0 0 0 / 0.3);
 }
 </style>

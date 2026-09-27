@@ -14,9 +14,13 @@ export function removeLeakedToolProtocol(value: string) {
   return normalized
     .replace(/<\|\|DSML\|\|tool_calls>[\s\S]*?<\/\|\|DSML\|\|tool_calls>/gi, '')
     .replace(/<\|\|DSML\|\|tool_calls>[\s\S]*$/gi, '')
-    // An unfinished ACT envelope is private protocol. Keep it out of the
-    // parser's final value as well as literal stream output.
-    .replace(/<\|\s*ACT\b(?:(?!\|>)[\s\S])*$/gi, '')
+    // Some providers close ACT with '||'. Remove that bounded envelope
+    // before the unfinished-envelope rule, preserving following prose.
+    .replace(/<\|\s*ACT\b(?:(?!\|>)[\s\S])*?\}\s*\|{2,}>?/gi, '')
+    .replace(/<\|(?:DELAY|SEGMENT)\b(?:(?!\|>)[\s\S])*?\|{2,}>?/gi, '')
+    // Truncated names are private too, even before 'ACT' is fully received.
+    // Completed markers stay intact for final action extraction.
+    .replace(/<\|(?:(?!\|>)[\s\S])*$/g, '')
 }
 
 interface MarkerToken {
@@ -120,6 +124,10 @@ function createLlmMarkerParser(options?: MarkerParserOptions) {
             buffer = buffer.slice(nextOpenIndex)
             await onLiteral(emit)
           }
+          // '<||DSML...' also begins with the generic '<|' opener. Wait
+          // until the longer opener is decided before choosing its closer.
+          if (buffer.length < DSML_TOOL_CALLS_OPEN.length && DSML_TOOL_CALLS_OPEN.startsWith(buffer))
+            break
           activeTag = buffer.startsWith(DSML_TOOL_CALLS_OPEN) ? 'dsml' : 'marker'
         }
         else {
@@ -139,7 +147,11 @@ function createLlmMarkerParser(options?: MarkerParserOptions) {
 
     async end(onLiteral: (value: string) => Promise<void> | void) {
       if (!activeTag && buffer.length > 0) {
-        await onLiteral(buffer)
+        // A partial longer opener may still be waiting for disambiguation.
+        // In particular '<|' must not be flushed as literal text at EOF.
+        const literal = removeLeakedToolProtocol(buffer)
+        if (literal)
+          await onLiteral(literal)
         buffer = ''
       }
     },

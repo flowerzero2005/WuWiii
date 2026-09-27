@@ -15,6 +15,7 @@ chat:
     screen-source-unavailable: Impossible de capturer cette source. Sélectionnez à nouveau un écran ou une fenêtre disponible.
     screen-thumbnail-unavailable: La source sélectionnée n’a pas fourni d’image. Vérifiez l’autorisation d’enregistrement de l’écran, puis sélectionnez-la à nouveau.
     screen-timeout: Le délai de capture d’écran a expiré. Réessayez.
+    screen-system-unavailable: La demande de capture système ne s’est pas terminée. Réessayez ; si le problème persiste, redémarrez Wuwiii.
     screen-permission-denied: Le système a refusé l’autorisation d’enregistrement de l’écran. Autorisez Wuwiii à enregistrer votre écran dans les réglages système, puis réessayez.
     screen-no-sources: Aucun écran ou fenêtre n’est disponible.
 message: Dites quelque chose...

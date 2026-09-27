@@ -1,7 +1,9 @@
 import type { CommerceRequestPurpose, CommerceRequestSurface, PublicUsageHistoryEntry, PublicUsageHistoryPage } from '@proj-airi/server-shared/types'
 
+import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
+import { StorageSerializers } from '@vueuse/core'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 
 import { SERVER_URL } from '../libs/auth'
 import { useAuthStore } from './auth'
@@ -108,7 +110,7 @@ export const COMMERCE_PAYMENT_ERROR_I18N_KEYS = {
 } as const
 
 export class CommerceApiError extends Error {
-  constructor(message: string, public readonly code?: string, public readonly details?: unknown) {
+  constructor(message: string, public readonly code?: string, public readonly details?: unknown, public readonly status?: number) {
     super(message)
     this.name = 'CommerceApiError'
   }
@@ -190,6 +192,11 @@ function commerceUrl(path: string) {
   return new URL(path, SERVER_URL).toString()
 }
 
+interface CommerceRequestOptions {
+  signal?: AbortSignal
+  isCurrent?: () => boolean
+}
+
 /** Keep the public usage feed deterministic when pages overlap at one timestamp. */
 function sortUsageHistory(entries: PublicUsageHistoryEntry[]) {
   return entries.toSorted((left, right) =>
@@ -213,6 +220,7 @@ async function readCommerceResponse<T>(response: Response): Promise<T> {
     body?.message ?? `Commerce request failed with ${response.status}`,
     body?.error,
     body?.details,
+    response.status,
   )
 }
 
@@ -220,7 +228,13 @@ export const useCommerceStore = defineStore('commerce', () => {
   const auth = useAuthStore()
   let requestGeneration = 0
   let accountRequestRevision = 0
+  let checkInRequestRevision = 0
   let requestHistoryRequestRevision = 0
+  let checkInClaimPromise: Promise<CommerceCheckInClaimResult> | undefined
+  let checkInClaimController: AbortController | undefined
+
+  const autoCheckInEnabled = useLocalStorageManualReset('settings/commerce/auto-check-in-enabled', true)
+  const checkInRefreshSignal = useLocalStorageManualReset<{ userId: string, revision: string } | null>('commerce/check-in-refresh', null, { serializer: StorageSerializers.object })
 
   const account = ref<CommerceAccountState>()
   const checkInState = ref<CommerceCheckInState>()
@@ -230,6 +244,7 @@ export const useCommerceStore = defineStore('commerce', () => {
   const activePaymentOrder = ref<CommercePaymentOrder>()
   const activePaymentCheckout = ref<CommerceCheckout | null>(null)
   const isLoading = ref(false)
+  const isLoadingCheckIn = ref(false)
   const isClaimingCheckIn = ref(false)
   const isRedeeming = ref(false)
   const isLoadingMoreLedger = ref(false)
@@ -271,7 +286,11 @@ export const useCommerceStore = defineStore('commerce', () => {
       && context.userId === auth.user?.id
   }
 
-  async function fetchAccountState() {
+  function isOperationCurrent(context: ReturnType<typeof captureRequestContext>, options: CommerceRequestOptions) {
+    return isRequestCurrent(context) && !options.signal?.aborted && (options.isCurrent?.() ?? true)
+  }
+
+  async function fetchAccountState(options: CommerceRequestOptions = {}) {
     if (!auth.isAuthenticated) {
       account.value = undefined
       return undefined
@@ -280,6 +299,13 @@ export const useCommerceStore = defineStore('commerce', () => {
     const context = captureRequestContext()
     const revision = ++accountRequestRevision
     isLoading.value = true
+    const clearLoading = () => {
+      if (isRequestCurrent(context) && revision === accountRequestRevision)
+        isLoading.value = false
+    }
+    options.signal?.addEventListener('abort', clearLoading, { once: true })
+    if (options.signal?.aborted)
+      clearLoading()
     isLoadingMoreLedger.value = false
     error.value = null
     accountError.value = null
@@ -287,9 +313,12 @@ export const useCommerceStore = defineStore('commerce', () => {
       const result = await readCommerceResponse<CommerceAccountState>(
         await fetch(commerceUrl('/api/commerce/me'), {
           credentials: 'include',
+          ...(options.signal ? { signal: options.signal } : {}),
         }),
       )
-      if (isRequestCurrent(context) && revision === accountRequestRevision) {
+      if (result.balance.userId !== context.userId)
+        throw new CommerceApiError('The commerce account no longer matches the signed-in user', 'UNAUTHORIZED', undefined, 401)
+      if (isOperationCurrent(context, options) && revision === accountRequestRevision) {
         account.value = result
         ledgerCursor.value = result.recentLedger.length >= 20
           ? { createdAt: result.recentLedger.at(-1)!.createdAt, id: result.recentLedger.at(-1)!.id }
@@ -298,15 +327,15 @@ export const useCommerceStore = defineStore('commerce', () => {
       return result
     }
     catch (err) {
-      if (isRequestCurrent(context) && revision === accountRequestRevision) {
+      if (isOperationCurrent(context, options) && revision === accountRequestRevision) {
         error.value = err
         accountError.value = err
       }
       throw err
     }
     finally {
-      if (isRequestCurrent(context) && revision === accountRequestRevision)
-        isLoading.value = false
+      options.signal?.removeEventListener('abort', clearLoading)
+      clearLoading()
     }
   }
 
@@ -417,66 +446,147 @@ export const useCommerceStore = defineStore('commerce', () => {
     }
   }
 
-  async function fetchCheckInState() {
+  async function fetchCheckInState(options: CommerceRequestOptions = {}, duringClaim = false) {
     if (!auth.isAuthenticated) {
       checkInState.value = undefined
       return undefined
     }
 
+    // A read started during a claim could return the pre-claim balance/status.
+    if (isClaimingCheckIn.value && !duringClaim)
+      return checkInState.value
+
     const context = captureRequestContext()
+    const revision = ++checkInRequestRevision
+    isLoadingCheckIn.value = true
+    const clearLoading = () => {
+      if (isRequestCurrent(context) && revision === checkInRequestRevision)
+        isLoadingCheckIn.value = false
+    }
+    options.signal?.addEventListener('abort', clearLoading, { once: true })
+    if (options.signal?.aborted)
+      clearLoading()
     error.value = null
     checkInError.value = null
     try {
       const result = await readCommerceResponse<CommerceCheckInState>(
         await fetch(commerceUrl('/api/commerce/check-in'), {
           credentials: 'include',
+          ...(options.signal ? { signal: options.signal } : {}),
         }),
       )
-      if (isRequestCurrent(context))
+      if (isOperationCurrent(context, options) && revision === checkInRequestRevision)
         checkInState.value = result
       return result
     }
     catch (err) {
-      if (isRequestCurrent(context)) {
-        error.value = err
-        checkInError.value = err
-      }
-      throw err
-    }
-  }
-
-  async function claimDailyCheckIn() {
-    if (!auth.isAuthenticated)
-      throw new Error('Login is required before claiming daily check-in points')
-
-    const context = captureRequestContext()
-    isClaimingCheckIn.value = true
-    error.value = null
-    checkInError.value = null
-    try {
-      const result = await readCommerceResponse<CommerceCheckInClaimResult>(
-        await fetch(commerceUrl('/api/commerce/check-in/claim'), {
-          method: 'POST',
-          credentials: 'include',
-        }),
-      )
-      if (isRequestCurrent(context)) {
-        checkInState.value = result.state
-        await fetchAccountState().catch(() => undefined)
-      }
-      return result
-    }
-    catch (err) {
-      if (isRequestCurrent(context)) {
+      if (isOperationCurrent(context, options) && revision === checkInRequestRevision) {
         error.value = err
         checkInError.value = err
       }
       throw err
     }
     finally {
-      if (isRequestCurrent(context))
-        isClaimingCheckIn.value = false
+      options.signal?.removeEventListener('abort', clearLoading)
+      clearLoading()
     }
+  }
+
+  function claimDailyCheckIn(options: CommerceRequestOptions = {}): Promise<CommerceCheckInClaimResult> {
+    if (!auth.ready || !auth.isAuthenticated)
+      return Promise.reject(new Error('Login is required before claiming daily check-in points'))
+    if (options.signal?.aborted)
+      return Promise.reject(options.signal.reason)
+    if (options.isCurrent?.() === false)
+      return Promise.reject(new DOMException('Daily check-in was cancelled', 'AbortError'))
+    if (checkInClaimPromise)
+      return checkInClaimPromise
+
+    const context = captureRequestContext()
+    const controller = new AbortController()
+    checkInClaimController = controller
+    const deadline = setTimeout(() => controller.abort(new DOMException('Daily check-in timed out', 'TimeoutError')), 30_000)
+    const abort = () => controller.abort(options.signal?.reason)
+    options.signal?.addEventListener('abort', abort, { once: true })
+    const requestOptions = { ...options, signal: controller.signal }
+    const assertCurrent = () => {
+      if (controller.signal.aborted)
+        throw controller.signal.reason
+      if (!auth.ready || !isOperationCurrent(context, requestOptions))
+        throw new DOMException('Daily check-in was cancelled', 'AbortError')
+    }
+    isClaimingCheckIn.value = true
+    const claim = async () => {
+      await auth.waitUntilReady()
+      if (auth.isRefreshingSession)
+        await auth.refreshSession()
+      assertCurrent()
+      // Account initialization grants the welcome balance. It must finish
+      // before checking whether today's reward fits the server's storage cap.
+      const initializedAccount = await fetchAccountState(requestOptions)
+      assertCurrent()
+      if (initializedAccount?.balance.userId !== context.userId)
+        throw new CommerceApiError('The commerce account no longer matches the signed-in user', 'UNAUTHORIZED', undefined, 401)
+      const state = await fetchCheckInState(requestOptions, true)
+      assertCurrent()
+      if (!state)
+        throw new Error('Daily check-in state is unavailable')
+      if (!state.canClaim || state.capReached || !(state.nextRewardPoints > 0))
+        return { checkIn: { rewardPoints: 0 }, state }
+
+      const revision = ++checkInRequestRevision
+      isLoadingCheckIn.value = false
+      error.value = null
+      checkInError.value = null
+      assertCurrent()
+      const result = await readCommerceResponse<CommerceCheckInClaimResult>(
+        await fetch(commerceUrl('/api/commerce/check-in/claim'), {
+          method: 'POST',
+          credentials: 'include',
+          signal: controller.signal,
+        }),
+      )
+      assertCurrent()
+      if (revision === checkInRequestRevision) {
+        checkInState.value = result.state
+        if (result.checkIn.rewardPoints > 0)
+          checkInRefreshSignal.value = { userId: context.userId!, revision: crypto.randomUUID() }
+        await fetchAccountState(requestOptions).catch(() => undefined)
+        assertCurrent()
+      }
+      return result
+    }
+    // Manual and automatic calls share this account-scoped lock across windows.
+    // Always re-read under the lock: another window may have just claimed.
+    let rejectCancelled: () => void = () => {}
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      rejectCancelled = () => reject(controller.signal.reason)
+      controller.signal.addEventListener('abort', rejectCancelled, { once: true })
+    })
+    // Race the callback itself so a transport that ignores AbortSignal cannot
+    // hold the cross-window lock or local single-flight slot indefinitely.
+    const boundedClaim = () => Promise.race([claim(), cancelled])
+    const task = typeof navigator !== 'undefined' && navigator.locks
+      ? navigator.locks.request(`airi:daily-check-in:${context.userId}`, { signal: controller.signal }, boundedClaim)
+      : Promise.resolve().then(boundedClaim)
+    const promise = Promise.race([task, cancelled]).catch((err) => {
+      if (isOperationCurrent(context, requestOptions)) {
+        error.value = err
+        checkInError.value = err
+      }
+      throw err
+    }).finally(() => {
+      clearTimeout(deadline)
+      controller.signal.removeEventListener('abort', rejectCancelled)
+      options.signal?.removeEventListener('abort', abort)
+      if (checkInClaimPromise === promise) {
+        checkInClaimPromise = undefined
+        checkInClaimController = undefined
+        isClaimingCheckIn.value = false
+      }
+    })
+    checkInClaimPromise = promise
+    return promise
   }
 
   async function redeemActivationCode(code: string) {
@@ -675,8 +785,12 @@ export const useCommerceStore = defineStore('commerce', () => {
   }
 
   function reset() {
+    checkInClaimController?.abort()
+    checkInClaimController = undefined
+    checkInClaimPromise = undefined
     requestGeneration += 1
     accountRequestRevision += 1
+    checkInRequestRevision += 1
     requestHistoryRequestRevision += 1
     stopPaymentPolling()
     account.value = undefined
@@ -686,6 +800,9 @@ export const useCommerceStore = defineStore('commerce', () => {
     requestHistoryCursor.value = undefined
     requestHistoryServerNow.value = undefined
     checkInState.value = undefined
+    isLoading.value = false
+    isLoadingCheckIn.value = false
+    isClaimingCheckIn.value = false
     paymentProducts.value = []
     paymentMethods.value = []
     paymentOrders.value = []
@@ -707,6 +824,9 @@ export const useCommerceStore = defineStore('commerce', () => {
     requestHistoryError.value = null
   }
 
+  watch([() => auth.user?.id, () => auth.isAuthenticated], () => reset(), { flush: 'sync' })
+  onScopeDispose(() => checkInClaimController?.abort())
+
   return {
     account,
     accountError,
@@ -716,6 +836,8 @@ export const useCommerceStore = defineStore('commerce', () => {
     activePlan,
     availablePoints,
     balance,
+    autoCheckInEnabled,
+    checkInRefreshSignal,
     checkInState,
     checkInError,
     error,
@@ -725,6 +847,7 @@ export const useCommerceStore = defineStore('commerce', () => {
     paymentProductsError,
     isClaimingCheckIn,
     isLoading,
+    isLoadingCheckIn,
     isLoadingMoreLedger,
     isLoadingMoreRequestHistory,
     isLoadingRequestHistory,

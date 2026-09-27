@@ -29,6 +29,7 @@ import { deriveAiriInnerVoiceMoodTags, generateAiriInnerVoiceNote, shouldPrewarm
 import { createDefaultAiriRelationshipState } from './persona-relationship-state'
 import { useChatPersonaRuntimeStore } from './persona-runtime-store'
 import { createDefaultAiriPersonaState } from './persona-state'
+import { isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 import { useChatSessionStore } from './session-store'
 
 interface EnsureAssistantInnerVoiceNoteInput {
@@ -393,15 +394,18 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
   }
 
   async function ensureNoteForMessage(input: EnsureAssistantInnerVoiceNoteInput) {
-    if (!input.sessionId || !input.messageId || !input.assistantText.trim())
+    if (!input.sessionId || !input.messageId || !input.assistantText.trim() || isSessionMemoryWorkCancelled(input.sessionId))
       return null
 
+    const scope = resolveNoteScope(input)
     const key = messageKey(input.sessionId, input.messageId)
     const existingNote = notesByMessageKey.value[key]
     if (existingNote?.text)
       return existingNote
 
     const persistedNote = await innerVoiceNotesRepo.getNote(input.sessionId, input.messageId)
+    if (isSessionMemoryWorkCancelled(input.sessionId))
+      return null
     if (persistedNote?.text) {
       cacheNote(persistedNote)
       return persistedNote
@@ -447,6 +451,8 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
         }
         // NOTICE: Start the generation timeout only after any user consent dialog closes.
         // A blocking confirmation must not consume the model request's response budget.
+        if (isSessionMemoryWorkCancelled(input.sessionId) || input.abortSignal?.aborted)
+          return null
         linkedAbort = createLinkedAbortSignal(input.abortSignal, input.timeoutMs ?? 20_000)
         const generationInput: AiriInnerVoiceNoteGenerationInput = {
           stream: client.stream,
@@ -477,12 +483,11 @@ export const useAssistantInnerVoiceNoteStore = defineStore('assistant-inner-voic
         }
 
         const noteText = await generateAiriInnerVoiceNote(generationInput)
-        if (!noteText || linkedAbort.signal.aborted) {
+        if (!noteText || linkedAbort.signal.aborted || isSessionMemoryWorkCancelled(input.sessionId)) {
           setGenerationError(key, NO_NOTE_GENERATED_MESSAGE)
           return null
         }
 
-        const scope = resolveNoteScope(input)
         return await upsertNote({
           messageId: input.messageId!,
           sessionId: input.sessionId!,

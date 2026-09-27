@@ -15,6 +15,10 @@
     "directory": "packages/server-shared"
   },
   "exports": {
+    "./vision-limits": {
+      "types": "./dist/vision-limits.d.mts",
+      "default": "./dist/vision-limits.mjs"
+    },
     "./types": {
       "types": "./dist/types/index.d.mts",
       "default": "./dist/types/index.mjs"

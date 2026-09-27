@@ -761,6 +761,9 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
+      "@proj-airi/server-shared":
+        specifier: workspace:*
+        version: link:../../packages/server-shared
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^2.0.0

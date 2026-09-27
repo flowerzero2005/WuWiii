@@ -5,6 +5,7 @@ import type { WidgetsWindowManager } from '../widgets'
 
 import { join, resolve } from 'node:path'
 
+import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { BrowserWindow, shell } from 'electron'
 
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
@@ -42,6 +43,8 @@ export function setupChatWindowReusableFunc(params: {
       shell.openExternal(details.url)
       return { action: 'deny' }
     })
+
+    initScreenCaptureForWindow(window)
 
     await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/chat'))
 

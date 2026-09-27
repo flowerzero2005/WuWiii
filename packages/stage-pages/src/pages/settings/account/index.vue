@@ -10,7 +10,7 @@ import { useCommerceStore } from '@proj-airi/stage-ui/stores/commerce'
 import { buildUsageHistoryDisplay } from '@proj-airi/stage-ui/stores/commerce-usage-history-display'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useProfileStore } from '@proj-airi/stage-ui/stores/profile'
-import { BasicTextarea, Button, Input, SelectTab } from '@proj-airi/ui'
+import { BasicTextarea, Button, Checkbox, Input, SelectTab } from '@proj-airi/ui'
 import { useEventListener, useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
@@ -29,7 +29,7 @@ const officialPricingStore = useOfficialPricingStore()
 const profileStore = useProfileStore()
 
 const { isAuthenticated, user } = storeToRefs(authStore)
-const { account, accountError, activeEntitlements, activePlan, availablePoints, balance, checkInState, isClaimingCheckIn, isLoading, isLoadingMoreLedger, isLoadingMoreRequestHistory, isLoadingRequestHistory, isRedeeming, ledgerCursor, recentLedger, requestHistory, requestHistoryAvailable, requestHistoryCursor, requestHistoryError, requestHistoryServerNow } = storeToRefs(commerceStore)
+const { account, accountError, activeEntitlements, activePlan, autoCheckInEnabled, availablePoints, balance, checkInError, checkInRefreshSignal, checkInState, isClaimingCheckIn, isLoading, isLoadingCheckIn, isLoadingMoreLedger, isLoadingMoreRequestHistory, isLoadingRequestHistory, isRedeeming, ledgerCursor, recentLedger, requestHistory, requestHistoryAvailable, requestHistoryCursor, requestHistoryError, requestHistoryServerNow } = storeToRefs(commerceStore)
 const { isSaving: isProfileSaving, profile } = storeToRefs(profileStore)
 
 const activationCode = ref('')
@@ -66,6 +66,9 @@ const profileRemoteAvatarUrl = ref('')
 const profileAvatarDataUrl = ref('')
 const profileBio = ref('')
 const accountActivityTab = ref<'usage' | 'balance'>('usage')
+const pricingSection = ref<HTMLElement>()
+let accountViewGeneration = 0
+onBeforeUnmount(() => { accountViewGeneration += 1 })
 
 const AVATAR_OUTPUT_SIZE = 256
 const MAX_AVATAR_SOURCE_BYTES = 8 * 1024 * 1024
@@ -104,7 +107,32 @@ const canSubmitEmailAuth = computed(() => {
   return true
 })
 const canRedeem = computed(() => isAuthenticated.value && normalizedActivationCode.value.length > 0 && !isRedeeming.value)
-const canClaimCheckIn = computed(() => isAuthenticated.value && !!checkInState.value?.canClaim && !isClaimingCheckIn.value)
+const checkInDisplayStatus = computed(() => {
+  if (isLoadingCheckIn.value || (isLoading.value && !account.value))
+    return 'loading'
+  if (checkInError.value || accountError.value)
+    return 'error'
+  const state = checkInState.value
+  if (!state || !balance.value)
+    return 'unavailable'
+  // An upgrade can allow a second claim even though today's check-in is recorded.
+  if (state.upgradeRefreshAvailable)
+    return state.capReached ? 'upgrade-full' : state.canClaim ? 'upgrade' : 'unavailable'
+  if (state.claimedToday)
+    return 'claimed'
+  if (state.capReached)
+    return 'full'
+  return state.canClaim ? 'available' : 'unavailable'
+})
+const checkInReady = computed(() => !['loading', 'error', 'unavailable'].includes(checkInDisplayStatus.value))
+const canClaimCheckIn = computed(() => isAuthenticated.value && !isClaimingCheckIn.value
+  && ['available', 'upgrade'].includes(checkInDisplayStatus.value))
+const checkInBucketLabel = computed(() => t(checkInState.value?.plan === 'free'
+  ? 'settings.pages.account.sections.check-in.trial-points'
+  : 'settings.pages.account.sections.check-in.membership-points'))
+const checkInBucketBalance = computed(() => checkInState.value?.plan === 'free'
+  ? balance.value?.trialPoints
+  : checkInState.value?.membershipPoints)
 function formatPlanLabel(plan: string) {
   const labels: Record<string, string> = {
     free: t('settings.pages.account.plans.free'),
@@ -115,16 +143,36 @@ function formatPlanLabel(plan: string) {
   }
   return labels[plan] ?? plan
 }
-const checkInDescription = computed(() => checkInState.value?.plan === 'free'
-  ? t('settings.pages.account.sections.check-in.description-free', {
-      cap: formatNumber(checkInState.value.storageCapPoints),
-      points: formatNumber(checkInState.value.dailyRewardPoints),
+const checkInDescription = computed(() => {
+  const state = checkInState.value
+  if (!state)
+    return ''
+  return t(`settings.pages.account.sections.check-in.policy-${state.plan === 'free' ? 'free' : 'member'}`, {
+    plan: formatPlanLabel(state.plan),
+    points: formatNumber(state.dailyRewardPoints),
+  })
+})
+const checkInStatusMessage = computed(() => {
+  const status = checkInDisplayStatus.value
+  if (status === 'available')
+    return ''
+  return t(`settings.pages.account.sections.check-in.${status === 'unavailable' ? 'error' : status}-description`, {
+    bucket: checkInBucketLabel.value,
+  })
+})
+const checkInButtonLabel = computed(() => {
+  if (isClaimingCheckIn.value)
+    return t('settings.pages.account.sections.check-in.claiming')
+  const status = checkInDisplayStatus.value
+  if (status === 'available' || status === 'upgrade') {
+    return t(`settings.pages.account.actions.${status === 'upgrade' ? 'claim-check-in-upgrade-points' : 'claim-check-in-points'}`, {
+      points: formatNumber(checkInState.value!.nextRewardPoints),
     })
-  : t('settings.pages.account.sections.check-in.description-member', {
-      cap: formatNumber(checkInState.value?.storageCapPoints ?? 0),
-      plan: formatPlanLabel(checkInState.value?.plan ?? activePlan.value),
-      points: formatNumber(checkInState.value?.dailyRewardPoints ?? 0),
-    }))
+  }
+  if (status === 'full' || status === 'upgrade-full')
+    return t('settings.pages.account.sections.check-in.bucket-full', { bucket: checkInBucketLabel.value })
+  return t(`settings.pages.account.sections.check-in.${status === 'loading' ? 'loading' : status === 'claimed' ? 'claimed' : 'unavailable'}`)
+})
 const currentEntitlement = computed(() => activeEntitlements.value[0])
 const displayLedger = computed(() => buildDisplayLedger(recentLedger.value))
 const usageHistoryDisplay = computed(() => buildUsageHistoryDisplay(requestHistory.value, {
@@ -174,11 +222,6 @@ const membershipIdentity = computed(() => ({
   lite: t('settings.pages.account.membership-identities.lite'),
   pro: t('settings.pages.account.membership-identities.pro'),
 }[activePlan.value] ?? t('settings.pages.account.membership-identities.free')))
-const availablePointsTone = computed(() => availablePoints.value >= 150_000
-  ? 'text-[var(--airi-accent-strong)]'
-  : availablePoints.value >= 50_000
-    ? 'text-[var(--airi-text)]'
-    : 'text-[var(--airi-text-muted)]')
 const profileInitial = computed(() => (profile.value?.displayName || user.value?.name || user.value?.email || '?').trim().charAt(0).toUpperCase())
 const profileDraftInitial = computed(() => (profileDisplayName.value || profileHandle.value || '?').trim().charAt(0).toUpperCase())
 const profileAvatarDraftUrl = computed(() => profileAvatarDataUrl.value || profileRemoteAvatarUrl.value.trim())
@@ -553,16 +596,37 @@ async function refreshAccountState() {
   if (!isAuthenticated.value)
     return
 
+  const userId = user.value?.id
+  const generation = accountViewGeneration
   try {
+    await commerceStore.fetchAccountState()
+    if (generation !== accountViewGeneration || userId !== user.value?.id || !isAuthenticated.value)
+      return
     await Promise.all([
-      commerceStore.fetchAccountState(),
       commerceStore.fetchCheckInState(),
       commerceStore.fetchRequestHistory(),
       profileStore.fetchProfile(),
     ])
   }
   catch (error) {
-    toast.error(error instanceof Error ? error.message : t('settings.pages.account.status.fetch-failed'))
+    if (generation === accountViewGeneration && userId === user.value?.id && isAuthenticated.value)
+      toast.error(error instanceof Error ? error.message : t('settings.pages.account.status.fetch-failed'))
+  }
+}
+
+async function retryCheckIn() {
+  if (!isAuthenticated.value || isLoading.value || isLoadingCheckIn.value || isClaimingCheckIn.value)
+    return
+  const userId = user.value?.id
+  const generation = accountViewGeneration
+  try {
+    await commerceStore.fetchAccountState()
+    if (generation !== accountViewGeneration || userId !== user.value?.id || !isAuthenticated.value)
+      return
+    await commerceStore.fetchCheckInState()
+  }
+  catch {
+    // Expose failures inline; refresh balance/status without submitting a daily claim.
   }
 }
 
@@ -783,28 +847,41 @@ async function claimCheckIn() {
   if (!canClaimCheckIn.value)
     return
 
+  const userId = user.value?.id
+  const generation = accountViewGeneration
   try {
-    const result = await commerceStore.claimDailyCheckIn()
-    toast.success(t('settings.pages.account.status.check-in-claimed', {
-      points: result.checkIn.rewardPoints,
-    }))
+    await commerceStore.claimDailyCheckIn()
+    if (generation === accountViewGeneration && userId === user.value?.id && isAuthenticated.value)
+      toast.success(t('settings.pages.account.status.check-in-updated'))
   }
   catch (error) {
-    toast.error(error instanceof Error ? error.message : t('settings.pages.account.status.check-in-failed'))
+    if (generation !== accountViewGeneration || userId !== user.value?.id || !isAuthenticated.value)
+      return
+    if (error instanceof Error && error.name === 'AbortError')
+      return
+    toast.error(error instanceof Error && error.name === 'TimeoutError'
+      ? t('settings.pages.account.status.check-in-timeout')
+      : error instanceof Error ? error.message : t('settings.pages.account.status.check-in-failed'))
   }
 }
 
-watch(isAuthenticated, async (authenticated) => {
+watch([isAuthenticated, () => user.value?.id], async ([authenticated, userId], previous) => {
+  accountViewGeneration += 1
+  if (!authenticated || (previous?.[1] && previous[1] !== userId)) {
+    commerceStore.reset()
+    profileStore.reset()
+  }
   if (authenticated) {
     await refreshAccountState()
-    return
   }
-
-  commerceStore.reset()
-  profileStore.reset()
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 
 useEventListener('focus', () => void refreshAccountState())
+
+watch(checkInRefreshSignal, (signal) => {
+  if (signal && isAuthenticated.value && signal.userId === user.value?.id)
+    void refreshAccountState()
+})
 
 const { pause: pauseUsagePolling, resume: resumeUsagePolling } = useIntervalFn(() => {
   if (!isAuthenticated.value || !hasProcessingUsage.value || isLoading.value || isLoadingRequestHistory.value)
@@ -832,58 +909,47 @@ watch(profile, () => {
 </script>
 
 <template>
-  <div data-airi-runtime-route="/settings/account" :class="['mx-auto flex w-full max-w-[76rem] flex-col gap-6 pb-8']">
-    <section
-      :class="[
-        'overflow-hidden rounded-lg border border-[var(--airi-border-subtle)]',
-        'bg-[var(--airi-surface-card)]',
-      ]"
-    >
-      <div
-        :class="[
-          'grid',
-          'grid-cols-1',
-          'items-start',
-          'gap-5 px-5 py-5',
-          'md:grid-cols-[minmax(0,1fr)_auto]',
-        ]"
-      >
-        <div :class="['flex', 'min-w-0', 'flex-col', 'gap-2']">
-          <div :class="['flex', 'items-center', 'gap-2']">
-            <div :class="['grid size-10 place-items-center rounded-md bg-[var(--airi-accent-surface)] text-[var(--airi-accent-strong)]']">
-              <span :class="['i-solar:home-smile-angle-bold-duotone size-5']" />
-            </div>
-            <div :class="['text-2xl font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.overview.title') }}
-            </div>
-          </div>
-          <p :class="['max-w-2xl text-sm leading-6 airi-text-muted']">
-            {{ t('settings.pages.account.sections.overview.description') }}
-          </p>
-        </div>
-
-        <div :class="['flex', 'flex-wrap', 'gap-2', 'md:justify-end']">
-          <Button
-            v-if="isAuthenticated"
-            variant="secondary-muted"
-            icon="i-solar:refresh-bold"
-            :loading="isLoading"
-            @click="refreshAccountState"
-          >
-            {{ t('settings.pages.account.actions.refresh') }}
-          </Button>
-          <Button
-            v-if="isAuthenticated"
-            variant="danger"
-            icon="i-solar:logout-2-bold"
-            :loading="isSigningOut"
-            @click="handleSignOut"
-          >
-            {{ t('settings.pages.account.actions.sign-out') }}
-          </Button>
-        </div>
+  <div data-airi-runtime-route="/settings/account" :class="['mx-auto flex min-w-0 w-full max-w-[76rem] flex-col gap-5 pb-8']">
+    <header :class="['flex flex-wrap items-center justify-between gap-x-5 gap-y-3']">
+      <div :class="['min-w-0']">
+        <h1 :class="['text-xl font-semibold tracking-tight airi-text']">
+          {{ t('settings.pages.account.sections.overview.title') }}
+        </h1>
+        <p :class="['mt-1 text-sm leading-5 airi-text-muted']">
+          {{ t('settings.pages.account.sections.overview.description') }}
+        </p>
       </div>
-    </section>
+      <div :class="['flex flex-wrap items-center gap-2']">
+        <Button
+          v-if="isAuthenticated"
+          variant="ghost"
+          size="sm"
+          @click="pricingSection?.scrollIntoView({ block: 'start', behavior: 'auto' })"
+        >
+          {{ t('settings.pages.account.actions.view-pricing') }}
+        </Button>
+        <Button
+          v-if="isAuthenticated"
+          size="sm"
+          variant="secondary-muted"
+          icon="i-solar:refresh-bold"
+          :loading="isLoading"
+          @click="refreshAccountState"
+        >
+          {{ t('settings.pages.account.actions.refresh') }}
+        </Button>
+        <Button
+          v-if="isAuthenticated"
+          size="sm"
+          variant="ghost"
+          icon="i-solar:logout-2-bold"
+          :loading="isSigningOut"
+          @click="handleSignOut"
+        >
+          {{ t('settings.pages.account.actions.sign-out') }}
+        </Button>
+      </div>
+    </header>
 
     <section
       v-if="!isAuthenticated"
@@ -1044,20 +1110,15 @@ watch(profile, () => {
     </section>
 
     <template v-else>
-      <section :class="['relative grid grid-cols-1 overflow-hidden rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] shadow-[0_12px_36px_-28px_rgba(0,0,0,0.42)] lg:grid-cols-[minmax(0,1fr)_15rem_17rem]']">
-        <div :class="['absolute inset-y-0 left-0 w-1 bg-[var(--airi-accent-strong)] opacity-80']" aria-hidden="true" />
-        <div
-          :class="[
-            'p-4 pl-5 lg:border-r lg:border-[var(--airi-border-subtle)]',
-          ]"
-        >
-          <div :class="['mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase text-[var(--airi-text-soft)]']">
+      <section :class="['account-overview-grid gap-5 rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5']">
+        <div :class="['min-w-0 py-1']">
+          <div :class="['mb-4 flex items-center gap-2 text-xs font-medium airi-text-muted']">
             <span :class="['i-solar:home-angle-bold-duotone size-4 text-[var(--airi-accent-strong)]']" />
             {{ t('settings.pages.account.sections.profile.doorplate') }}
           </div>
-          <div :class="['mb-3', 'flex', 'items-start', 'justify-between', 'gap-3']">
+          <div :class="['flex items-start justify-between gap-3']">
             <div :class="['flex', 'min-w-0', 'items-center', 'gap-3']">
-              <div :class="['size-12 shrink-0 overflow-hidden rounded-full border-2 border-[var(--airi-border-accent)] bg-[var(--airi-surface-control-muted)] flex items-center justify-center text-lg font-semibold text-[var(--airi-accent-strong)]']">
+              <div :class="['grid size-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-[var(--airi-border-accent)] bg-[var(--airi-accent-surface)] text-xl font-semibold text-[var(--airi-accent-strong)]']">
                 <img
                   v-if="profile?.avatarUrl && !avatarLoadFailed"
                   :src="profile.avatarUrl"
@@ -1068,10 +1129,10 @@ watch(profile, () => {
                 <span v-else>{{ profileInitial }}</span>
               </div>
               <div :class="['min-w-0']">
-                <div :class="['truncate text-lg font-semibold']">
+                <div :class="['break-words text-xl font-semibold leading-7 airi-text']">
                   {{ profile?.displayName || user?.name || user?.email || t('settings.pages.account.common.signed-in') }}
                 </div>
-                <div :class="['truncate', 'text-xs', 'airi-text-muted']">
+                <div :class="['mt-1 break-all text-sm airi-text-muted']">
                   {{ profile?.handle ? `@${profile.handle}` : visibleAccountEmail }}
                 </div>
               </div>
@@ -1080,13 +1141,16 @@ watch(profile, () => {
               size="sm"
               variant="secondary-muted"
               icon="i-solar:pen-new-square-bold"
-              :class="['size-9 !px-0 !py-0']"
+              :class="['size-9 shrink-0 !px-0 !py-0']"
               :aria-label="t('settings.pages.account.actions.edit-profile')"
               :title="t('settings.pages.account.actions.edit-profile')"
               @click="startProfileEdit"
             />
           </div>
-          <div :class="['truncate', 'text-xs', 'airi-text-muted']">
+          <p v-if="profile?.bio" :class="['mt-3 line-clamp-2 break-words text-sm leading-6 airi-text-muted']">
+            {{ profile.bio }}
+          </p>
+          <div v-if="profile?.handle" :class="['mt-3 break-all text-xs airi-text-muted']">
             {{ visibleAccountEmail }}
           </div>
           <div :class="['mt-2', 'flex', 'min-w-0', 'items-center', 'gap-2']">
@@ -1097,7 +1161,7 @@ watch(profile, () => {
               size="sm"
               variant="secondary-muted"
               icon="i-solar:copy-bold"
-              :class="['size-9 !px-0 !py-0']"
+              :class="['size-8 shrink-0 !px-0 !py-0']"
               :aria-label="t('settings.pages.account.actions.copy-user-id')"
               :title="t('settings.pages.account.actions.copy-user-id')"
               @click="copyUserId"
@@ -1105,184 +1169,37 @@ watch(profile, () => {
           </div>
         </div>
 
-        <button
-          type="button"
-          :class="[
-            'border-t border-amber-400/25 bg-amber-500/8 p-4 lg:border-r lg:border-t-0',
-            'text-left outline-none transition-colors hover:bg-amber-500/13 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500/40',
-          ]"
-          @click="router.push('/settings/account/membership')"
-        >
-          <div :class="['mb-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300']">
-            <div :class="['i-solar:crown-star-bold-duotone', 'text-lg']" />
-            {{ t('settings.pages.account.sections.plan.title') }}
-          </div>
-          <div :class="['text-2xl font-semibold airi-text']">
-            {{ membershipIdentity }}
-          </div>
-          <div :class="['mt-1 text-xs airi-text-muted']">
-            {{ t('settings.pages.account.sections.plan.valid-until', { date: formatDate(currentEntitlement?.validUntil) }) }}
-          </div>
-          <div :class="['mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300']">
-            {{ t('settings.pages.account.actions.manage-membership') }}
-            <span :class="['i-solar:alt-arrow-right-linear size-4']" />
-          </div>
-        </button>
-
-        <div
-          :class="[
-            'border-t border-sky-400/25 bg-sky-500/7 p-4 lg:border-t-0',
-          ]"
-        >
-          <div :class="['mb-2 flex items-center gap-2 text-sm text-sky-700 dark:text-sky-300']">
-            <div :class="['i-solar:bolt-bold-duotone', 'text-lg']" />
-            {{ t('settings.pages.account.sections.points.title') }}
-          </div>
-          <div :class="['flex', 'items-center', 'gap-3']">
-            <div :class="['text-3xl font-semibold tabular-nums', availablePointsTone]">
-              {{ account ? formatNumber(availablePoints) : '—' }}
+        <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4']">
+          <div :class="['flex flex-wrap items-center justify-between gap-2']">
+            <div :class="['flex items-center gap-2 text-sm airi-text-muted']">
+              <span :class="['i-solar:wallet-money-bold-duotone size-4']" />
+              {{ t('settings.pages.account.sections.points.title') }}
             </div>
+            <span :class="['inline-flex max-w-full items-center gap-1.5 rounded-full bg-[var(--airi-accent-surface)] px-2.5 py-1 text-xs font-medium text-[var(--airi-accent-text)]']">
+              <span aria-hidden="true" :class="['i-solar:crown-star-bold-duotone size-3.5 shrink-0']" />
+              <span :class="['break-words']">{{ membershipIdentity }}</span>
+            </span>
+          </div>
+          <div :class="['mt-3 break-all text-3xl font-semibold tabular-nums tracking-tight text-[var(--airi-accent-strong)]']">
+            {{ account ? formatNumber(availablePoints) : '—' }}
+          </div>
+          <p :class="['mt-1 text-xs leading-5 airi-text-muted']">
+            {{ t('settings.pages.account.sections.points.available') }}
+          </p>
+          <div :class="['mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--airi-border-subtle)] pt-3']">
+            <span :class="['min-w-0 text-xs leading-5 airi-text-muted']">
+              {{ t('settings.pages.account.sections.plan.valid-until', { date: formatDate(currentEntitlement?.validUntil) }) }}
+            </span>
             <Button
               size="sm"
-              variant="secondary-muted"
-              icon="i-solar:refresh-bold"
-              :disabled="isLoading"
-              :loading="isLoading"
-              :aria-label="t('settings.pages.account.actions.refresh')"
-              :title="t('settings.pages.account.actions.refresh')"
-              @click="refreshAccountState"
+              variant="ghost"
+              icon="i-solar:alt-arrow-right-linear"
+              @click="router.push('/settings/account/membership')"
             >
-              {{ t('settings.pages.account.actions.refresh') }}
+              {{ t('settings.pages.account.actions.manage-membership') }}
             </Button>
           </div>
-          <div :class="['mt-1', 'text-xs', 'opacity-80']">
-            {{ t('settings.pages.account.sections.points.available') }}
-          </div>
         </div>
-      </section>
-
-      <section :class="['rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5']">
-        <div :class="['flex flex-wrap items-start justify-between gap-3']">
-          <div>
-            <h2 :class="['text-base font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.pricing.title') }}
-            </h2>
-            <p :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.description') }}
-            </p>
-          </div>
-          <span :class="['text-[11px] airi-text-muted']">{{ officialPriceSummary ? t('settings.pages.account.sections.pricing.live') : t('settings.pages.account.sections.pricing.loading') }}</span>
-        </div>
-        <div v-if="officialPriceSummary" :class="['mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3']">
-          <div :class="['rounded-md border p-3 airi-border-subtle airi-surface-muted']">
-            <div :class="['text-xs font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.pricing.chat') }}
-            </div>
-            <div v-for="model in officialPriceSummary.models" :key="model.id" :class="['mt-1 flex justify-between gap-2 text-xs airi-text-muted']">
-              <span class="truncate">{{ locale === 'zh-Hans' ? model.nameZh || model.name : model.name }}</span>
-              <span class="shrink-0 tabular-nums">{{ modelDisplayPoints(model) }} {{ t('settings.pages.account.sections.pricing.points-per-unit', { tokens: model.tokenUnit }) }}</span>
-            </div>
-            <p :class="['mt-2 border-t pt-2 text-[11px] leading-5 airi-border-subtle airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.chat-billing-explanation') }}
-            </p>
-          </div>
-          <div :class="['rounded-md border p-3 airi-border-subtle airi-surface-muted']">
-            <div :class="['text-xs font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.pricing.speech') }}
-            </div>
-            <div v-for="chain in officialPriceSummary.capabilities.speech.chains" :key="chain.channel" :class="['mt-1 flex justify-between gap-2 text-xs airi-text-muted']">
-              <span>{{ t(`tamagotchi.settings.pages.official-voices.channels.${chain.channel}`) }}</span>
-              <span class="shrink-0 tabular-nums">{{ chain.pointsPerMinute }} {{ t('settings.pages.account.sections.pricing.points-per-minute') }}</span>
-            </div>
-            <div :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.voice-surcharge-note') }}
-            </div>
-          </div>
-          <div :class="['rounded-md border p-3 airi-border-subtle airi-surface-muted']">
-            <div :class="['text-xs font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.pricing.other') }}
-            </div>
-            <div :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.asr', { first: officialPriceSummary.capabilities.transcription.firstMinutePoints, additional: officialPriceSummary.capabilities.transcription.additionalMinutePoints }) }}
-            </div>
-            <div :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.embedding'), points: officialPriceSummary.capabilities.embedding.pointsPerRequest }) }}
-            </div>
-            <div :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.web-search'), points: officialPriceSummary.capabilities.webSearch.pointsPerRequest }) }}
-            </div>
-            <div v-if="officialPriceSummary.capabilities.vision" :class="['mt-1 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.vision'), points: officialPriceSummary.capabilities.vision.pointsPerRequest }) }}
-            </div>
-          </div>
-          <div :class="['rounded-md border p-3 airi-border-subtle airi-surface-muted md:col-span-2 xl:col-span-3']">
-            <div :class="['text-xs font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.pricing.feature-title') }}
-            </div>
-            <div :class="['mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs airi-text-muted']">
-              <span v-for="feature in officialPriceSummary.features" :key="feature.feature">
-                {{ featurePricingLabel(feature.feature) }} × {{ feature.multiplier }}<template v-if="featureMinimumPoints(feature.feature, feature.multiplier) !== undefined"> · {{ t('settings.pages.account.sections.pricing.minimum', { points: featureMinimumPoints(feature.feature, feature.multiplier) }) }}</template>
-              </span>
-            </div>
-            <p :class="['mt-2 text-xs airi-text-muted']">
-              {{ t('settings.pages.account.sections.pricing.no-official-charge') }}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section :class="['grid gap-4 rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] px-5 py-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center']">
-        <div :class="['flex items-start gap-3']">
-          <div :class="['grid size-9 shrink-0 place-items-center rounded-md bg-[var(--airi-accent-surface)] text-[var(--airi-accent-strong)]']">
-            <span :class="['i-solar:shield-user-bold-duotone size-5']" />
-          </div>
-          <div>
-            <h2 :class="['text-base font-semibold airi-text']">
-              {{ t('settings.pages.account.sections.security.title') }}
-            </h2><p :class="['mt-1 text-xs leading-5 airi-text-muted']">
-              {{ t('settings.pages.account.sections.security.description') }}
-            </p>
-          </div>
-        </div>
-        <div v-if="hasBoundEmail" :class="['flex min-w-0 items-center justify-between gap-3 rounded-md border border-emerald-500/20 bg-emerald-500/7 px-4 py-3']">
-          <span :class="['min-w-0']"><span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.verified-email') }}</span><strong :class="['mt-0.5 block truncate text-sm airi-text']">{{ visibleAccountEmail }}</strong></span>
-          <span :class="['inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300']"><span :class="['i-solar:verified-check-bold size-4']" />{{ t('settings.pages.account.sections.security.verified') }}</span>
-        </div>
-        <form v-else :class="['grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]']" @submit.prevent="handleBindEmail">
-          <Input v-model="bindingEmail" autocomplete="email" type="email" :aria-label="t('settings.pages.account.sections.sign-in.email-label')" :placeholder="t('settings.pages.account.sections.security.email-placeholder')" variant="primary-dimmed" />
-          <Input v-model="bindingEmailCode" autocomplete="one-time-code" inputmode="numeric" maxlength="6" :aria-label="t('settings.pages.account.sections.sign-in.verification-code-label')" :placeholder="t('settings.pages.account.sections.sign-in.verification-code-placeholder')" variant="primary-dimmed" />
-          <div :class="['flex gap-2']">
-            <Button type="button" variant="secondary" :disabled="!canSendBindingEmailCode" :loading="isSendingBindingEmailCode" @click="handleSendBindingEmailCode">
-              {{ bindingEmailCodeButtonLabel }}
-            </Button>
-            <Button type="submit" :disabled="!canBindEmail" :loading="isBindingEmail">
-              {{ t('settings.pages.account.sections.security.bind') }}
-            </Button>
-          </div>
-        </form>
-        <div :class="['grid gap-3 lg:col-span-2 sm:grid-cols-2']">
-          <div :class="['flex items-center justify-between gap-3 rounded-md border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-control-muted)] px-4 py-3']">
-            <span class="min-w-0"><span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.phone') }}</span><strong :class="['mt-0.5 block truncate text-sm airi-text']">{{ visibleAccountPhone }}</strong></span>
-            <span :class="['i-solar:smartphone-2-bold-duotone size-5 text-[var(--airi-accent-strong)]']" />
-          </div>
-          <button type="button" :class="['flex items-center justify-between gap-3 rounded-md border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-control-muted)] px-4 py-3 text-left hover:border-[var(--airi-border-accent)]']" @click="showPasswordForm = !showPasswordForm">
-            <span><span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.password') }}</span><strong :class="['mt-0.5 block text-sm airi-text']">{{ t('settings.pages.account.sections.security.change-password') }}</strong></span>
-            <span :class="['i-solar:key-square-2-bold-duotone size-5 text-[var(--airi-accent-strong)]']" />
-          </button>
-        </div>
-        <form v-if="showPasswordForm" :class="['grid gap-3 rounded-md border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-control-muted)] p-4 lg:col-span-2 sm:grid-cols-3']" @submit.prevent="handleChangePassword">
-          <Input v-model="currentPassword" type="password" show-password-toggle autocomplete="current-password" :placeholder="t('settings.pages.account.sections.security.current-password')" variant="primary-dimmed" />
-          <Input v-model="newPassword" type="password" show-password-toggle autocomplete="new-password" :placeholder="t('settings.pages.account.sections.security.new-password')" variant="primary-dimmed" />
-          <Input v-model="confirmNewPassword" type="password" show-password-toggle autocomplete="new-password" :placeholder="t('settings.pages.account.sections.security.confirm-password')" variant="primary-dimmed" />
-          <div :class="['flex justify-end gap-2 sm:col-span-3']">
-            <Button type="button" variant="secondary" @click="showPasswordForm = false">
-              {{ t('settings.pages.account.actions.cancel') }}
-            </Button>
-            <Button type="submit" :disabled="!canChangePassword" :loading="isChangingPassword">
-              {{ t('settings.pages.account.sections.security.save-password') }}
-            </Button>
-          </div>
-        </form>
       </section>
 
       <DialogRoot :open="isEditingProfile" @update:open="handleProfileDialogOpenChange">
@@ -1386,107 +1303,126 @@ watch(profile, () => {
       </DialogRoot>
 
       <section
+        :aria-busy="isLoadingCheckIn || isClaimingCheckIn"
         :class="[
-          'grid',
-          'grid-cols-1',
-          'items-center',
-          'gap-5 rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] px-5 py-5',
-          'md:grid-cols-[minmax(0,1fr)_auto]',
+          'rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5',
         ]"
       >
-        <div :class="['min-w-0']">
-          <div :class="['mb-2', 'flex', 'items-center', 'gap-2']">
-            <div :class="['i-solar:calendar-mark-bold-duotone', 'text-2xl', 'text-[var(--airi-accent-strong)]']" />
-            <div :class="['text-lg', 'font-medium']">
-              {{ t('settings.pages.account.sections.check-in.title') }}
-            </div>
+        <header :class="['flex flex-wrap items-center justify-between gap-2']">
+          <h2 :class="['flex items-center gap-2 text-base font-medium airi-text']">
+            <span aria-hidden="true" :class="['i-solar:calendar-mark-bold-duotone size-5 text-[var(--airi-accent-strong)]']" />
+            {{ t('settings.pages.account.sections.check-in.title') }}
+          </h2>
+          <span v-if="checkInReady && checkInState" :class="['text-xs airi-text-muted']">
+            {{ t('settings.pages.account.sections.check-in.streak', { days: checkInState.consecutiveDays }) }}
+          </span>
+        </header>
+
+        <div :class="['mt-3 flex items-center justify-between gap-4 rounded-xl bg-[var(--airi-surface-control-muted)] px-3 py-3']">
+          <div :class="['min-w-0']">
+            <label for="account-auto-check-in" :class="['cursor-pointer text-sm font-medium airi-text']">
+              {{ t('settings.pages.account.sections.check-in.auto-label') }}
+            </label>
+            <p id="account-auto-check-in-description" :class="['mt-1 text-xs leading-5 airi-text-muted']">
+              {{ t(`settings.pages.account.sections.check-in.${autoCheckInEnabled ? 'auto-enabled-description' : 'auto-disabled-description'}`) }}
+            </p>
           </div>
-          <p :class="['max-w-2xl', 'text-sm', 'airi-text-muted']">
-            {{ checkInDescription }}
-          </p>
-          <div :class="['mt-3', 'flex', 'flex-wrap', 'gap-2']">
-            <span :class="['rounded-lg', 'airi-surface-glass', 'px-3', 'py-1.5', 'text-sm', 'airi-text']">
-              {{ t('settings.pages.account.sections.check-in.streak', { days: checkInState?.consecutiveDays ?? 0 }) }}
-            </span>
-            <span :class="['rounded-lg', 'airi-surface-glass', 'px-3', 'py-1.5', 'text-sm', 'airi-text']">
-              {{ checkInState?.capReached
-                ? t('settings.pages.account.sections.check-in.cap-reached')
-                : t('settings.pages.account.sections.check-in.next-reward', { points: checkInState?.nextRewardPoints ?? 1000 }) }}
-            </span>
-            <span
-              v-if="checkInState?.claimedToday"
-              :class="['rounded-lg', 'bg-emerald-100', 'px-3', 'py-1.5', 'text-sm', 'text-emerald-700', 'dark:bg-emerald-900/40', 'dark:text-emerald-200']"
+          <Checkbox
+            id="account-auto-check-in"
+            v-model="autoCheckInEnabled"
+            :class="['shrink-0']"
+            aria-describedby="account-auto-check-in-description"
+          />
+        </div>
+
+        <div :class="['mt-3 flex flex-wrap items-center justify-between gap-4']">
+          <div :class="['min-w-0 flex-[1_1_24rem]']">
+            <template v-if="checkInReady && checkInState">
+              <p :class="['text-xs leading-5 airi-text-muted']">{{ checkInDescription }}</p>
+              <dl :class="['mt-3 flex flex-wrap gap-x-8 gap-y-3']">
+                <div :class="['min-w-0']">
+                  <dt :class="['text-xs airi-text-muted']">
+                    {{ t('settings.pages.account.sections.check-in.bucket-capacity', { bucket: checkInBucketLabel }) }}
+                  </dt>
+                  <dd :class="['mt-1 flex flex-wrap items-baseline gap-1 break-all text-lg font-medium tabular-nums airi-text']">
+                    <span>{{ formatNumber(checkInBucketBalance) }}</span>
+                    <span :class="['text-sm font-normal airi-text-muted']">/ {{ formatNumber(checkInState.storageCapPoints) }}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt :class="['text-xs airi-text-muted']">
+                    {{ t('settings.pages.account.sections.check-in.today-reward') }}
+                  </dt>
+                  <dd :class="['mt-1 break-all text-lg font-medium tabular-nums text-[var(--airi-accent-strong)]']">
+                    {{ t('settings.pages.account.sections.check-in.reward-points', { points: formatNumber(checkInState.nextRewardPoints) }) }}
+                  </dd>
+                </div>
+              </dl>
+            </template>
+            <p
+              v-if="checkInStatusMessage"
+              role="status"
+              :class="['text-sm leading-6', checkInReady ? 'mt-3 airi-text-muted' : 'airi-text']"
             >
-              {{ t('settings.pages.account.sections.check-in.claimed') }}
-            </span>
+              {{ checkInStatusMessage }}
+            </p>
+          </div>
+          <div :class="['flex min-w-0 max-w-full flex-wrap items-center gap-2']">
+            <Button
+              v-if="checkInDisplayStatus === 'error' || checkInDisplayStatus === 'unavailable'"
+              variant="secondary-muted"
+              icon="i-solar:refresh-bold"
+              :disabled="isLoading || isLoadingCheckIn || isClaimingCheckIn"
+              :loading="isLoading || isLoadingCheckIn"
+              @click="retryCheckIn"
+            >
+              {{ t('settings.pages.account.sections.check-in.retry') }}
+            </Button>
+            <Button
+              v-else
+              variant="primary"
+              icon="i-solar:gift-bold"
+              :disabled="!canClaimCheckIn"
+              :loading="isClaimingCheckIn || checkInDisplayStatus === 'loading'"
+              @click="claimCheckIn"
+            >
+              {{ checkInButtonLabel }}
+            </Button>
+            <Button
+              v-if="['full', 'upgrade-full', 'claimed'].includes(checkInDisplayStatus)"
+              variant="secondary-muted"
+              size="sm"
+              icon="i-solar:refresh-bold"
+              :title="t('settings.pages.account.sections.check-in.retry')"
+              :aria-label="t('settings.pages.account.sections.check-in.retry')"
+              :disabled="isLoading || isLoadingCheckIn || isClaimingCheckIn"
+              :loading="isLoading || isLoadingCheckIn"
+              @click="retryCheckIn"
+            />
           </div>
         </div>
 
-        <Button
-          variant="primary"
-          icon="i-solar:gift-bold"
-          :disabled="!canClaimCheckIn"
-          :loading="isClaimingCheckIn"
-          @click="claimCheckIn"
-        >
-          {{ t(checkInState?.upgradeRefreshAvailable ? 'settings.pages.account.actions.claim-check-in-upgrade' : 'settings.pages.account.actions.claim-check-in') }}
-        </Button>
+        <div :class="['mt-4 border-t border-[var(--airi-border-subtle)] pt-3 text-xs leading-5 airi-text-muted']">
+          <p :class="['flex flex-wrap items-baseline gap-x-2 gap-y-1']">
+            <span :class="['font-medium tabular-nums airi-text']">
+              {{ t('settings.pages.account.sections.check-in.paid-balance', { points: balance && !accountError ? formatNumber(balance.paidPoints) : '—' }) }}
+            </span>
+            <span>{{ t('settings.pages.account.sections.check-in.paid-separate') }}</span>
+          </p>
+          <p :class="['mt-1']">{{ t('settings.pages.account.sections.check-in.schedule') }}</p>
+          <p>{{ t('settings.pages.account.sections.check-in.capacity-rule') }}</p>
+        </div>
       </section>
 
       <section
         :class="[
-          'grid',
-          'grid-cols-1',
-          'gap-4',
-          'lg:grid-cols-[minmax(20rem,0.7fr)_minmax(0,1.3fr)]',
+          'flex flex-wrap items-start gap-5',
         ]"
       >
-        <form
-          id="account-redeem-card"
-          :class="[
-            'rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5',
-          ]"
-          @submit.prevent="redeemCode"
-        >
-          <div :class="['mb-4', 'flex', 'items-start', 'gap-2']">
-            <div :class="['i-solar:ticket-sale-bold-duotone', 'mt-0.5', 'text-2xl', 'text-[var(--airi-accent-strong)]']" />
-            <div>
-              <div :class="['text-lg', 'font-medium']">
-                {{ t('settings.pages.account.sections.redeem.title') }}
-              </div>
-              <p :class="['text-sm', 'airi-text-muted']">
-                {{ t('settings.pages.account.sections.redeem.description') }}
-              </p>
-            </div>
-          </div>
-
-          <label :class="['flex', 'flex-col', 'gap-2']">
-            <span :class="['text-sm', 'font-medium']">
-              {{ t('settings.pages.account.sections.redeem.code-label') }}
-            </span>
-            <Input
-              v-model="activationCode"
-              :disabled="isRedeeming"
-              :placeholder="t('settings.pages.account.sections.redeem.code-placeholder')"
-              variant="primary-dimmed"
-            />
-          </label>
-
-          <Button
-            :class="['mt-4', 'w-full']"
-            type="submit"
-            icon="i-solar:check-circle-bold"
-            :disabled="!canRedeem"
-            :loading="isRedeeming"
-          >
-            {{ t('settings.pages.account.actions.redeem') }}
-          </Button>
-        </form>
-
         <section
           id="account-balance-card"
           :class="[
-            'rounded-lg border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5',
+            'min-w-0 flex-[2_1_36rem] scroll-mt-5 rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5',
           ]"
         >
           <header :class="['flex', 'items-center', 'gap-3']">
@@ -1512,8 +1448,8 @@ watch(profile, () => {
                 {{ t('settings.pages.account.sections.balance.description') }}
               </p>
 
-              <div v-if="accountError && !account" :class="['rounded-lg', 'border border-amber-300/45 bg-amber-50/55 p-4 dark:bg-amber-950/15']">
-                <p :class="['text-sm text-amber-800 dark:text-amber-200']">
+              <div v-if="accountError && !account" :class="['rounded-xl p-4 airi-status-warning']">
+                <p :class="['text-sm']">
                   {{ t('settings.pages.account.sections.balance.error') }}
                 </p>
                 <Button :class="['mt-3']" variant="secondary-muted" size="sm" icon="i-solar:refresh-bold" @click="handleRetryAccount">
@@ -1524,12 +1460,12 @@ watch(profile, () => {
                 <span :class="['i-svg-spinners:90-ring-with-bg size-4']" />
                 {{ t('settings.pages.account.sections.balance.loading') }}
               </div>
-              <div v-else :class="['grid', 'grid-cols-2', 'gap-3', 'sm:grid-cols-3', 'xl:grid-cols-5']">
+              <div v-else :class="['account-balance-grid gap-2']">
                 <div :class="['rounded-lg', 'airi-surface-glass', 'p-3']">
                   <div :class="['text-xs', 'airi-text-muted']">
                     {{ t('settings.pages.account.points.trial') }}
                   </div>
-                  <div :class="['mt-1', 'text-right', 'text-xl', 'font-medium', 'tabular-nums']">
+                  <div :class="['mt-1 break-all text-lg font-medium tabular-nums']">
                     {{ formatNumber(balance?.trialPoints ?? 0) }}
                   </div>
                 </div>
@@ -1537,7 +1473,7 @@ watch(profile, () => {
                   <div :class="['text-xs', 'airi-text-muted']">
                     {{ t('settings.pages.account.points.grant') }}
                   </div>
-                  <div :class="['mt-1', 'text-right', 'text-xl', 'font-medium', 'tabular-nums']">
+                  <div :class="['mt-1 break-all text-lg font-medium tabular-nums']">
                     {{ formatNumber(balance?.grantPoints ?? 0) }}
                   </div>
                 </div>
@@ -1545,7 +1481,7 @@ watch(profile, () => {
                   <div :class="['text-xs', 'airi-text-muted']">
                     {{ t('settings.pages.account.sections.points.membership') }}
                   </div>
-                  <div :class="['mt-1 text-right text-xl font-medium tabular-nums text-[var(--airi-accent-strong)]']">
+                  <div :class="['mt-1 break-all text-lg font-medium tabular-nums text-[var(--airi-accent-strong)]']">
                     {{ formatNumber(account.membershipPoints) }}
                   </div>
                 </div>
@@ -1553,7 +1489,7 @@ watch(profile, () => {
                   <div :class="['text-xs', 'airi-text-muted']">
                     {{ t('settings.pages.account.points.paid') }}
                   </div>
-                  <div :class="['mt-1', 'text-right', 'text-xl', 'font-medium', 'tabular-nums']">
+                  <div :class="['mt-1 break-all text-lg font-medium tabular-nums']">
                     {{ formatNumber(balance?.paidPoints ?? 0) }}
                   </div>
                 </div>
@@ -1561,7 +1497,7 @@ watch(profile, () => {
                   <div :class="['text-xs', 'airi-text-muted']">
                     {{ t('settings.pages.account.points.reserved') }}
                   </div>
-                  <div :class="['mt-1', 'text-right', 'text-xl', 'font-medium', 'tabular-nums']">
+                  <div :class="['mt-1 break-all text-lg font-medium tabular-nums']">
                     {{ formatNumber(balance?.reservedPoints ?? 0) }}
                   </div>
                 </div>
@@ -1595,9 +1531,9 @@ watch(profile, () => {
                 <div
                   v-for="entry in displayLedger"
                   :key="entry.id"
-                  :class="['grid', 'grid-cols-[minmax(0,1fr)_auto]', 'items-center', 'gap-3', 'py-3']"
+                  :class="['flex flex-wrap items-center justify-between gap-3 py-3']"
                 >
-                  <div :class="['min-w-0']">
+                  <div :class="['min-w-0 flex-[1_1_16rem]']">
                     <div :class="['flex', 'min-w-0', 'items-center', 'gap-2']">
                       <span :class="['truncate', 'font-medium']">
                         {{ formatLedgerType(entry.displayType, entry.note) }}
@@ -1626,7 +1562,7 @@ watch(profile, () => {
                       {{ t('settings.pages.account.sections.ledger.related-usage') }}
                     </div>
                   </div>
-                  <div :class="['text-right', 'tabular-nums']">
+                  <div :class="['min-w-0 max-w-full break-all text-sm tabular-nums']">
                     <div :class="['font-semibold', amountClass(entry.displayAmount)]">
                       {{ entry.displayAmount > 0 ? `+${formatNumber(entry.displayAmount)}` : formatNumber(entry.displayAmount) }}
                     </div>
@@ -1664,23 +1600,23 @@ watch(profile, () => {
 
               <div
                 v-if="!requestHistoryAvailable"
-                :class="['rounded-lg', 'airi-surface-glass', 'flex', 'items-center', 'justify-between', 'gap-3', 'p-4']"
+                :class="['flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 airi-surface-glass']"
               >
                 <p :class="['text-sm', 'airi-text-muted']">
                   {{ t('settings.pages.account.sections.usage-history.unavailable') }}
                 </p>
-                <Button variant="secondary-muted" size="sm" icon="i-solar:refresh-bold" @click="handleRetryUsageHistory">
+                <Button :class="['shrink-0']" variant="secondary-muted" size="sm" icon="i-solar:refresh-bold" @click="handleRetryUsageHistory">
                   {{ t('settings.pages.account.sections.usage-history.retry') }}
                 </Button>
               </div>
               <div
                 v-else-if="requestHistoryError && requestHistory.length === 0"
-                :class="['rounded-lg', 'border', 'border-amber-300/45', 'bg-amber-50/55', 'dark:bg-amber-950/15', 'flex', 'items-center', 'justify-between', 'gap-3', 'p-4']"
+                :class="['flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 airi-status-warning']"
               >
-                <p :class="['text-sm', 'text-amber-800', 'dark:text-amber-200']">
+                <p :class="['text-sm']">
                   {{ t('settings.pages.account.sections.usage-history.error') }}
                 </p>
-                <Button variant="secondary-muted" size="sm" icon="i-solar:refresh-bold" @click="handleRetryUsageHistory">
+                <Button :class="['shrink-0']" variant="secondary-muted" size="sm" icon="i-solar:refresh-bold" @click="handleRetryUsageHistory">
                   {{ t('settings.pages.account.sections.usage-history.retry') }}
                 </Button>
               </div>
@@ -1696,29 +1632,29 @@ watch(profile, () => {
                   v-for="item in usageHistoryDisplay"
                   :key="item.id"
                   :class="[
-                    'group rounded-lg border border-[var(--airi-border-subtle)] airi-surface-glass',
+                    'group rounded-xl border border-[var(--airi-border-subtle)] airi-surface-glass',
                     'transition-colors motion-reduce:transition-none',
                     'focus-within:border-[var(--airi-border-accent)]',
                   ]"
                 >
                   <summary
                     :class="[
-                      'grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-4 py-3',
+                      'flex cursor-pointer list-none flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl px-4 py-3',
                       'outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent-focus)]',
                     ]"
                   >
-                    <div :class="['min-w-0']">
+                    <div :class="['min-w-0 flex-[1_1_16rem]']">
                       <div :class="['flex', 'min-w-0', 'items-center', 'gap-2']">
                         <span :class="['truncate', 'font-medium', 'airi-text']">
                           {{ formatUsageTitle(item) }}
                         </span>
-                        <span v-if="item.isPartial" :class="['shrink-0 rounded-md bg-sky-100/70 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/35 dark:text-sky-200']">
+                        <span v-if="item.isPartial" :class="['rounded-md bg-[var(--airi-accent-surface)] px-1.5 py-0.5 text-[10px] text-[var(--airi-accent-text)]']">
                           {{ t('settings.pages.account.sections.usage-history.groups.partial') }}
                         </span>
                         <span :class="['i-solar:alt-arrow-down-linear', 'size-4', 'shrink-0', 'airi-text-muted', 'transition-transform', 'group-open:rotate-180', 'motion-reduce:transition-none']" />
                       </div>
                       <div :class="['mt-2', 'flex', 'flex-wrap', 'items-center', 'gap-2', 'text-xs', 'airi-text-muted']">
-                        <span :class="['size-1.5', 'shrink-0', 'rounded-full', 'bg-sky-400/70']" />
+                        <span :class="['size-1.5 shrink-0 rounded-full bg-[var(--airi-accent-strong)]']" />
                         <span>{{ t('settings.pages.account.sections.usage-history.time.started', { time: formatUsageTimestamp(item.createdAt) }) }}</span>
                         <span aria-hidden="true">→</span>
                         <span>{{ t('settings.pages.account.sections.usage-history.time.completed', { time: formatUsageTimestamp(item.completedAt) }) }}</span>
@@ -1727,7 +1663,7 @@ watch(profile, () => {
                         {{ t('settings.pages.account.sections.usage-history.time.local', { zone: localTimeZoneLabel }) }}
                       </div>
                     </div>
-                    <div :class="['min-w-28', 'text-right', 'tabular-nums']">
+                    <div :class="['min-w-0 max-w-full break-all text-sm tabular-nums']">
                       <div :class="['font-medium', usageStatusClass(item.billingStatus)]">
                         {{ formatUsageBillingStatus(item.billingStatus) }}
                       </div>
@@ -1738,7 +1674,7 @@ watch(profile, () => {
                   </summary>
 
                   <div :class="['border-t border-[var(--airi-border-subtle)] px-4 py-3']">
-                    <dl :class="['grid grid-cols-2 gap-x-5 gap-y-3 text-xs sm:grid-cols-5']">
+                    <dl :class="['account-usage-details-grid gap-x-5 gap-y-3 text-xs [&_dd]:break-all']">
                       <div>
                         <dt :class="['airi-text-muted']">
                           {{ t('settings.pages.account.sections.usage-history.details.reserved') }}
@@ -1789,9 +1725,9 @@ watch(profile, () => {
                         <div
                           v-for="child in item.children"
                           :key="child.id"
-                          :class="['grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-2 text-xs']"
+                          :class="['flex flex-wrap justify-between gap-3 py-2 text-xs']"
                         >
-                          <div :class="['min-w-0']">
+                          <div :class="['min-w-0 flex-[1_1_12rem]']">
                             <div :class="['truncate font-medium airi-text']">
                               {{ formatUsageKind(child) }}
                             </div>
@@ -1806,7 +1742,7 @@ watch(profile, () => {
                               {{ shortReference(child.id) }}
                             </div>
                           </div>
-                          <div :class="['text-right tabular-nums']">
+                          <div :class="['min-w-0 max-w-full break-all tabular-nums']">
                             <div :class="['font-medium', usageStatusClass(child.billingStatus)]">
                               {{ formatUsageBillingStatus(child.billingStatus) }}
                             </div>
@@ -1847,23 +1783,180 @@ watch(profile, () => {
             </div>
           </div>
         </section>
+
+        <aside :class="['min-w-0 flex-[1_1_18rem] space-y-5']">
+          <form
+            id="account-redeem-card"
+            :class="['rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5']"
+            @submit.prevent="redeemCode"
+          >
+            <header :class="['mb-4 flex items-start gap-2']">
+              <span :class="['i-solar:ticket-sale-bold-duotone mt-0.5 size-5 shrink-0 text-[var(--airi-accent-strong)]']" />
+              <div :class="['min-w-0']">
+                <h2 :class="['text-base font-semibold airi-text']">
+                  {{ t('settings.pages.account.sections.redeem.title') }}
+                </h2>
+                <p :class="['mt-1 text-xs leading-5 airi-text-muted']">
+                  {{ t('settings.pages.account.sections.redeem.description') }}
+                </p>
+              </div>
+            </header>
+            <label :class="['flex min-w-0 flex-col gap-2']">
+              <span :class="['text-sm font-medium']">{{ t('settings.pages.account.sections.redeem.code-label') }}</span>
+              <Input
+                v-model="activationCode"
+                :disabled="isRedeeming"
+                :placeholder="t('settings.pages.account.sections.redeem.code-placeholder')"
+                variant="primary-dimmed"
+              />
+            </label>
+            <Button
+              :class="['mt-3 w-full']"
+              type="submit"
+              size="sm"
+              icon="i-solar:check-circle-bold"
+              :disabled="!canRedeem"
+              :loading="isRedeeming"
+            >
+              {{ t('settings.pages.account.actions.redeem') }}
+            </Button>
+          </form>
+
+          <section :class="['min-w-0 rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5']">
+            <header :class="['mb-4 flex items-start gap-2']">
+              <span :class="['i-solar:shield-user-bold-duotone mt-0.5 size-5 shrink-0 text-[var(--airi-accent-strong)]']" />
+              <div :class="['min-w-0']">
+                <h2 :class="['text-base font-semibold airi-text']">{{ t('settings.pages.account.sections.security.title') }}</h2>
+                <p :class="['mt-1 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.security.description') }}</p>
+              </div>
+            </header>
+            <div v-if="hasBoundEmail" :class="['flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--airi-border-subtle)] pb-3']">
+              <div :class="['min-w-0']">
+                <span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.verified-email') }}</span>
+                <strong :class="['mt-1 block break-all text-sm font-medium airi-text']">{{ visibleAccountEmail }}</strong>
+              </div>
+              <span :class="['inline-flex items-center gap-1 text-xs font-medium text-[var(--airi-accent-text)]']">
+                <span aria-hidden="true" :class="['i-solar:verified-check-bold size-4']" />{{ t('settings.pages.account.sections.security.verified') }}
+              </span>
+            </div>
+            <form v-else :class="['grid min-w-0 gap-2 border-b border-[var(--airi-border-subtle)] pb-3']" @submit.prevent="handleBindEmail">
+              <Input v-model="bindingEmail" autocomplete="email" type="email" :aria-label="t('settings.pages.account.sections.sign-in.email-label')" :placeholder="t('settings.pages.account.sections.security.email-placeholder')" variant="primary-dimmed" />
+              <Input v-model="bindingEmailCode" autocomplete="one-time-code" inputmode="numeric" maxlength="6" :aria-label="t('settings.pages.account.sections.sign-in.verification-code-label')" :placeholder="t('settings.pages.account.sections.sign-in.verification-code-placeholder')" variant="primary-dimmed" />
+              <div :class="['flex flex-wrap gap-2']">
+                <Button type="button" size="sm" variant="secondary" :disabled="!canSendBindingEmailCode" :loading="isSendingBindingEmailCode" @click="handleSendBindingEmailCode">
+                  {{ bindingEmailCodeButtonLabel }}
+                </Button>
+                <Button type="submit" size="sm" :disabled="!canBindEmail" :loading="isBindingEmail">
+                  {{ t('settings.pages.account.sections.security.bind') }}
+                </Button>
+              </div>
+            </form>
+            <div :class="['flex min-w-0 items-center justify-between gap-3 border-b border-[var(--airi-border-subtle)] py-3']">
+              <div :class="['min-w-0']">
+                <span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.phone') }}</span>
+                <strong :class="['mt-1 block break-all text-sm font-medium airi-text']">{{ visibleAccountPhone }}</strong>
+              </div>
+              <span aria-hidden="true" :class="['i-solar:smartphone-2-bold-duotone size-5 shrink-0 airi-text-muted']" />
+            </div>
+            <button
+              type="button"
+              :aria-expanded="showPasswordForm"
+              :class="['mt-1 flex w-full items-center justify-between gap-3 rounded-xl py-3 text-left airi-text', 'outline-none transition-colors hover:text-[var(--airi-accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--airi-accent-focus)] motion-reduce:transition-none']"
+              @click="showPasswordForm = !showPasswordForm"
+            >
+              <span :class="['min-w-0']">
+                <span :class="['block text-xs airi-text-muted']">{{ t('settings.pages.account.sections.security.password') }}</span>
+                <strong :class="['mt-1 block text-sm font-medium']">{{ t('settings.pages.account.sections.security.change-password') }}</strong>
+              </span>
+              <span aria-hidden="true" :class="['i-solar:alt-arrow-down-linear size-4 shrink-0', showPasswordForm ? 'rotate-180' : '']" />
+            </button>
+            <form v-if="showPasswordForm" :class="['grid min-w-0 gap-3 pt-2']" @submit.prevent="handleChangePassword">
+              <Input v-model="currentPassword" type="password" show-password-toggle autocomplete="current-password" :aria-label="t('settings.pages.account.sections.security.current-password')" :placeholder="t('settings.pages.account.sections.security.current-password')" variant="primary-dimmed" />
+              <Input v-model="newPassword" type="password" show-password-toggle autocomplete="new-password" :aria-label="t('settings.pages.account.sections.security.new-password')" :placeholder="t('settings.pages.account.sections.security.new-password')" variant="primary-dimmed" />
+              <Input v-model="confirmNewPassword" type="password" show-password-toggle autocomplete="new-password" :aria-label="t('settings.pages.account.sections.security.confirm-password')" :placeholder="t('settings.pages.account.sections.security.confirm-password')" variant="primary-dimmed" />
+              <div :class="['flex flex-wrap justify-end gap-2']">
+                <Button type="button" size="sm" variant="secondary" @click="showPasswordForm = false">{{ t('settings.pages.account.actions.cancel') }}</Button>
+                <Button type="submit" size="sm" :disabled="!canChangePassword" :loading="isChangingPassword">{{ t('settings.pages.account.sections.security.save-password') }}</Button>
+              </div>
+            </form>
+          </section>
+        </aside>
+      </section>
+
+      <section id="account-pricing" ref="pricingSection" :class="['scroll-mt-5 rounded-2xl border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card)] p-5']">
+        <header :class="['flex flex-wrap items-start justify-between gap-3']">
+          <div :class="['min-w-0']">
+            <h2 :class="['flex items-center gap-2 text-lg font-semibold airi-text']">
+              <span aria-hidden="true" :class="['i-solar:tag-price-bold-duotone size-5 shrink-0 airi-text-muted']" />
+              {{ t('settings.pages.account.sections.pricing.title') }}
+            </h2>
+            <p :class="['mt-1 text-sm leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.description') }}</p>
+          </div>
+          <span :class="['text-xs airi-text-muted']">{{ officialPriceSummary ? t('settings.pages.account.sections.pricing.live') : t('settings.pages.account.sections.pricing.loading') }}</span>
+        </header>
+        <div v-if="officialPriceSummary" :class="['account-pricing-grid mt-4 gap-4']">
+          <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4']">
+            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.chat') }}</h3>
+            <div v-for="model in officialPriceSummary.models" :key="model.id" :class="['mt-2 flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1 text-xs leading-5 airi-text-muted']">
+              <span :class="['min-w-0 break-words']">{{ locale === 'zh-Hans' ? model.nameZh || model.name : model.name }}</span>
+              <span :class="['break-words tabular-nums']">{{ modelDisplayPoints(model) }} {{ t('settings.pages.account.sections.pricing.points-per-unit', { tokens: model.tokenUnit }) }}</span>
+            </div>
+            <p :class="['mt-3 border-t border-[var(--airi-border-subtle)] pt-3 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.chat-billing-explanation') }}</p>
+          </div>
+          <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4']">
+            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.speech') }}</h3>
+            <div v-for="chain in officialPriceSummary.capabilities.speech.chains" :key="chain.channel" :class="['mt-2 flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1 text-xs leading-5 airi-text-muted']">
+              <span>{{ t(`tamagotchi.settings.pages.official-voices.channels.${chain.channel}`) }}</span>
+              <span :class="['break-words tabular-nums']">{{ chain.pointsPerMinute }} {{ t('settings.pages.account.sections.pricing.points-per-minute') }}</span>
+            </div>
+            <p :class="['mt-2 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.voice-surcharge-note') }}</p>
+          </div>
+          <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4 text-xs leading-5 airi-text-muted']">
+            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.other') }}</h3>
+            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.asr', { first: officialPriceSummary.capabilities.transcription.firstMinutePoints, additional: officialPriceSummary.capabilities.transcription.additionalMinutePoints }) }}</p>
+            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.embedding'), points: officialPriceSummary.capabilities.embedding.pointsPerRequest }) }}</p>
+            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.web-search'), points: officialPriceSummary.capabilities.webSearch.pointsPerRequest }) }}</p>
+            <p v-if="officialPriceSummary.capabilities.vision" :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.vision'), points: officialPriceSummary.capabilities.vision.pointsPerRequest }) }}</p>
+          </div>
+        </div>
+        <div v-if="officialPriceSummary" :class="['mt-4 border-t border-[var(--airi-border-subtle)] pt-4']">
+          <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.feature-title') }}</h3>
+          <div :class="['mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs leading-5 airi-text-muted']">
+            <span v-for="feature in officialPriceSummary.features" :key="feature.feature">
+              {{ featurePricingLabel(feature.feature) }} × {{ feature.multiplier }}<template v-if="featureMinimumPoints(feature.feature, feature.multiplier) !== undefined"> · {{ t('settings.pages.account.sections.pricing.minimum', { points: featureMinimumPoints(feature.feature, feature.multiplier) }) }}</template>
+            </span>
+          </div>
+          <p :class="['mt-3 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.no-official-charge') }}</p>
+        </div>
       </section>
     </template>
-
-    <div
-      v-motion
-      class="text-[var(--airi-text-soft)] opacity-20 dark:opacity-15" pointer-events-none
-      fixed top="[calc(100dvh-15rem)]" bottom-0 right--5 z--1
-      :initial="{ scale: 0.9, opacity: 0, y: 20 }"
-      :enter="{ scale: 1, opacity: 1, y: 0 }"
-      :duration="500"
-      size-60
-      flex items-center justify-center
-    >
-      <div text="60" i-solar:wallet-money-bold-duotone />
-    </div>
   </div>
 </template>
+
+<style scoped>
+.account-overview-grid,
+.account-balance-grid,
+.account-usage-details-grid,
+.account-pricing-grid {
+  display: grid;
+}
+
+.account-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+.account-balance-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+}
+
+.account-usage-details-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+}
+
+.account-pricing-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+</style>
 
 <route lang="yaml">
 meta:

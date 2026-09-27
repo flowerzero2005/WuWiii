@@ -57,6 +57,7 @@ export function parseRecommendedReplies(raw: string) {
 }
 
 export async function generateRecommendedReplies(input: {
+  abortSignal?: AbortSignal
   assistantText: string
   characterName?: string
   chatProvider: ChatProvider
@@ -69,7 +70,9 @@ export async function generateRecommendedReplies(input: {
   turnId: string
   userText: string
 }) {
+  input.abortSignal?.throwIfAborted()
   const { generateText } = await import('@xsai/generate-text')
+  input.abortSignal?.throwIfAborted()
   const language = input.locale.toLowerCase().startsWith('zh') ? 'Simplified Chinese' : input.locale
   const messages: Message[] = [
     {
@@ -100,6 +103,7 @@ export async function generateRecommendedReplies(input: {
     input.onRequestTrace?.(requestTrace.requestId)
   const response = await generateText({
     ...chatConfig,
+    abortSignal: input.abortSignal,
     headers: createChatTraceHeaders(chatConfig.headers, requestTrace),
     messages,
     model: input.model,
@@ -117,37 +121,45 @@ export function acknowledgeRecommendedRepliesDelivery(requestId: string) {
 }
 
 export function isRecommendedRepliesRetryableError(error: unknown) {
-  const candidate = error && typeof error === 'object'
-    ? error as {
-      code?: unknown
-      status?: unknown
-      message?: unknown
-    }
-    : undefined
-  const code = typeof candidate?.code === 'string' ? candidate.code.toLowerCase() : ''
-  const status = typeof candidate?.status === 'number' ? candidate.status : undefined
-  const message = String(candidate?.message ?? error ?? '').toLowerCase()
+  let current = error
+  let retryable = false
+  // The gateway already recovers inside one reservation. A terminal official
+  // failure anywhere in the cause chain must win over an outer network/502
+  // wrapper, or background retries create fresh paid reservations.
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    const candidate = typeof current === 'object' ? current as Record<string, unknown> : undefined
+    const details = candidate?.details && typeof candidate.details === 'object'
+      ? candidate.details as Record<string, unknown>
+      : undefined
+    const code = typeof candidate?.code === 'string' ? candidate.code.toLowerCase() : ''
+    const status = Number(candidate?.status)
+    const reason = typeof details?.reason === 'string' ? details.reason.toLowerCase() : ''
+    const message = String(candidate?.message ?? current).toLowerCase()
+    if (candidate?.name === 'AbortError' || candidate?.name === 'OfficialCloudRequestError'
+      || code === 'recommendations_timeout' || code.startsWith('official_')
+      || code === 'llm_empty_result' || code === 'delivery_ack_unavailable'
+      || code === 'unauthorized' || code === 'insufficient_points'
+      || code.includes('rate_limit') || code.includes('duplicate') || code.includes('refunded')
+      || ['401', '403', '409', '429'].includes(code)
+      || [401, 403, 409, 429].includes(status)
+      || [401, 403, 429].includes(Number(details?.upstreamStatus))
+      || candidate?.refunded === true || details?.refunded === true
+      || ['rate-limited', 'empty-response', 'content-filtered', 'truncated-response', 'invalid-response', 'delivery-failed'].includes(reason)
+      || message.includes('rate limit') || message.includes('too many requests'))
+      return false
 
-  // A client-side deadline is terminal for this auxiliary request. Retrying
-  // the same hung transport would keep the recommendation state pending for
-  // minutes after the primary chat turn has already settled.
-  if (code === 'recommendations_timeout')
-    return false
-
-  return code.includes('processing')
-    || code.includes('in_progress')
-    || code.includes('rate_limit')
-    || code.includes('temporarily')
-    || status === 408
-    || status === 409
-    || status === 429
-    || (status !== undefined && status >= 500)
-    || message.includes('already being processed')
-    || message.includes('already processing')
-    || message.includes('rate limit')
-    || message.includes('too many requests')
-    || message.includes('timed out')
-    || message.includes('timeout')
-    || message.includes('networkerror')
-    || message.includes('failed to fetch')
+    retryable ||= code.includes('processing')
+      || code.includes('in_progress')
+      || code.includes('temporarily')
+      || status === 408
+      || status >= 500
+      || message.includes('already being processed')
+      || message.includes('already processing')
+      || message.includes('timed out')
+      || message.includes('timeout')
+      || message.includes('networkerror')
+      || message.includes('failed to fetch')
+    current = candidate?.cause
+  }
+  return retryable
 }

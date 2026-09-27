@@ -5,7 +5,7 @@ import type { ScreenCaptureSetSourceRequest, SerializableDesktopCapturerSource }
 
 import { defineInvoke } from '@moeru/eventa'
 
-import { screenCaptureCheckMacOSPermission, screenCaptureGetSources, screenCaptureRequestMacOSPermission, screenCaptureResetSource, screenCaptureSetSourceEx } from '.'
+import { screenCaptureCheckMacOSPermission, screenCaptureGetSourceImage, screenCaptureGetSources, screenCaptureRequestMacOSPermission, screenCaptureResetSource, screenCaptureSetSourceEx } from '.'
 
 export interface SourceOptionsWithRequest {
   sourcesOptions?: SourcesOptions
@@ -14,6 +14,7 @@ export interface SourceOptionsWithRequest {
 
 export function setupElectronScreenCapture(context: ReturnType<typeof createContext>['context']) {
   const invokeGetSources = defineInvoke(context, screenCaptureGetSources)
+  const invokeGetSourceImage = defineInvoke(context, screenCaptureGetSourceImage)
   const setSource = defineInvoke(context, screenCaptureSetSourceEx)
   const resetSource = defineInvoke(context, screenCaptureResetSource)
 
@@ -24,18 +25,23 @@ export function setupElectronScreenCapture(context: ReturnType<typeof createCont
     return invokeGetSources(sourcesOptions)
   }
 
+  async function getSourceImage(sourceId: string, sourcesOptions: SourcesOptions) {
+    return invokeGetSourceImage({ sourceId, options: sourcesOptions })
+  }
+
   async function selectWithSource<R>(
     selectFn: (sources: SerializableDesktopCapturerSource[]) => string | Promise<string>,
     useFn: () => R | Promise<R>,
     options?: SourceOptionsWithRequest,
   ): Promise<R> {
-    const sources = await getSources(options?.sourcesOptions)
+    const sourcesOptions = options?.sourcesOptions ?? { types: ['screen'] } satisfies SourcesOptions
+    const sources = await getSources(sourcesOptions)
     const sourceId = await selectFn(sources)
 
     let handle: string | undefined
     try {
       handle = await setSource({
-        options: options?.sourcesOptions,
+        options: sourcesOptions,
         sourceId,
         timeout: options?.request?.timeout,
       })
@@ -50,6 +56,7 @@ export function setupElectronScreenCapture(context: ReturnType<typeof createCont
 
   return {
     getSources,
+    getSourceImage,
     setSource,
     selectWithSource,
     resetSource,

@@ -1,7 +1,7 @@
 {
   "name": "@proj-airi/stage-tamagotchi",
   "type": "module",
-  "version": "0.9.0-beta.4",
+  "version": "0.9.0-beta.5",
   "private": true,
   "description": "A desktop digital companion with customizable characters, voice interaction, and local tools.",
   "author": {
@@ -86,6 +86,7 @@
     "@proj-airi/plugin-sdk": "workspace:^",
     "@proj-airi/server-runtime": "workspace:^",
     "@proj-airi/server-sdk": "workspace:*",
+    "@proj-airi/server-shared": "workspace:*",
     "@proj-airi/stage-layouts": "workspace:^",
     "@proj-airi/stage-pages": "workspace:^",
     "@proj-airi/stage-ui": "workspace:^",

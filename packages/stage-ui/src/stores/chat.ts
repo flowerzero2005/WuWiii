@@ -18,13 +18,14 @@ import { createQueue } from '@proj-airi/stream-kit'
 import { generateText } from '@xsai/generate-text'
 import { nanoid } from 'nanoid'
 import { defineStore, storeToRefs } from 'pinia'
-import { computed, ref, toRaw, watch } from 'vue'
+import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { useAnalytics } from '../composables'
 import { useLlmmarkerParser } from '../composables/llm-marker-parser'
 import { parseActPerformance } from '../composables/queues'
 import { categorizeResponse, createStreamingCategorizer } from '../composables/response-categoriser'
 import { removeSpecialMarkers, segmentAssistantReply } from '../composables/semantic-segmentation'
+import { resolveChatTurnIdleTimeoutMs } from '../constants/chat-timeouts'
 import { reportOfficialCloudReplyDisplayFailure } from '../libs/providers/providers/official-cloud'
 import { allocateWholeReplySpeechTimings, buildAssistantSegmentMessageIds, buildToolReplyMessageIds, clampSpeechSyncedSegmentBubbleDelayMs, getSpeechSyncedTypingSpeedMs, getTypingCharCount, getTypingDuration, getWholeReplyTypingSpeedMs, resolveChatSpeechSegmentation } from '../utils'
 import { createCharacterPerformanceResourceActionCard } from '../utils/character-performance-capabilities'
@@ -68,6 +69,7 @@ import { applyAiriActionOutcome, deriveAiriPersonaState, finalizeAiriPersonaStat
 import { createReadableFinalText, createReadableSpeechText } from './chat/readable-text'
 import { useReplyFeedbackStore } from './chat/reply-feedback'
 import { useReplyFeedbackReflectionStore } from './chat/reply-feedback-reflection'
+import { isSessionMemoryWorkCancelled } from './chat/session-memory-lifecycle'
 import { useChatSessionStore } from './chat/session-store'
 import { resolveSegmentDisplayFallbackMs, resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './chat/speech-display-policy'
 import { useChatStreamStore } from './chat/stream-store'
@@ -162,6 +164,7 @@ interface SpeechDisplaySyncController {
 interface ActiveChatTurn {
   sessionId: string
   generation: number
+  idleTimeoutMs: number
   turnId: string
   abortController: AbortController
   assistantMessageIds: string[]
@@ -385,6 +388,9 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const { trackFirstMessage } = useAnalytics()
 
   const chatSession = useChatSessionStore()
+  // Deletion can originate in another renderer. Abort the exact provider
+  // request and queued sends as well as fencing its eventual persistence.
+  onScopeDispose(chatSession.onSessionDeleted(sessionId => interruptActiveTurn(sessionId, 'conversation-deleted')))
   const chatStream = useChatStreamStore()
   const chatContext = useChatContextStore()
   const live2dStore = useLive2d()
@@ -663,7 +669,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   // NOTICE: 打断按钮看门狗。performSend 内部仍有 provider/parser/hooks 等异步边界，
   // 极端断链时这些 await 仍可能
   // 挂起 → finally 永不执行 → 按钮不消失。看门狗完全独立于事件链：仅监视"最近一次
-  // 进度"，30s 无进度即强制收敛 UI 状态（activeTurn/sending/typing），不清理
+  // 进度"，按回合冻结的等待预算强制收敛 UI 状态（activeTurn/sending/typing），不清理
   // streamingMessage、不 abort、不影响生成与持久化；持久化自身另有 5s 队列熔断保证有界。
   const TURN_WATCHDOG_GRACE_MS = 30_000
   const TURN_WATCHDOG_TICK_MS = 2_000
@@ -671,7 +677,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   let turnWatchdogInterval: ReturnType<typeof setInterval> | null = null
 
   function bumpTurnWatchdog() {
-    turnWatchdogDeadline = Date.now() + TURN_WATCHDOG_GRACE_MS
+    turnWatchdogDeadline = Date.now() + (activeTurn.value?.idleTimeoutMs ?? TURN_WATCHDOG_GRACE_MS)
   }
 
   watch(activeTurn, (turn) => {
@@ -686,7 +692,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         console.warn('[Chat] turn watchdog: force releasing turn after no progress', {
           sessionId: current.sessionId,
           generation: current.generation,
-          graceMs: TURN_WATCHDOG_GRACE_MS,
+          graceMs: current.idleTimeoutMs,
         })
         // NOTICE: 保险丝——完成链挂起时段间占位会残留，强制清。streamingMessage
         // 必须保留：慢模型（官方云带工具首包 >30s）未到保底线时被旧 10s 看门狗
@@ -746,17 +752,17 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     personaFingerprint?: AiriCardRuntimeSnapshot['personaFingerprint']
     personaName: string
     sessionId: string
+    memoryScope: NotebookMemoryScope
   }) {
     const notebookStore = useCharacterNotebookStore()
-    if (!notebookStore.isLoaded)
-      await notebookStore.loadFromStorage()
-
-    const generationScope = `${input.personaCardId}:${input.sessionId}`
+    const generationScope = `${input.memoryScope.characterId}:${input.sessionId}`
     if (pendingDiaryGenerationScopes.has(generationScope))
       return
-
+    const notebook = await notebookStore.getNotebookForScope(input.memoryScope)
+    if (isSessionMemoryWorkCancelled(input.sessionId) || pendingDiaryGenerationScopes.has(generationScope))
+      return
     const allEvents = toDiaryEvents(chatSession.getSessionMessages(input.sessionId), input.sessionId)
-    const previousDiaryEnd = notebookStore.partitionDiary
+    const previousDiaryEnd = notebook.entries.filter(entry => entry.kind === 'diary')
       .filter(entry => entry.metadata?.sourceSessionId === input.sessionId)
       .map(entry => typeof entry.metadata?.periodEnd === 'number' ? entry.metadata.periodEnd : 0)
       .sort((left, right) => right - left)[0] ?? 0
@@ -786,7 +792,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       events: trimmedEvents,
       now,
       sourceSessionId: input.sessionId,
-    })) {
+    }, notebook)) {
       return
     }
 
@@ -805,10 +811,10 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         personaName: input.personaName,
         personaFingerprint: input.personaFingerprint,
       })
-      if (!result)
+      if (!result || isSessionMemoryWorkCancelled(input.sessionId))
         return
 
-      notebookStore.createDiaryDraft({
+      await notebookStore.createDiaryDraftForScope(input.memoryScope, {
         title: result.title,
         text: result.text,
         periodStart,
@@ -821,10 +827,6 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           sourceSessionId: input.sessionId,
         },
       })
-      // NOTICE: A generated diary is user-authored product data. Persist it
-      // immediately so closing the app before the 500 ms reactive debounce
-      // cannot silently discard a completed 1v1 diary draft.
-      await notebookStore.saveToStorage()
     }
     catch (error) {
       console.warn('[Chat] Character diary generation skipped:', error)
@@ -841,7 +843,8 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     sessionId: string,
   ) {
     const preparationStartedAt = performance.now()
-    if (!sendingMessage && !options.attachments?.length)
+    const hasImageInput = Boolean(options.attachments?.length || options.displayAttachments?.length)
+    if (!sendingMessage.trim() && !hasImageInput && !options.visionContext?.trim())
       return
     options.onProgress?.()
 
@@ -861,6 +864,11 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       uiLocale: globalThis.navigator?.language,
       userRequestedLanguage: options.replyLanguage,
     })
+    // This fallback belongs only to the provider request. The persisted user
+    // message and turn hooks retain the user's actual text (including none).
+    const providerInputText = !sendingMessage.trim() && (hasImageInput || options.visionContext?.trim())
+      ? `Please respond naturally to the images I shared, using their visible details. Reply in ${turnLanguage.targetLanguage}.`
+      : sendingMessage
     const turnContext = createChatTurnContext({
       personaCardId: turnPersonaCardId,
       sessionId,
@@ -1459,13 +1467,14 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     // 定义在 parser/流机制之前，onEnd 等闭包内也可安全引用（避免 TDZ）。
     const logTurnMilestone = (_step: string) => {
       // NOTICE: 每个检查点都证明回合在前进，续期看门狗。parser/rewrite/hooks 的
-      // 检查点之间可能有长工具执行或慢 token，任何一步到达即重置 30s 保底线。
+      // 检查点之间可能有长工具执行或慢 token，到达后重置本回合冻结的等待预算。
       bumpTurnWatchdog()
       options.onProgress?.()
     }
     activeTurn.value = {
       sessionId,
       generation,
+      idleTimeoutMs: resolveChatTurnIdleTimeoutMs(options.chatProvider.chat(options.model).apiKey === 'official-cloud', TURN_WATCHDOG_GRACE_MS),
       turnId,
       abortController,
       assistantMessageIds: buildingMessage.id ? [buildingMessage.id] : [],
@@ -1885,7 +1894,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       if (!hasSpeechDisplaySync())
         updateUI()
 
-      const contentParts: CommonContentPart[] = [{ type: 'text', text: sendingMessage }]
+      const contentParts: CommonContentPart[] = [{ type: 'text', text: providerInputText }]
 
       if (options.attachments) {
         for (const attachment of options.attachments) {
@@ -3005,7 +3014,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           }
         },
         onSpecial: async (special) => {
-          if (shouldAbort())
+          if (shouldAbort() || isSessionMemoryWorkCancelled(sessionId))
             return
 
           const captured = parseMemoryCaptureMarker(special)
@@ -3466,14 +3475,17 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           logTurnMilestone('onEnd:emitSpeechLiteral-whole:done')
 
           buildingMessage.categorization = {
-            speech: finalCategorization.speech,
-            reasoning: finalCategorization.reasoning,
+            speech: removeSpecialMarkers(finalCategorization.speech),
+            reasoning: '',
           }
           if (buildingMessage.metadata)
             buildingMessage.metadata.assistantTurnText = removeSpecialMarkers(fullText)
-          const hasVisibleAssistantText = buildingMessage.slices.some(slice => slice.type === 'text' && slice.text.length > 0)
-          if (!hasVisibleAssistantText)
-            replaceVisibleAssistantText(createReadableFinalText(acknowledgementPrefix ? finalSpeechSource : fullText, turnProviderId))
+          const finalVisibleText = createReadableFinalText(acknowledgementPrefix ? finalSpeechSource : fullText, turnProviderId)
+          const currentVisibleText = buildingMessage.slices.flatMap(slice => slice.type === 'text' ? [slice.text] : []).join('')
+          // Release any ordinary suffix held while deciding a split tag, and
+          // ensure the persisted draft matches the same sanitized final text.
+          if (currentVisibleText !== finalVisibleText)
+            replaceVisibleAssistantText(finalVisibleText)
         },
         minLiteralEmitLength: 24,
       })
@@ -3519,7 +3531,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
               rawMessage,
               msg.id,
               options.sourceUserMessageId,
-              options.attachments?.length ? contentParts : undefined,
+              hasImageInput || options.visionContext?.trim() ? contentParts : undefined,
             )
           })) as Message[]
 
@@ -3542,7 +3554,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       if (options.hiddenUserMessage && !options.reusePersistedUserMessage) {
         newMessages.push({
           role: 'user',
-          content: contentParts.length === 1 ? sendingMessage : contentParts,
+          content: contentParts.length === 1 ? providerInputText : contentParts,
         })
       }
 
@@ -4030,9 +4042,9 @@ ${contextTexts}
             await segmentedReplyPlayback
         }
         else if (hasSpeechDisplaySync() && speechDisplaySyncController) {
-          const speechSyncedFinalText = committedToolAcknowledgement
+          const speechSyncedFinalText = createReadableFinalText(committedToolAcknowledgement
             ? finalSpeechSource
-            : fullText
+            : fullText, turnProviderId)
           await persistSpeechDisplayContext(speechSyncedFinalText)
           if (groupRuntime) {
             if (streamingMessageContext.speech)
@@ -4297,9 +4309,6 @@ ${contextTexts}
         streamingMessageContext.speech.finalText = readableFinalSpeechText
       }
 
-      logTurnMilestone('emitStreamEndHooks:start')
-      await hooks.emitStreamEndHooks(streamingMessageContext)
-      logTurnMilestone('emitStreamEndHooks:done')
       const sourceAssistantMessageIds = Array.from(new Set([
         visibleAssistantMessageId,
         ...(activeTurn.value?.assistantMessageIds ?? []),
@@ -4309,6 +4318,28 @@ ${contextTexts}
         sourceAssistantMessageId: visibleAssistantMessageId,
         sourceAssistantMessageIds,
       }
+
+      const memoryUserMessage = options.memoryUserMessage?.trim() || (options.hiddenUserMessage ? '' : sendingMessage)
+      const completedMemoryTurn = {
+        userMessage: memoryUserMessage,
+        assistantMessage: visibleAssistantText,
+        sourceSessionId: sessionId,
+        sourceCreatedAt: options.sourceCreatedAt ?? sendingCreatedAt,
+        sourceUserMessageId: options.sourceUserMessageId ?? streamingMessageContext.message?.id,
+        sourceAssistantMessageId: visibleAssistantMessageId,
+        sourceAssistantMessageIds,
+        sourceSurface: options.sourceSurface ?? 'chat-store',
+        extractionRuntime: { memoryCandidates },
+        ...turnMemoryScope,
+        memoryScope: 'current-persona',
+      }
+      // Persist the local follow-up work before any completion hook yields.
+      if (memoryUserMessage && visibleAssistantText)
+        memoryManager.stageCompletedChatTurnForMemory(completedMemoryTurn)
+
+      logTurnMilestone('emitStreamEndHooks:start')
+      await hooks.emitStreamEndHooks(streamingMessageContext)
+      logTurnMilestone('emitStreamEndHooks:done')
 
       // NOTICE: 用户要求"确认回复要有语音，像角色本人说话"（方案 A）。确定性收尾落库后，
       // 用小模型再生成一句自然口头确认，走 speech-runtime 的独立短语音入口（与
@@ -4489,30 +4520,10 @@ ${contextTexts}
       if (!commitAcceptedPersonaTurn(finalizedPersonaState, finalizedRelationshipState))
         return
 
-      const memoryUserMessage = options.memoryUserMessage?.trim() || (!options.hiddenUserMessage ? sendingMessage : '')
       // Each speaker uses a frozen persona scope. Persistence is local and can
       // safely continue after this provider turn releases the next speaker.
       if (memoryUserMessage && visibleAssistantText) {
-        const memoryExtraction = memoryManager.processCompletedChatTurnForMemory({
-          userMessage: memoryUserMessage,
-          assistantMessage: visibleAssistantText,
-          sourceSessionId: sessionId,
-          sourceCreatedAt: options.sourceCreatedAt ?? sendingCreatedAt,
-          sourceUserMessageId: options.sourceUserMessageId ?? streamingMessageContext.message?.id,
-          sourceAssistantMessageId: visibleAssistantMessageId,
-          sourceAssistantMessageIds,
-          sourceSurface: options.sourceSurface ?? 'chat-store',
-          trace: { ...turnTrace, stage: 'memory-extraction' },
-          extractionRuntime: {
-            chatProvider: options.chatProvider,
-            model: options.model,
-            personaContext: turnPersonaRuntime?.systemPrompt,
-            providerConfig: options.providerConfig,
-            memoryCandidates,
-          },
-          ...turnMemoryScope,
-          memoryScope: 'current-persona',
-        })
+        const memoryExtraction = memoryManager.processCompletedChatTurnForMemory(completedMemoryTurn)
         // Memory storage is off the speaker critical path. In particular a
         // group turn must not wait for IndexedDB while the next speaker is
         // composing; each candidate carries its frozen persona scope.
@@ -4529,7 +4540,7 @@ ${contextTexts}
         && visibleAssistantText
       ) {
         globalThis.setTimeout(() => {
-          if (shouldAbort())
+          if (shouldAbort() || isSessionMemoryWorkCancelled(sessionId))
             return
 
           void innerVoiceNotes.ensureNoteForMessage({
@@ -4563,7 +4574,7 @@ ${contextTexts}
           revision: streamingMessageContext.turn?.speaker?.stageModelRevision,
           sessionId,
           turnId,
-          userId: relationshipScope.userId,
+          userId: turnMemoryScope.userId,
           personaState: finalizedPersonaState,
           relationshipState: finalizedRelationshipState,
           recentMessages: sessionMessagesForSend.slice(-8) as ChatHistoryItem[],
@@ -4579,6 +4590,7 @@ ${contextTexts}
           personaFingerprint: turnPersonaFingerprint,
           personaName: turnPersonaRuntime?.displayName ?? 'the active character',
           sessionId,
+          memoryScope: turnMemoryScope,
         })
       }
 
@@ -4843,7 +4855,8 @@ ${contextTexts}
     chatSession.bumpSessionGeneration(sessionId)
     cancelPendingSends(sessionId)
     typingCompletionGate.releaseSession(sessionId)
-    speechRuntimeStore.stopAll(reason)
+    if (activeSessionId.value === sessionId || interruptedTurn?.sessionId === sessionId || streamingSessionId.value === sessionId)
+      speechRuntimeStore.stopAll(reason)
     chatStream.clearInterSegmentPlaceholder(sessionId)
 
     // NOTICE: 无条件清理 speechDisplayPending。回合可能已被 turn:complete 释放

@@ -2,6 +2,8 @@ import type { CharacterDiaryDraft, NotebookEntry, ScheduledTask } from '../../st
 
 import localforage from 'localforage'
 
+import { isSessionMemoryWorkCancelled } from '../../stores/chat/session-memory-lifecycle'
+
 export interface NotebookData {
   entries: NotebookEntry[]
   tasks: ScheduledTask[]
@@ -16,10 +18,12 @@ export interface NotebookData {
 
 export interface NotebookSaveOptions {
   preserveMetadata?: boolean
+  sourceSessionId?: string
 }
 
 const NOTEBOOK_LOCK_TIMEOUT_MS = 2_000
 const MAX_DELETED_DIARY_ENTRY_IDS = 500
+const localNotebookLocks = new Map<string, Promise<unknown>>()
 
 // 创建专门的 notebook store
 const notebookStore = localforage.createInstance({
@@ -120,8 +124,18 @@ export function mergeNotebookData(current: NotebookData | null, incoming: Notebo
 
 async function withNotebookLock<T>(characterId: string, action: () => Promise<T>): Promise<T> {
   const locks = globalThis.navigator?.locks
-  if (!locks)
-    return action()
+  if (!locks) {
+    const previous = localNotebookLocks.get(characterId) ?? Promise.resolve()
+    const task = previous.catch(() => undefined).then(action)
+    localNotebookLocks.set(characterId, task)
+    try {
+      return await task
+    }
+    finally {
+      if (localNotebookLocks.get(characterId) === task)
+        localNotebookLocks.delete(characterId)
+    }
+  }
 
   const abortController = new AbortController()
   const timeout = setTimeout(() => abortController.abort(), NOTEBOOK_LOCK_TIMEOUT_MS)
@@ -184,6 +198,8 @@ export const notebookRepo = {
         // Reading while holding this lock turns stale renderer snapshots into
         // merges instead of whole-record replacements.
         const currentData = await notebookStore.getItem<NotebookData>(key)
+        if (isSessionMemoryWorkCancelled(options.sourceSessionId))
+          throw new Error('Notebook work source session was deleted')
         const merged = mergeNotebookData(currentData, {
           entries: safeClone(data.entries),
           tasks: safeClone(data.tasks),
@@ -206,6 +222,15 @@ export const notebookRepo = {
         }
 
         await notebookStore.setItem(key, saveData)
+        if (isSessionMemoryWorkCancelled(options.sourceSessionId)) {
+          // Deletion may arrive while IndexedDB commits. Roll back only this
+          // in-flight transaction under the same notebook lock.
+          if (currentData)
+            await notebookStore.setItem(key, currentData)
+          else
+            await notebookStore.removeItem(key)
+          throw new Error('Notebook work source session was deleted')
+        }
         return saveData
       })
     }

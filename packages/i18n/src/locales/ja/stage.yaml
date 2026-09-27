@@ -15,6 +15,7 @@ chat:
     screen-source-unavailable: このソースをキャプチャできませんでした。利用可能な画面またはウィンドウを選択し直してください。
     screen-thumbnail-unavailable: 選択したソースから画像を取得できませんでした。画面収録の権限を確認してから、もう一度選択してください。
     screen-timeout: 画面キャプチャがタイムアウトしました。もう一度お試しください。
+    screen-system-unavailable: システムの画面キャプチャ要求が終了していません。再試行し、失敗が続く場合は Wuwiii を再起動してください。
     screen-permission-denied: システムが画面収録の権限を拒否しました。システム設定で Wuwiii に画面収録を許可してから、もう一度お試しください。
     screen-no-sources: 利用可能な画面またはウィンドウがありません。
 message: 何か話しかけてみましょう…

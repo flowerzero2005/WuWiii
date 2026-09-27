@@ -3,6 +3,54 @@ import { describe, expect, it } from 'vitest'
 import { useLlmmarkerParser } from './llm-marker-parser'
 
 describe('useLlmmarkerParser', async () => {
+  it('preserves action callbacks while withholding ACT text at every chunk boundary', async () => {
+    const marker = '<|ACT {"actionCardId":"small-wave"}|>'
+    const text = `Hello ${marker} world!`
+    for (let split = 1; split < text.length; split++) {
+      const literals: string[] = []
+      const specials: string[] = []
+      let completed = ''
+      const parser = useLlmmarkerParser({
+        onLiteral: value => { literals.push(value) },
+        onSpecial: value => { specials.push(value) },
+        onEnd: value => { completed = value },
+      })
+      await parser.consume(text.slice(0, split))
+      await parser.consume(text.slice(split))
+      await parser.end()
+      expect(literals.join('')).toBe('Hello  world!')
+      expect(specials).toEqual([marker])
+      expect(completed).toBe(text)
+    }
+  })
+
+  it('waits for a DSML opener split after its generic marker prefix', async () => {
+    const literals: string[] = []
+    const specials: string[] = []
+    const parser = useLlmmarkerParser({
+      onLiteral: value => { literals.push(value) },
+      onSpecial: value => { specials.push(value) },
+    })
+    for (const chunk of ['Hello <|', '|DSML||tool_', 'calls>private</||DSML||tool_calls> world!'])
+      await parser.consume(chunk)
+    await parser.end()
+    expect(literals.join('')).toBe('Hello  world!')
+    expect(specials).toEqual([])
+  })
+
+  it('discards a marker whose name is truncated at EOF', async () => {
+    const literals: string[] = []
+    let completed = ''
+    const parser = useLlmmarkerParser({
+      onLiteral: value => { literals.push(value) },
+      onEnd: value => { completed = value },
+    })
+    await parser.consume('Hello <|A')
+    await parser.end()
+    expect(literals.join('')).toBe('Hello ')
+    expect(completed).toBe('Hello ')
+  })
+
   it('drops leaked DSML tool calls split across stream chunks', async () => {
     const literals: string[] = []
     const specials: string[] = []

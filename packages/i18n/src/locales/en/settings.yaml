@@ -651,6 +651,9 @@ pages:
       cancel: Cancel
       claim-check-in: Claim points
       claim-check-in-upgrade: Claim upgrade points
+      claim-check-in-points: Claim {points} points
+      claim-check-in-upgrade-points: Claim {points} upgrade points
+      view-pricing: View prices
       copy-user-id: Copy user ID
       create-account: Create account
       edit-profile: Edit profile
@@ -699,17 +702,17 @@ pages:
       support-description: We are still early in development. Your support helps cover service costs, improve character experiences and keep new features maintained.
       spend-responsibly: Choose only what you genuinely need. Passes never auto-renew, and free features, local models and your own API keys remain available. Real life comes first.
     points:
-      grant: Grant
-      paid: Paid
+      grant: Grants (including membership)
+      paid: Top-up points
       reserved: Reserved
-      trial: Trial
+      trial: Trial points
     sections:
       overview:
-        title: Account & Points
-        description: View your beta access, remaining model points, and activation code status.
+        title: Your profile
+        description: Your profile, points, and usage in one place.
       pricing:
         title: Current point prices
-        description: Current official-cloud prices. Admin changes refresh automatically.
+        description: Current prices and billing details for official cloud services.
         loading: Loading current prices
         live: Live prices · updates within 5 seconds
         chat: Chat model reference prices
@@ -948,15 +951,40 @@ pages:
       check-in:
         title: Daily check-in
         description: Claim points daily until the current storage cap is reached.
-        description-free: 'Free includes {points} trial points per day, stored up to {cap}.'
-        description-member: '{plan} includes {points} membership points per day, stored up to {cap}.'
+        description-free: 'Trial accounts can claim up to {points} trial points daily.'
+        description-member: '{plan} can claim up to {points} membership points daily.'
+        policy-free: 'Trial accounts can claim up to {points} trial points daily.'
+        policy-member: '{plan} can claim up to {points} membership points daily.'
         streak: '{days} day streak'
-        next-reward: '+{points} trial points next'
-        cap-reached: Trial point cap reached
+        next-reward: '{points} points available today'
+        cap-reached: Check-in point cap reached
         claimed: Claimed today
+        trial-points: Trial points
+        membership-points: Membership points
+        bucket-capacity: '{bucket} balance / check-in cap'
+        bucket-full: '{bucket} balance full'
+        today-reward: Available to claim today
+        reward-points: '{points} points'
+        paid-balance: 'Top-up points: {points}'
+        paid-separate: Separate from check-in points; they do not use check-in capacity.
+        auto-label: Auto-claim on this device
+        auto-enabled-description: 'On: claims automatically while you are signed in and the app is running. You can also claim manually.'
+        auto-disabled-description: 'Off: use the claim button to collect points manually.'
+        schedule: Resets daily at 08:00 Beijing time. Days missed while the app is closed are not claimed later; missed claims do not carry over.
+        capacity-rule: If the balance is near its cap, the claim only fills the remaining space. Spending after claiming does not increase today's allowance.
+        loading: Loading
+        loading-description: Loading check-in balance and today's available points…
+        error-description: Could not load the latest check-in status. Try again. Missing balances do not mean zero.
+        unavailable: Status unavailable
+        retry: Refresh status
+        claiming: Claiming…
+        claimed-description: Claimed today. Spending does not allow another daily claim; return after the next reset.
+        full-description: 'Your {bucket} balance is full. Spend some points, then refresh the status to claim.'
+        upgrade-description: You already claimed today. Your plan upgrade allows an additional claim of the upgrade allowance, limited by remaining capacity.
+        upgrade-full-description: 'Your upgrade allows an additional claim, but your {bucket} balance is full. Free up capacity by spending, then claim the upgrade allowance today.'
       balance:
         title: Point balance
-        description: Trial, grant, and paid points are spent when the model is called; reserved points are settled or released after the request.
+        description: Trial, grant, and top-up points are spent on model calls. Membership points are included in grants; do not add them twice. Reserved points are settled or released after the request.
         loading: Loading point balance…
         error: Point balance could not be loaded. Try again. This does not mean your balance is zero.
         retry: Retry
@@ -1168,8 +1196,10 @@ pages:
           cancelled: The request was cancelled. You were not charged.
           unknown: The request did not complete. You were not charged.
     status:
-      check-in-claimed: Claimed {points} trial points.
+      check-in-claimed: Claimed {points} points in total today.
+      check-in-updated: Check-in status updated. See your latest balance and points available today.
       check-in-failed: Failed to claim daily check-in points.
+      check-in-timeout: The claim request timed out. Refresh to check its latest status; retrying will not grant duplicate points.
       fetch-failed: Failed to refresh account state.
       email-auth-failed: Email authentication failed.
       verification-auth-failed: Verification code sign-in failed.
@@ -2081,6 +2111,13 @@ pages:
           provider-selection:
             description: Choose a speech recognition provider that turns your voice into words for the current resident.
     memory-long-term:
+      character-selector:
+        label: Character
+        description: All conversations with this character share these long-term memories. Viewing another character here does not switch your chat or stage model.
+        finish-edit: Save or cancel your edit before choosing another character.
+        load-failed: Could not load this character’s memories. Select the character again to retry.
+        save-failed: Could not save this memory change. Please try again.
+        navigation-failed: Could not open the source conversation. Return to chat and try again.
       description: Organize the memories the current resident will keep for a long time
       title: Long-Term Memory
       stats:
@@ -2152,8 +2189,19 @@ pages:
         loading: Loading...
         no-memory: No memories yet
     memory-short-term:
-      description: Manage the memories the current resident uses in recent conversations
+      description: Browse saved conversation records and manage short-term memory.
       title: Short-Term Memory
+      delete-conversation:
+        title: Delete conversation
+        description: Remove the selected conversation from this character's conversation list.
+        scope: Messages and linked inner voice notes will be deleted. The character's long-term memories will remain. This cannot be undone.
+        confirm-description: Delete “{title}”?
+        action: Delete selected conversation
+        confirm: Confirm deletion
+        cancel: Cancel
+        pending: Deleting…
+        success: Deleted “{title}”.
+        failed: Could not complete deletion. Refresh the conversation list and try again.
       auto-cleanup:
         title: Auto Cleanup
         enabled-label: Auto-clean short-term memory
@@ -2162,8 +2210,19 @@ pages:
         limit-description: 'Auto-clean triggers when the message count reaches or exceeds this value. Range: 1-400.'
         unit: messages
       session-selector:
-        label: Memory session
-        description: Choose which session's memories to view or clean (includes group chat sessions).
+        label: Conversation
+        role-label: Character or group chat
+        group: Group chat
+        description: Viewing records does not switch your chat, character, or model. Cleanup applies only to the selected conversation.
+        context-description: These are saved records. The model receives only the context selected for each reply, within its context capacity; it may not receive every saved message. The cleanup limit controls saved records, not model context capacity.
+        saved-count: Saved messages
+        empty: No saved conversations
+        loading: Loading saved messages…
+        load-failed: Could not load this conversation. Select it again to retry.
+        current: View current chat
+        open: Go to this conversation
+        current-unavailable: No open chat was found. Choose a character and conversation above.
+        navigation-failed: Could not open the conversation. Return to chat, finish sending or end the voice call, then try again.
     messaging-discord:
       description: Chat & voice chat over Discord
       title: Discord
@@ -2404,12 +2463,13 @@ pages:
       test:
         heading: Connection test
         intro: The test sends one image with the current configuration and follows the selected provider's billing rules.
-        choose-image: Choose image
+        choose-image: Choose images
+        images-selected: '{count} images selected'
         image-selected: 'Selected: {name}'
         clear-image: Remove image
         selection-local: Selecting an image only previews it here. It does not upload, analyze, or use points until you start the test.
         fee-required: Accept the current official image understanding fee before starting a test. Selecting an image is still local and free.
-        image-required: Select an image first.
+        image-required: Select at least one image first.
         prompt: Briefly describe what is in this image.
         disabled: Image understanding is disabled.
         analyzing: Analyzing…

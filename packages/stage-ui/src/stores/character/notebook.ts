@@ -5,6 +5,7 @@ import { defineStore, storeToRefs } from 'pinia'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import { notebookRepo } from '../../database/repos/notebook.repo'
+import { isSessionMemoryWorkCancelled } from '../chat/session-memory-lifecycle'
 import { useAiriCardStore } from '../modules/airi-card'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
 import { useUserIdentityStore } from '../user-identity'
@@ -161,6 +162,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   let pendingSaveCount = 0
   let persistedVersion = 1
   let persistedRevision = 0
+  const scopeMutationQueues = new Map<string, Promise<unknown>>()
 
   function createNotebookSnapshot(): NotebookData {
     return JSON.parse(JSON.stringify({
@@ -292,8 +294,10 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
         isSaving.value = true
         const saved = await notebookRepo.save(scopeId, snapshot)
         await applySavedSnapshot(scopeId, snapshot, saved)
-        persistedVersion = saved.version
-        persistedRevision = saved.revision ?? saved.version
+        if (loadedScopeId.value === scopeId) {
+          persistedVersion = saved.version
+          persistedRevision = saved.revision ?? saved.version
+        }
         lastSaveResult.value = {
           scopeId,
           version: saved.version,
@@ -463,14 +467,67 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     return addEntry('diary', text, options)
   }
 
+  async function getNotebookForScope(scope: NotebookMemoryScope, options?: { force?: boolean }): Promise<NotebookData> {
+    if (options?.force) {
+      // Preserve this scope's pending local edits before reading a detached
+      // disk snapshot. Inspecting another character never swaps loadedScopeId.
+      if (loadedScopeId.value === scope.characterId) {
+        await nextTick()
+        if (scheduledSaveScopeId === scope.characterId)
+          await flushScheduledSave()
+        await saveQueue
+      }
+      return await notebookRepo.load(scope.characterId) ?? { entries: [], tasks: [], diaryDrafts: [], version: 1 }
+    }
+    await ensureCurrentScopeLoaded(scope)
+    if (loadedScopeId.value === scope.characterId)
+      return createNotebookSnapshot()
+    return await notebookRepo.load(scope.characterId) ?? { entries: [], tasks: [], diaryDrafts: [], version: 1 }
+  }
+
+  /** A frozen notebook transaction; callers never mutate the newly active card. */
+  async function updateNotebookForScope<T>(
+    scope: NotebookMemoryScope,
+    update: (data: NotebookData) => T,
+    sourceSessionId?: string,
+  ): Promise<T | undefined> {
+    const previous = scopeMutationQueues.get(scope.characterId) ?? Promise.resolve()
+    const task = previous.catch(() => undefined).then(async () => {
+      await flushScheduledSave()
+      await saveQueue
+      const localSnapshot = loadedScopeId.value === scope.characterId ? createNotebookSnapshot() : undefined
+      const snapshot = await getNotebookForScope(scope, { force: true })
+      if (isSessionMemoryWorkCancelled(sourceSessionId))
+        return undefined
+      const data = JSON.parse(JSON.stringify(snapshot)) as NotebookData
+      const result = update(data)
+      const saved = await notebookRepo.save(scope.characterId, data, { sourceSessionId })
+      await applySavedSnapshot(scope.characterId, localSnapshot ?? snapshot, saved)
+      if (loadedScopeId.value === scope.characterId) {
+        persistedVersion = saved.version
+        persistedRevision = saved.revision ?? saved.version
+      }
+      return result
+    })
+    scopeMutationQueues.set(scope.characterId, task)
+    try {
+      return await task
+    }
+    finally {
+      if (scopeMutationQueues.get(scope.characterId) === task)
+        scopeMutationQueues.delete(scope.characterId)
+    }
+  }
+
   function shouldOfferDiaryDraft(input: {
     turnCount: number
     events: readonly DiaryEventCandidate[]
     now?: number
     sourceSessionId?: string
-  }) {
+  }, data?: Pick<NotebookData, 'entries' | 'diaryDrafts'>) {
     const now = input.now ?? Date.now()
-    const hasPendingDraft = diaryDrafts.value.some((draft) => {
+    const scopedDiaries = data ? data.entries.filter(entry => entry.kind === 'diary') : partitionDiary.value
+    const hasPendingDraft = (data?.diaryDrafts ?? diaryDrafts.value).some((draft) => {
       if (draft.status !== 'draft')
         return false
       return !input.sourceSessionId || draft.metadata?.sourceSessionId === input.sourceSessionId
@@ -478,7 +535,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     if (hasPendingDraft)
       return false
 
-    const latestDiary = partitionDiary.value
+    const latestDiary = scopedDiaries
       .filter(entry => typeof entry.createdAt === 'number')
       .sort((left, right) => right.createdAt - left.createdAt)[0]
     if (latestDiary && now - latestDiary.createdAt < CHARACTER_DIARY_COOLDOWN_MS)
@@ -486,7 +543,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
 
     const dayStart = new Date(now)
     dayStart.setHours(0, 0, 0, 0)
-    const diariesToday = partitionDiary.value.filter(entry => entry.createdAt >= dayStart.getTime() && entry.createdAt <= now)
+    const diariesToday = scopedDiaries.filter(entry => entry.createdAt >= dayStart.getTime() && entry.createdAt <= now)
     if (diariesToday.length >= CHARACTER_DIARY_MAX_PER_DAY)
       return false
 
@@ -507,6 +564,14 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     }
     diaryDrafts.value.push(draft)
     return draft
+  }
+
+  async function createDiaryDraftForScope(scope: NotebookMemoryScope, input: Omit<CharacterDiaryDraft, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
+    const now = Date.now()
+    await updateNotebookForScope(scope, (data) => {
+      data.diaryDrafts ??= []
+      data.diaryDrafts.push({ ...input, metadata: createScopedMetadata(input.metadata, scope), id: nanoid(), status: 'draft', createdAt: now, updatedAt: now })
+    }, typeof input.metadata?.sourceSessionId === 'string' ? input.metadata.sourceSessionId : undefined)
   }
 
   function updateDiaryDraft(id: string, updates: Partial<Pick<CharacterDiaryDraft, 'title' | 'text'>>) {
@@ -599,7 +664,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     options: { scope: Partial<NotebookMemoryScope>, tags?: string[], metadata?: Record<string, unknown> },
   ) {
     const scope = resolveMemoryScope(options.scope)
-    await ensureCurrentScopeLoaded(scope)
+    const sourceSessionId = typeof options.metadata?.sourceSessionId === 'string' ? options.metadata.sourceSessionId : undefined
     const entry: NotebookEntry = {
       id: nanoid(),
       kind,
@@ -609,22 +674,10 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
       metadata: createScopedMetadata(options.metadata, scope),
     }
 
-    if (loadedScopeId.value === scope.characterId) {
-      entries.value.push(entry)
-      // A completed chat turn must survive a restart even when its scope is
-      // already hydrated; the old path only updated the reactive array.
-      await saveToStorage(scope.characterId)
+    return updateNotebookForScope(scope, (data) => {
+      data.entries.push(entry)
       return entry
-    }
-
-    const data = await notebookRepo.load(scope.characterId)
-    await notebookRepo.save(scope.characterId, {
-      entries: [...(data?.entries ?? []), entry],
-      tasks: data?.tasks ?? [],
-      diaryDrafts: data?.diaryDrafts ?? [],
-      version: data?.version ?? 1,
-    })
-    return entry
+    }, sourceSessionId)
   }
 
   /** Update one memory in its frozen scope, persisting that scope atomically. */
@@ -632,25 +685,16 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     entryId: string,
     scopeInput: Partial<NotebookMemoryScope>,
     update: (entry: NotebookEntry) => void,
+    sourceSessionId?: string,
   ) {
     const scope = resolveMemoryScope(scopeInput)
-    await ensureCurrentScopeLoaded(scope)
-    if (loadedScopeId.value === scope.characterId) {
-      const entry = entries.value.find(item => item.id === entryId)
+    return updateNotebookForScope(scope, (data) => {
+      const entry = data.entries.find(item => item.id === entryId)
       if (!entry)
         return undefined
       update(entry)
-      await saveToStorage(scope.characterId)
       return entry
-    }
-
-    const data = await notebookRepo.load(scope.characterId)
-    const entry = data?.entries.find(item => item.id === entryId)
-    if (!entry || !data)
-      return undefined
-    update(entry)
-    await notebookRepo.save(scope.characterId, data)
-    return entry
+    }, sourceSessionId)
   }
 
   function scheduleTask(payload: {
@@ -805,6 +849,9 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     updateMemoryEntryInScope,
     entryBelongsToMemoryScope,
     getMemoryEntriesForScope,
+    getNotebookForScope,
+    updateNotebookForScope,
+    createDiaryDraftForScope,
     resolveMemoryScope,
     removeEntry,
     removeEntriesBySourceMessage,

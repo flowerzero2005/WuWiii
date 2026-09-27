@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import type { NotebookEntry } from '@proj-airi/stage-ui/stores/character/notebook'
+import type { NotebookEntry, NotebookMemoryScope } from '@proj-airi/stage-ui/stores/character/notebook'
 
+import { useConversationNavigation } from '@proj-airi/stage-ui/composables/use-conversation-navigation'
 import { useCharacterNotebookStore } from '@proj-airi/stage-ui/stores/character/notebook'
 import { useMemoryManager } from '@proj-airi/stage-ui/stores/chat/memory-manager'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const chatSession = useChatSessionStore()
 const memoryManager = useMemoryManager()
 const notebookStore = useCharacterNotebookStore()
+const airiCards = useAiriCardStore()
+const navigation = useConversationNavigation()
+const route = useRoute()
 const router = useRouter()
 const { locale, t } = useI18n()
 const filtersPanelClass = 'airi-surface-panel rounded-xl p-4 space-y-4'
@@ -51,16 +56,48 @@ const isLoading = ref(true)
 // Edit state
 const editingId = ref<string | null>(null)
 const editingText = ref('')
+const editingScope = ref<NotebookMemoryScope>()
+const selectedCharacterId = ref('')
+const scopedEntries = ref<NotebookEntry[]>([])
+const actionPending = ref(false)
+const scopeError = ref('')
+const selectedScope = computed(() => notebookStore.resolveMemoryScope({ personaCardId: selectedCharacterId.value }))
+const characterOptions = computed(() => Array.from(new Set([
+  'default',
+  ...airiCards.cards.keys(),
+  ...chatSession.directSessions.map(meta => meta.characterId),
+  ...chatSession.groupSessions.flatMap(meta => meta.participants?.map(participant => participant.characterId) ?? []),
+])).map(id => ({ id, name: airiCards.cards.get(id)?.name || (id === 'default' ? t('base.resident.default-name') : id) })))
+let loadRevision = 0
 
 async function refreshLongTermMemory() {
+  if (!selectedCharacterId.value || editingId.value)
+    return
+  const scope = { ...selectedScope.value }
+  const revision = ++loadRevision
+  isLoading.value = true
+  scopeError.value = ''
   try {
-    if (!editingId.value)
-      await notebookStore.loadFromStorage({ force: true })
+    const notebook = await notebookStore.getNotebookForScope(scope, { force: true })
+    if (revision === loadRevision && selectedScope.value.characterId === scope.characterId)
+      scopedEntries.value = notebook.entries.filter(entry => notebookStore.entryBelongsToMemoryScope(entry, scope))
   }
-  catch (error) {
-    console.warn('[Long-term Memory] Failed to refresh storage snapshot:', error)
+  catch {
+    if (revision === loadRevision)
+      scopeError.value = mt('character-selector.load-failed')
+  }
+  finally {
+    if (revision === loadRevision)
+      isLoading.value = false
   }
 }
+
+watch(() => selectedScope.value.characterId, () => {
+  ++loadRevision
+  scopedEntries.value = []
+  cancelEdit()
+  void refreshLongTermMemory()
+}, { flush: 'sync' })
 
 function refreshLongTermMemoryFromFocus() {
   void refreshLongTermMemory()
@@ -76,12 +113,17 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', refreshLongTermMemoryWhenVisible)
 
   try {
-    await notebookStore.loadFromStorage({ force: true })
-    if (!chatSession.isReady) {
-      await chatSession.initialize()
-    }
+    await chatSession.initializeForInspection()
+    const requestedCharacter = typeof route.query.characterId === 'string' ? route.query.characterId : undefined
+    const requestedSession = typeof route.query.sessionId === 'string' ? route.query.sessionId : undefined
+    const sessionId = requestedSession || (navigation ? await navigation.getCurrentConversation() : chatSession.activeSessionId)
+    const meta = [...chatSession.directSessions, ...chatSession.groupSessions].find(meta => meta.sessionId === sessionId)
+    const characterId = requestedCharacter || (meta?.kind === 'room' ? meta.primaryCharacterId || meta.participants?.[0]?.characterId : meta?.characterId)
+    selectedCharacterId.value = characterOptions.value.some(option => option.id === characterId) ? characterId! : characterOptions.value[0]?.id ?? 'default'
+    await refreshLongTermMemory()
   }
   catch (error) {
+    scopeError.value = mt('character-selector.load-failed')
     console.error('[Long-term Memory] Failed to load:', error)
   }
   finally {
@@ -103,7 +145,7 @@ const selectedTags = ref<string[]>([])
 
 // Get all entries sorted by creation time (newest first)
 const allEntries = computed(() => {
-  let filtered = notebookStore.entries
+  let filtered = [...scopedEntries.value]
 
   // Filter by importance
   if (selectedImportance.value === 'focus') {
@@ -139,7 +181,7 @@ const allEntries = computed(() => {
 const allTags = computed(() => {
   const tags = new Set<string>()
 
-  notebookStore.entries.forEach((entry) => {
+  scopedEntries.value.forEach((entry) => {
     entry.tags?.forEach(tag => tags.add(tag))
   })
   return Array.from(tags).sort()
@@ -147,10 +189,10 @@ const allTags = computed(() => {
 
 // Statistics
 const stats = computed(() => ({
-  total: notebookStore.entries.length,
-  focus: notebookStore.partitionFocus.length,
-  growthCandidate: notebookStore.entries.filter(e => e.metadata?.memoryKind === 'persona-growth-candidate').length,
-  note: notebookStore.entries.filter(e => e.kind === 'note').length,
+  total: scopedEntries.value.length,
+  focus: scopedEntries.value.filter(e => e.kind === 'focus').length,
+  growthCandidate: scopedEntries.value.filter(e => e.metadata?.memoryKind === 'persona-growth-candidate').length,
+  note: scopedEntries.value.filter(e => e.kind === 'note').length,
 }))
 
 function getImportanceIcon(kind: string) {
@@ -281,14 +323,17 @@ async function openSourceMessage(entry: NotebookEntry) {
   if (!target)
     return
 
-  chatSession.setActiveSession(target.sessionId)
-  await router.push({
-    path: '/chat',
-    query: {
-      focusMessageId: target.messageId,
-      sourceSessionId: target.sessionId,
-    },
-  })
+  try {
+    if (navigation) {
+      if (!await navigation.openConversation(target.sessionId))
+        scopeError.value = mt('character-selector.navigation-failed')
+      return
+    }
+    await router.push({ path: '/settings/modules/memory-short-term', query: { sessionId: target.sessionId } })
+  }
+  catch {
+    scopeError.value = mt('character-selector.navigation-failed')
+  }
 }
 
 function getReferenceTraceText(entry: NotebookEntry) {
@@ -376,55 +421,97 @@ function getPersonaGrowthTraceText(entry: NotebookEntry) {
   ].filter(Boolean).join(' · ')
 }
 
-function deleteEntry(id: string) {
+async function runScopedAction(scope: NotebookMemoryScope, action: () => Promise<unknown>) {
+  if (actionPending.value || scope.userId !== selectedScope.value.userId)
+    return false
+  actionPending.value = true
+  scopeError.value = ''
+  try {
+    await action()
+    if (scope.characterId === selectedScope.value.characterId) {
+      cancelEdit()
+      await refreshLongTermMemory()
+    }
+    return true
+  }
+  catch {
+    scopeError.value = mt('character-selector.save-failed')
+    return false
+  }
+  finally {
+    actionPending.value = false
+  }
+}
+
+async function deleteEntry(id: string) {
+  const scope = { ...selectedScope.value }
   // NOTICE: This page already used native confirm for destructive deletion; replacing the dialog UX is outside this cleanup.
   // eslint-disable-next-line no-alert
   if (confirm(mt('confirm.delete'))) {
-    notebookStore.removeEntry(id)
+    await runScopedAction(scope, () => notebookStore.updateNotebookForScope(scope, (data) => {
+      data.entries = data.entries.filter(entry => entry.id !== id)
+    }))
   }
 }
 
 async function solidifyPersonaGrowthCandidate(id: string) {
+  const scope = { ...selectedScope.value }
   // eslint-disable-next-line no-alert
   if (!confirm(mt('confirm.solidify-growth')))
     return
 
-  await memoryManager.solidifyPersonaGrowthCandidate(id)
+  await runScopedAction(scope, () => memoryManager.solidifyPersonaGrowthCandidate(id, scope))
 }
 
 async function disablePersonaGrowthCandidate(id: string) {
+  const scope = { ...selectedScope.value }
   // eslint-disable-next-line no-alert
   if (!confirm(mt('confirm.ignore-growth')))
     return
 
-  await memoryManager.disablePersonaGrowthCandidate(id)
+  await runScopedAction(scope, () => memoryManager.disablePersonaGrowthCandidate(id, scope))
 }
 
-function startEdit(entry: any) {
+function startEdit(entry: NotebookEntry) {
+  if (actionPending.value || isLoading.value)
+    return
   editingId.value = entry.id
   editingText.value = entry.text
+  editingScope.value = { ...selectedScope.value }
 }
 
 function cancelEdit() {
   editingId.value = null
   editingText.value = ''
+  editingScope.value = undefined
 }
 
-function saveEdit() {
-  if (!editingId.value || !editingText.value.trim())
+async function saveEdit() {
+  if (!editingId.value || !editingText.value.trim() || !editingScope.value)
     return
 
-  const entry = notebookStore.entries.find(e => e.id === editingId.value)
-  if (entry) {
-    entry.text = editingText.value.trim()
-  }
-
-  cancelEdit()
+  const scope = { ...editingScope.value }
+  const id = editingId.value
+  const text = editingText.value.trim()
+  await runScopedAction(scope, () => notebookStore.updateMemoryEntryInScope(id, scope, (entry) => {
+    entry.text = text
+  }))
 }
 </script>
 
 <template>
   <div class="p-6 space-y-6">
+    <section :class="filtersPanelClass">
+      <label :class="['flex max-w-sm flex-col gap-2 text-sm font-medium']">
+        {{ mt('character-selector.label') }}
+        <select v-model="selectedCharacterId" :disabled="isLoading || actionPending || Boolean(editingId)" :class="['min-w-0 rounded-md border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card-base)] px-3 py-2 disabled:opacity-50']">
+          <option v-for="character in characterOptions" :key="character.id" :value="character.id">{{ character.name }}</option>
+        </select>
+      </label>
+      <p :class="['text-xs text-[var(--airi-text-muted)] leading-5']">{{ mt('character-selector.description') }}</p>
+      <p v-if="editingId" :class="['text-xs text-[var(--airi-text-muted)]']">{{ mt('character-selector.finish-edit') }}</p>
+      <p v-if="scopeError" role="alert" :class="['airi-status-danger rounded-md p-3 text-sm']">{{ scopeError }}</p>
+    </section>
     <!-- Statistics -->
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div :class="statCardClass">
@@ -558,21 +645,24 @@ function saveEdit() {
             <div v-if="editingId === entry.id" class="mb-2 space-y-2">
               <textarea
                 v-model="editingText"
+                :readonly="actionPending"
                 :class="editTextareaClass"
                 rows="3"
-                @keydown.esc="cancelEdit"
+                @keydown.esc="!actionPending && cancelEdit()"
                 @keydown.ctrl.enter="saveEdit"
               />
               <div class="flex items-center justify-between gap-2">
                 <div class="flex gap-2">
                   <button
                     :class="saveEditButtonClass"
+                    :disabled="actionPending"
                     @click="saveEdit"
                   >
                     {{ mt('actions.save') }}
                   </button>
                   <button
                     :class="cancelEditButtonClass"
+                    :disabled="actionPending"
                     @click="cancelEdit"
                   >
                     {{ mt('actions.cancel') }}
@@ -635,6 +725,7 @@ function saveEdit() {
           <div v-if="editingId !== entry.id" class="flex flex-shrink-0 gap-1">
             <button
               v-if="canJumpToSource(entry)"
+              :disabled="actionPending || isLoading || Boolean(editingId)"
               :class="sourceActionButtonClass"
               :title="mt('actions.open-source')"
               @click="openSourceMessage(entry)"
@@ -644,6 +735,7 @@ function saveEdit() {
             <button
               v-if="isActivePersonaGrowthCandidate(entry)"
               :class="solidifyActionButtonClass"
+              :disabled="actionPending || isLoading || Boolean(editingId)"
               :title="mt('actions.solidify-growth')"
               @click="solidifyPersonaGrowthCandidate(entry.id)"
             >
@@ -652,6 +744,7 @@ function saveEdit() {
             <button
               v-if="isActivePersonaGrowthCandidate(entry)"
               :class="ignoreActionButtonClass"
+              :disabled="actionPending || isLoading || Boolean(editingId)"
               :title="mt('actions.ignore-growth')"
               @click="disablePersonaGrowthCandidate(entry.id)"
             >
@@ -659,6 +752,7 @@ function saveEdit() {
             </button>
             <button
               :class="editActionButtonClass"
+              :disabled="actionPending || isLoading || Boolean(editingId)"
               :title="mt('actions.edit')"
               @click="startEdit(entry)"
             >
@@ -666,6 +760,7 @@ function saveEdit() {
             </button>
             <button
               :class="deleteActionButtonClass"
+              :disabled="actionPending || isLoading || Boolean(editingId)"
               :title="mt('actions.delete')"
               @click="deleteEntry(entry.id)"
             >

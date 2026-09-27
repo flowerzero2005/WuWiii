@@ -37,6 +37,7 @@ import { setupWorkbenchMemoryService } from './services/airi/workbench-memory'
 import { setupWorkbenchStaticPreviewService } from './services/airi/workbench-static-preview'
 import { setupWorkbenchWorkspaceService } from './services/airi/workbench-workspace'
 import { setupAutoUpdater } from './services/electron/auto-updater'
+import { createConversationNavigationService } from './services/electron/conversation-navigation'
 import { createDetachedComposerService } from './services/electron/detached-composer'
 import { setupMediaPermissions } from './services/electron/media-permissions'
 import { setupSingleInstance } from './single-instance'
@@ -258,7 +259,7 @@ if (isWindows)
   app.setAppUserModelId(desktopAppUserModelId)
 
 if (singleInstance.isPrimary)
-  initScreenCaptureForMain()
+  initScreenCaptureForMain({ onDiagnostic: desktopDiagnostics.record })
 
 singleInstance.isPrimary && app.whenReady().then(async () => {
   setupMediaPermissions(session.defaultSession)
@@ -388,7 +389,7 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
     build: ({ dependsOn }) => createServerChannelService({ serverChannel: dependsOn.serverChannel }),
   })
 
-  const detachedComposer = injeca.provide('modules:detached-composer', () => createDetachedComposerService())
+  const detachedComposer = injeca.provide('modules:detached-composer', () => createDetachedComposerService(undefined, desktopDiagnostics))
   // Register the source/editor commands before any chat renderer can load.
   // injeca.invoke schedules work; resolving here makes ordering explicit.
   await injeca.resolve({ detachedComposer })
@@ -494,6 +495,12 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
     },
   })
 
+  const conversationNavigation = injeca.provide('modules:conversation-navigation', {
+    dependsOn: { chatWindow },
+    build: ({ dependsOn }) => createConversationNavigationService(dependsOn.chatWindow),
+  })
+  await injeca.resolve({ conversationNavigation })
+
   injeca.invoke({
     dependsOn: { mainWindow },
     callback: ({ mainWindow }) => {
@@ -592,6 +599,7 @@ singleInstance.isPrimary && app.whenReady().then(async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  desktopDiagnostics.record('electron-window-all-closed')
   emitAppWindowAllClosed()
 
   if (platform !== 'darwin') {
@@ -601,6 +609,7 @@ app.on('window-all-closed', () => {
 
 // Clean up server and intervals when app quits
 app.on('before-quit', (event) => {
+  desktopDiagnostics.record('electron-before-quit', { cleanupStarted: quitCleanupStarted })
   if (quitCleanupStarted)
     return
 

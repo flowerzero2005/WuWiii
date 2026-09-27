@@ -3,13 +3,20 @@ import { electron } from '@proj-airi/electron-eventa'
 import { useElectronEventaInvoke, useElectronWindowResize } from '@proj-airi/electron-vueuse'
 import { useAsyncState } from '@vueuse/core'
 
+const props = withDefaults(defineProps<{
+  /** Keep the native resize hit areas inside a visible sub-surface. */
+  contained?: boolean
+}>(), {
+  contained: false,
+})
+
 const isWindows = useElectronEventaInvoke(electron.app.isWindows)
 const { handleResizeStart } = useElectronWindowResize()
 const isWindowsRef = useAsyncState(() => isWindows(), false)
 </script>
 
 <template>
-  <div v-if="isWindowsRef" class="resize-handles">
+  <div v-if="isWindowsRef" :class="['resize-handles', props.contained ? 'resize-handles-contained' : undefined]">
     <div class="handle n" @mousedown="handleResizeStart($event, 'n')" />
     <div class="handle s" @mousedown="handleResizeStart($event, 's')" />
     <div class="handle e" @mousedown="handleResizeStart($event, 'e')" />
@@ -30,6 +37,10 @@ const isWindowsRef = useAsyncState(() => isWindows(), false)
   bottom: 0;
   pointer-events: none;
   z-index: 9999;
+}
+
+.resize-handles-contained {
+  position: absolute;
 }
 
 .handle {

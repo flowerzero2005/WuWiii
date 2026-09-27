@@ -127,6 +127,10 @@ export const mainBundledWorkspaceDependencies = [
   '@proj-airi/electron-vueuse',
   '@proj-airi/i18n',
   '@proj-airi/plugin-sdk',
+  // NOTICE: Match the package name so the aliased vision-limits source is bundled;
+  // leaving the UI re-export external made Node load the unbuilt dist module.
+  // See `node_modules/electron-vite/dist/chunks/lib-q6ns0vZr.js:1127-1150`.
+  '@proj-airi/server-shared',
   '@electron-toolkit/utils',
 ]
 
@@ -202,6 +206,9 @@ export default defineConfig({
 
     resolve: {
       alias: {
+        // Keep capture handlers and renderer contracts on the same source revision.
+        '@proj-airi/electron-screen-capture': resolve(join(import.meta.dirname, '..', '..', 'packages', 'electron-screen-capture', 'src')),
+        '@proj-airi/server-shared/vision-limits': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-shared', 'src', 'vision-limits.ts')),
         '@proj-airi/i18n': resolve(join(import.meta.dirname, '..', '..', 'packages', 'i18n', 'src')),
       },
     },
@@ -267,6 +274,8 @@ export default defineConfig({
 
     resolve: {
       alias: {
+        '@proj-airi/electron-screen-capture': resolve(join(import.meta.dirname, '..', '..', 'packages', 'electron-screen-capture', 'src')),
+        '@proj-airi/server-shared/vision-limits': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-shared', 'src', 'vision-limits.ts')),
         '@proj-airi/server-sdk': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-sdk', 'src')),
         '@proj-airi/i18n': resolve(join(import.meta.dirname, '..', '..', 'packages', 'i18n', 'src')),
         '@proj-airi/stage-ui': resolve(join(import.meta.dirname, '..', '..', 'packages', 'stage-ui', 'src')),

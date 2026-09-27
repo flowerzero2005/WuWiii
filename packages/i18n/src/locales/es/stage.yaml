@@ -15,6 +15,7 @@ chat:
     screen-source-unavailable: No se pudo capturar esta fuente. Vuelve a seleccionar una pantalla o ventana disponible.
     screen-thumbnail-unavailable: La fuente seleccionada no proporcionó una imagen. Revisa el permiso de grabación de pantalla y vuelve a seleccionarla.
     screen-timeout: Se agotó el tiempo de espera de la captura de pantalla. Inténtalo de nuevo.
+    screen-system-unavailable: La solicitud de captura del sistema no ha terminado. Vuelve a intentarlo; si sigue fallando, reinicia Wuwiii.
     screen-permission-denied: El sistema denegó el permiso de grabación de pantalla. Permite que Wuwiii grabe la pantalla en los ajustes del sistema y vuelve a intentarlo.
     screen-no-sources: No hay pantallas ni ventanas disponibles.
 message: Dile algo...

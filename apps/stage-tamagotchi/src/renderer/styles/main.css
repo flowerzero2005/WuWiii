@@ -24,6 +24,14 @@ html.butler-window-surface #app {
   background-image: none !important;
 }
 
+html.composer-window-surface,
+html.composer-window-surface body,
+html.composer-window-surface #app {
+  background-color: transparent !important;
+  background-image: none !important;
+  overflow: hidden;
+}
+
 html.hide-vue-devtools-floating :is(
   #__vue-devtools-container__ > .vue-devtools__anchor,
   #vue-devtools-container > .vue-devtools__anchor,

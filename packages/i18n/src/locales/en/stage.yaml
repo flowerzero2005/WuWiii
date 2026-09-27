@@ -1,4 +1,28 @@
 chat:
+  conversations:
+    browse: Chats
+    title: Conversations
+    with-character: 'Conversations with {name}'
+    new-with-character: 'New conversation with {name}'
+    memory-kept: A new conversation keeps this character’s long-term memory.
+    search: Search conversations
+    no-results: No matching conversations
+    empty: Start a conversation with this character.
+    untitled: New conversation
+    no-messages: No messages yet
+    open-preview: Open this conversation to view messages
+    loading-preview: Loading last message…
+    star: Favorite conversation
+    unstar: Remove from favorites
+    rename: Rename conversation
+    title-label: Conversation title
+    delete: Delete conversation
+    delete-confirm: 'Delete “{title}” and its messages? This character’s long-term memory will be kept.'
+    cancel: Cancel
+    save: Save
+    action-failed: Could not update this conversation. Please try again.
+    switch-failed: Could not save and return your input. Please try switching again.
+    busy: Finish sending or end the voice call before switching conversations.
   composer:
     title: Detached composer
     description: Edit here; the original conversation performs the send and any image consent.
@@ -10,7 +34,9 @@ chat:
     orphaned: The original conversation changed or closed. Return to that conversation to recover this draft.
     uncertain: The original send outcome is unknown. This draft is saved on this device and cannot be resent. Check the original conversation before explicitly discarding it.
     sync-failed: Draft sync failed. Closing is blocked to keep your latest input here. Retry sync before returning.
-    source-failed: Could not detach or return. Finish the current send, or return any other detached input first.
+    source-failed: The input window state changed. Try again shortly.
+    another-detached: Another detached input is open. Return it to its source conversation first.
+    source-retrying: The draft service is temporarily unavailable. Retrying.
     send-failed: The source could not send this draft. Check the original conversation.
     wait-send: Wait for the current send to finish before closing.
     image: Attached image
@@ -19,7 +45,7 @@ chat:
     fee-confirm-in-source: Return to the original chat window to confirm this image understanding fee before sending. The detached window does not bypass that confirmation.
     fee-quote-loading: Reading the current official image understanding fee…
     fee-quote-unavailable: The current official image understanding fee is unavailable. Return to the original chat window before sending.
-    image-failed: Use up to 4 PNG, JPEG, WebP or GIF images, each at most 10 MB.
+    image-failed: 'Use up to {count} PNG, JPEG, WebP or GIF images, each at most {maxImageMb} MB and {maxTotalMb} MB in total.'
     syncing: Syncing draft…
     synced: Draft synced
     retry-sync: Retry sync
@@ -27,7 +53,7 @@ chat:
     drag-return: Drag this handle onto the original input area to return the draft.
     return-ready: Release to return the draft to this conversation.
     return-target-unavailable: The original input area is unavailable. Return to that conversation before dragging again.
-    checkpoint-failed: Draft could not be saved. Check disk space or explicitly discard an earlier saved draft, then click to retry.
+    checkpoint-failed: The draft is not synced yet, but remains in this window. Click to retry.
     discard: Discard saved draft
     cancel-discard: Keep draft
     discard-confirm: Discard this draft permanently? An unknown send may already appear in the original conversation. This does not resend or cancel it.
@@ -49,18 +75,24 @@ chat:
     failed-text-only: The image could not be understood. This turn will send only the text.
     upload: Upload image
     screen-capture: Capture screen or window
-    screen-select: Choose a source and preview it before attaching. The image is sent only when you send the message.
+    screen-select: Choose a source, then attach to capture after 3 seconds. You can switch to the view you want. The image is uploaded only when you send the message.
     screen-preview: Selected source preview
-    screen-attach: Attach screenshot
+    screen-attach: Capture in 3 seconds
+    screen-attach-countdown: 'Capture in {seconds} seconds'
+    screen-countdown: 'Capturing in {seconds} seconds. Switch to the view you want to capture.'
+    screen-capturing: Capturing screenshot…
     screen-loading: Loading preview…
     screen-failed: Could not start screen capture. Try again.
     screen-source-unavailable: Could not capture this source. Select an available screen or window again.
     screen-thumbnail-unavailable: The selected source did not provide an image. Check screen-recording permission, then select it again.
     screen-timeout: Screen capture timed out. Try again.
+    screen-system-unavailable: The system capture request has not finished. Try again; if it keeps failing, restart Wuwiii.
     screen-permission-denied: The system denied screen-recording permission. Allow Wuwiii to record your screen in system settings, then try again.
     screen-no-sources: No screens or windows are available.
     image-limit: 'Send up to {count} images at once.'
-    image-too-large: Each image must be smaller than 10 MB.
+    image-too-large: 'Each image must be at most {maxImageMb} MB.'
+    images-too-large: 'Images must total at most {maxTotalMb} MB. Remove some images or reduce their size.'
+    image-format: Choose PNG, JPEG, WebP or GIF images.
   capability-consent:
     action: Enable
     approval-required: Enable and confirm this official capability from the chat controls first.
@@ -141,7 +173,18 @@ chat:
       insufficient-points: Not enough points. Open Account & Points to add more.
       login-required: Sign in to use the official cloud model.
       not-configured: The official cloud model is not configured. Contact the service operator.
-      unavailable: The selected official cloud model is temporarily unavailable. Try again later or switch models.
+      unavailable: The selected official cloud model is not available. Update the app or choose another model.
+      request-failed: This reply request failed. Please try again later.
+      request-timeout: This reply request timed out. Please try again later.
+      tool-timeout: The tool response timed out. Check the action status before trying again.
+      rate-limited: Too many requests. Please wait a moment before trying again.
+      rate-limited-wait: 'The service is rate limited. Please try again in {seconds} seconds.'
+      empty-response: No visible reply was generated. Please retry.
+      invalid-response: The service returned an invalid reply. Please try again later.
+      truncated-response: The reply reached its output limit before it was complete. Please shorten the request.
+      content-filtered: The reply was stopped by the content filter. Please revise your message.
+      delivery-failed: The reply could not be delivered. Please try again later.
+      context-too-long: The conversation is too long for this request. Please shorten it or start a new conversation.
   official-cloud-login-required: Sign in to use official cloud
   official-cloud-send-disabled: You are signed out, so official cloud messages cannot be sent.
   recommended-replies:

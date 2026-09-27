@@ -648,6 +648,9 @@ pages:
       cancel: 取消
       claim-check-in: 领取点数
       claim-check-in-upgrade: 补领升级点数
+      claim-check-in-points: 领取 {points} 点
+      claim-check-in-upgrade-points: 补领 {points} 点
+      view-pricing: 查看定价
       copy-user-id: 复制用户 ID
       create-account: 创建账户
       edit-profile: 编辑资料
@@ -696,17 +699,17 @@ pages:
       support-description: 我们仍在开发初期。每一份支持都会用于服务成本、角色体验和新功能维护，也让这个小屋能更稳定地陪伴大家。
       spend-responsibly: 请按实际需要选择，不必为了支持而勉强消费。会员不自动续费，免费功能、本地模型和自有 API Key 仍可正常使用；先好好生活，再来屋里坐坐。
     points:
-      grant: 赠送
-      paid: 付费
+      grant: 赠送点（含会员）
+      paid: 充值点
       reserved: 预留
-      trial: 试用
+      trial: 体验点
     sections:
       overview:
-        title: 账户与点数
-        description: 查看你的内测资格、剩余模型点数和激活码状态。
+        title: 个人主页
+        description: 管理个人资料、点数与使用记录。
       pricing:
         title: 当前点数价格
-        description: 显示官方云功能的当前价格；管理端修改后会自动刷新。
+        description: 查看官方云服务的当前价格与计费方式。
         loading: 正在读取当前价格
         live: 实时价格 · 最多 5 秒更新
         chat: 聊天模型参考价
@@ -941,19 +944,44 @@ pages:
       points:
         title: 可用点数
         available: 可用于官方云模型调用
-        membership: 其中会员点数
+        membership: 其中会员点
       check-in:
         title: 每日签到
         description: 每日领取点数，达到当前存储上限后暂停累积。
-        description-free: 'Free 每日可领 {points} 试用点，最多存储 {cap} 点。'
-        description-member: '{plan} 每日可领 {points} 会员点数，最多存储 {cap} 点。'
+        description-free: '体验账户每日最多领取 {points} 体验点。'
+        description-member: '{plan} 每日最多领取 {points} 会员点。'
+        policy-free: '体验账户每日最多领取 {points} 体验点。'
+        policy-member: '{plan} 每日最多领取 {points} 会员点。'
         streak: 已连续 {days} 天
-        next-reward: 下次 +{points} 试用点
-        cap-reached: 已达到试用点上限
+        next-reward: 今日可领 {points} 点
+        cap-reached: 已达到签到点数上限
         claimed: 今天已领取
+        trial-points: 体验点
+        membership-points: 会员点
+        bucket-capacity: '{bucket}余额 / 签到上限'
+        bucket-full: '{bucket}余额已满'
+        today-reward: 今日实际可领
+        reward-points: '{points} 点'
+        paid-balance: '充值点：{points}'
+        paid-separate: 独立于签到点数，不占签到容量。
+        auto-label: 自动领取（此设备）
+        auto-enabled-description: 已开启：登录并保持软件运行时自动领取，也可手动领取。
+        auto-disabled-description: 已关闭：可使用领取按钮手动领取。
+        schedule: 北京时间每天 08:00 刷新；软件关闭期间不补签，漏领不累计。
+        capacity-rule: 余额接近上限时，只补到上限；当天领取后再消费，不会增加当日领取额度。
+        loading: 正在加载
+        loading-description: 正在读取签到余额和今日可领点数…
+        error-description: 暂时无法读取最新签到状态，请重试。未显示的余额不代表零。
+        unavailable: 状态暂不可用
+        retry: 重新获取
+        claiming: 正在领取…
+        claimed-description: 今日已领取。当天消费后不再补领，请在下次刷新后领取。
+        full-description: '{bucket}余额已满，暂时无法领取；消费腾出容量后可重新获取状态。'
+        upgrade-description: 今日已领取过，套餐升级后仍可补领升级额度，实际到账以剩余容量为限。
+        upgrade-full-description: '套餐升级后仍有补领资格，但{bucket}余额已满；消费腾出容量后可在今日补领升级额度。'
       balance:
         title: 点数余额
-        description: 试用、赠送和付费点数会在调用模型时扣除，预留点数会在调用完成或失败后结算。
+        description: 体验点、赠送点和充值点会在调用模型时扣除；会员点包含在赠送点中，不需重复相加。预留点数会在调用完成或失败后结算。
         loading: 正在加载点数余额…
         error: 暂时无法读取点数余额，请重试。当前显示不代表余额为零。
         retry: 重试
@@ -1165,8 +1193,10 @@ pages:
           cancelled: 请求已取消，本次未收费。
           unknown: 请求未完成，本次未收费。
     status:
-      check-in-claimed: 已领取 {points} 试用点。
+      check-in-claimed: 今日累计领取 {points} 点。
+      check-in-updated: 签到状态已更新，请查看最新余额和今日可领点数。
       check-in-failed: 领取每日签到点数失败。
+      check-in-timeout: 领取请求超时，请刷新查看最新状态；重复尝试不会重复发放点数。
       fetch-failed: 刷新账户状态失败。
       email-auth-failed: 邮箱登录失败。
       verification-auth-failed: 验证码登录失败。
@@ -2070,6 +2100,13 @@ pages:
           provider-selection:
             description: 选择合适的语音识别服务，把接收到的声音转换为文字。
     memory-long-term:
+      character-selector:
+        label: 角色
+        description: 与这个角色的所有对话共享这里的长期记忆。在此查看其他角色不会切换当前聊天或舞台模型。
+        finish-edit: 请先保存或取消编辑，再选择其他角色。
+        load-failed: 未能加载这个角色的记忆，请重新选择角色后重试。
+        save-failed: 未能保存这次记忆修改，请重试。
+        navigation-failed: 未能打开来源对话，请回到聊天后重试。
       description: 整理希望当前居民长期记住的内容。
       title: 长期记忆
       stats:
@@ -2141,8 +2178,19 @@ pages:
         loading: 加载中...
         no-memory: 暂无记忆
     memory-short-term:
-      description: 查看最近对话中正在使用的短期记忆。
+      description: 查看已保存的对话记录，管理短期记忆。
       title: 短期记忆
+      delete-conversation:
+        title: 删除对话
+        description: 从此角色的对话列表中移除当前选中的对话。
+        scope: 对话消息及关联心声札记将一并删除，角色的长期记忆会保留。删除后无法恢复。
+        confirm-description: 确认删除「{title}」？
+        action: 删除所选对话
+        confirm: 确认删除
+        cancel: 取消
+        pending: 正在删除…
+        success: 已删除对话「{title}」。
+        failed: 未能完成删除，请刷新对话列表后重试。
       auto-cleanup:
         title: 自动清理
         enabled-label: 自动清理短期记忆
@@ -2151,8 +2199,19 @@ pages:
         limit-description: 消息数量达到或超过该值时触发自动清理，范围 1-400 条。
         unit: 条
       session-selector:
-        label: 记忆会话
-        description: 选择要查看或清理记忆的会话（包含群聊会话）。
+        label: 对话
+        role-label: 角色或群聊
+        group: 群聊
+        description: 查看记录不会切换当前聊天、角色或模型。清理操作仅作用于这里选中的对话。
+        context-description: 这里展示已保存的记录。模型每次回复只会接收在上下文容量内选取的内容，不一定包含全部已保存消息。清理上限控制保存的记录数量，不代表模型的上下文容量。
+        saved-count: 已保存消息
+        empty: 还没有保存的对话
+        loading: 正在加载已保存的消息…
+        load-failed: 未能加载这段对话，请重新选择后重试。
+        current: 查看当前聊天
+        open: 前往这段对话
+        current-unavailable: 未找到打开的聊天，请在上方选择角色和对话。
+        navigation-failed: 未能打开这段对话，请回到聊天，等待发送完成或结束语音通话后重试。
     messaging-discord:
       description: Discord 发消息和语音聊天
       title: Discord
@@ -2393,11 +2452,12 @@ pages:
         heading: 连接测试
         intro: 测试会使用当前配置发送一张图片，并按所选服务的规则计费。
         choose-image: 选择图片
+        images-selected: '已选择 {count} 张图片'
         image-selected: '已选择：{name}'
         clear-image: 移除图片
         selection-local: 选择图片只会在这里本地预览；开始测试前不会上传、识别或扣点。
         fee-required: 请先接受当前官方图片理解费用，再开始测试。选择图片仍是本地操作，不会扣点。
-        image-required: 请先选择一张图片。
+        image-required: 请先选择至少一张图片。
         prompt: 请简要说明这张图片里有什么。
         disabled: 视觉模块当前未启用。
         analyzing: 识别中…

@@ -7,6 +7,7 @@ import type { ServerChannel } from '../../services/airi/channel-server'
 
 import { join, resolve } from 'node:path'
 
+import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { defineInvokeHandler } from '@moeru/eventa'
 import { BrowserWindow as ElectronBrowserWindow, screen, shell } from 'electron'
 import { debounce } from 'es-toolkit'
@@ -362,6 +363,8 @@ export function setupQuickChatWindowManager(params: {
       void openSettingsWindow({ settingsWindow: params.settingsWindow, payload })
         .catch(error => console.warn('[QuickChatWindow] Failed to open settings window:', error))
     })
+
+    initScreenCaptureForWindow(window)
 
     await load(window, withHashRoute(rendererBase, '/quick-chat'))
 

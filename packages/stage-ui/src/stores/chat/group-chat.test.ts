@@ -20,6 +20,15 @@ import {
 import { createAiriPersonaAffectDefinition } from './persona-affect-definition'
 
 describe('group chat rules', () => {
+  it('keeps active chat ownership on the frozen provider budget instead of the current model setting', () => {
+    const source = readFileSync(new URL('../chat.ts', import.meta.url), 'utf8')
+    expect(source).toContain('const TURN_WATCHDOG_GRACE_MS = 30_000')
+    expect(source).toContain('idleTimeoutMs: resolveChatTurnIdleTimeoutMs(options.chatProvider.chat(options.model).apiKey === \'official-cloud\', TURN_WATCHDOG_GRACE_MS)')
+    expect(source).toContain('Date.now() + (activeTurn.value?.idleTimeoutMs ?? TURN_WATCHDOG_GRACE_MS)')
+    expect(source).toContain('graceMs: current.idleTimeoutMs')
+    expect(source).toContain('completeActiveTurn(current.sessionId, current.generation, { finalizeTyping: true }, current.turnId)')
+  })
+
   it('resolves explicit mentions in text order and de-duplicates repeated names', () => {
     expect(parseGroupChatMentionedCharacterIds({
       members: [
@@ -823,14 +832,14 @@ describe('group chat rules', () => {
 
   it('restores a single-segment group reply before the text-only display queue', () => {
     const chatStoreSource = readFileSync(fileURLToPath(new URL('../chat.ts', import.meta.url)), 'utf8')
-    const marker = 'const hasVisibleAssistantText = buildingMessage.slices.some(slice => slice.type === \'text\' && slice.text.length > 0)'
+    const marker = 'const finalVisibleText = createReadableFinalText('
     const branchStart = chatStoreSource.indexOf(marker)
-    const branch = chatStoreSource.slice(branchStart, branchStart + 420)
+    const branch = chatStoreSource.slice(branchStart, branchStart + 650)
 
     expect(branchStart).toBeGreaterThanOrEqual(0)
-    expect(branch).toContain('if (!hasVisibleAssistantText)')
-    expect(branch).toContain('replaceVisibleAssistantText(createReadableFinalText(')
-    expect(branch).not.toContain('if (!groupRuntime && !hasVisibleAssistantText)')
+    expect(branch).toContain('if (currentVisibleText !== finalVisibleText)')
+    expect(branch).toContain('replaceVisibleAssistantText(finalVisibleText)')
+    expect(branch).not.toContain('if (!groupRuntime &&')
   })
 
   it('bounds a background group segment when no renderer emits typingComplete', () => {

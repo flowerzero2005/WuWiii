@@ -5,7 +5,7 @@ import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/el
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot } from '../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDraftDiscarded, composerDragDetach, composerExecute, composerFlushSource, composerInvalidate, composerRecovery, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceSubmit, composerViewRecovery } from '../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDraftDiscarded, composerDragDetach, composerExecute, composerFlushSource, composerInvalidate, composerRecovery, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceReturnAck, composerSourceSubmit, composerViewRecovery } from '../../shared/detached-composer-events'
 import { useComposerPointerDrag } from './use-composer-pointer-drag'
 
 export function useDetachedComposerSource(input: {
@@ -29,12 +29,16 @@ export function useDetachedComposerSource(input: {
   const sourceReadInvoke = useElectronEventaInvoke(composerSourceRead)
   const checkpointInvoke = useElectronEventaInvoke(composerSourceCheckpoint)
   const closeAckInvoke = useElectronEventaInvoke(composerSourceCloseAck)
+  const returnAckInvoke = useElectronEventaInvoke(composerSourceReturnAck)
   const inlineSubmitInvoke = useElectronEventaInvoke(composerSourceSubmit)
   const snapshot = ref<ComposerSnapshot>()
   const detaching = ref(false)
   const recoverable = ref(false)
   const recoveryUncertain = ref(false)
   const failed = ref(false)
+  const anotherDetached = ref(false)
+  const sourceUnavailable = ref(false)
+  const deliveryFailed = ref(false)
   const checkpointFailed = ref(false)
   const hydrating = ref(true)
   const inlineSending = ref(false)
@@ -50,7 +54,31 @@ export function useDetachedComposerSource(input: {
   let scopeReady: Promise<void> = Promise.resolve()
   let checkpointQueue = Promise.resolve()
   let checkpointTimer: ReturnType<typeof setTimeout> | undefined
+  let hydrationRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let hydrationFailures = 0
   let inlinePromise: Promise<void> | undefined
+  const unsavedDrafts = new Map<string, ComposerDraft>()
+  const errorMessage = (error: unknown) => error instanceof Error ? error.message : ''
+  const isVersionConflict = (error: unknown) => errorMessage(error).includes('saved draft version changed')
+  const isOwnershipRace = (error: unknown) => {
+    const message = errorMessage(error)
+    return message.includes('no longer owns this source scope')
+      || message.includes('detached editor owns this draft')
+      || message.includes('Another source already owns the detached composer')
+      || message.includes('ownership changed')
+      || message.includes('acknowledgement is no longer current')
+  }
+  const isAnotherDetachedOwner = (error: unknown) => errorMessage(error).includes('Another source already owns the detached composer')
+  const isUnknownOutcome = (error: unknown) => errorMessage(error).includes('submit outcome is unknown')
+  const isCurrentScope = (sourceGeneration: string, sessionId: string, userScope: string) => !disposed
+    && sourceGeneration === generation && sessionId === input.sessionId() && userScope === input.userScope()
+  const draftScopeKey = (scope: Pick<ComposerDetach, 'userScope' | 'sessionId' | 'surface'>) => `${scope.userScope}\u0000${scope.surface}\u0000${scope.sessionId}`
+  function rememberUnsavedDraft(scope: Pick<ComposerDetach, 'userScope' | 'sessionId' | 'surface'>, draft: ComposerDraft) {
+    unsavedDrafts.set(draftScopeKey(scope), structuredClone(toRaw(draft)))
+  }
+  function clearRememberedDraft(scope: Pick<ComposerDetach, 'userScope' | 'sessionId' | 'surface'>) {
+    unsavedDrafts.delete(draftScopeKey(scope))
+  }
   function applyDraft(draft: ComposerDraft) {
     mirroredDraft = structuredClone(toRaw(draft))
     applyingDraft = true
@@ -67,24 +95,67 @@ export function useDetachedComposerSource(input: {
   function checkpoint() {
     clearTimeout(checkpointTimer)
     const hydration = scopeReady
+    const checkpointGeneration = generation
+    const checkpointSessionId = input.sessionId()
+    const checkpointUserScope = input.userScope()
     const task = checkpointQueue.catch(() => undefined).then(async () => {
       await hydration
+      let rebased = false
       while (draftDirty) {
-        if (disposed || !binding || binding.sourceGeneration !== generation || readonly.value || input.busy())
+        if (!isCurrentScope(checkpointGeneration, checkpointSessionId, checkpointUserScope)
+          || !binding || binding.sourceGeneration !== checkpointGeneration || readonly.value || input.busy()) {
           break
+        }
         const current = binding
         const epoch = draftEpoch
-        const result = await checkpointInvoke({ ...current, draft: structuredClone(toRaw(input.draft())) })
+        let result: { version: number }
+        try {
+          result = await checkpointInvoke({ ...current, draft: structuredClone(toRaw(input.draft())) })
+        }
+        catch (error) {
+          // A revision can move while a return handoff is being acknowledged.
+          // Re-read only the revision, preserve the local draft, then make one
+          // checked retry. This never bypasses main-process ownership checks.
+          if (!rebased && isVersionConflict(error) && isCurrentScope(checkpointGeneration, checkpointSessionId, checkpointUserScope)) {
+            const saved = await sourceReadInvoke({
+              sessionId: checkpointSessionId,
+              userScope: checkpointUserScope,
+              surface: input.surface,
+              sourceGeneration: checkpointGeneration,
+              group: input.group(),
+            })
+            if (isCurrentScope(checkpointGeneration, checkpointSessionId, checkpointUserScope) && !saved.uncertain) {
+              current.version = saved.version
+              rebased = true
+              continue
+            }
+            if (saved.uncertain) {
+              recoveryUncertain.value = true
+              recoverable.value = true
+            }
+          }
+          throw error
+        }
         current.version = result.version
         checkpointFailed.value = false
-        if (epoch === draftEpoch)
+        if (epoch === draftEpoch) {
           draftDirty = false
+          clearRememberedDraft(current)
+        }
       }
     }).catch((error) => {
-      // A checkpoint that lost the race to a successful detach is rejected by
-      // the main process because the detached editor owns the draft now.
-      if (!detached.value)
-        checkpointFailed.value = true
+      // A stale renderer can lose ownership while a detach, return, or scope
+      // switch is in flight. Its draft remains in memory; do not turn that
+      // expected ordering race into a false storage warning in the new scope.
+      if (isCurrentScope(checkpointGeneration, checkpointSessionId, checkpointUserScope) && !detached.value) {
+        if (isUnknownOutcome(error)) {
+          recoveryUncertain.value = true
+          recoverable.value = true
+        }
+        else if (!isOwnershipRace(error)) {
+          checkpointFailed.value = true
+        }
+      }
       throw error
     })
     checkpointQueue = task.catch(() => undefined)
@@ -100,6 +171,8 @@ export function useDetachedComposerSource(input: {
     draftEpoch += 1
     lastDraft = structuredClone(toRaw(input.draft()))
     draftDirty = true
+    if (binding && unsavedDrafts.has(draftScopeKey(binding)))
+      rememberUnsavedDraft(binding, input.draft())
     if (!readonly.value && !input.busy())
       scheduleCheckpoint()
   }, { deep: true, flush: 'sync' })
@@ -127,6 +200,15 @@ export function useDetachedComposerSource(input: {
     // only edits and a settled response, never overwrite it during submission.
     if (!merged.busy && !merged.uncertain && (!previous?.busy || !executing))
       applyDraft(merged.draft)
+    if (merged.status === 'returned' && binding?.sourceGeneration === generation) {
+      void returnAckInvoke({
+        leaseId: merged.scope.leaseId,
+        version: merged.version,
+        sourceGeneration: generation,
+      // The persisted return is already visible in this source. An obsolete
+      // acknowledgement is harmless because main has a close timeout fallback.
+      }).catch(() => undefined)
+    }
   })
   const offExecute = context.value.on(composerExecute, ({ body }) => {
     if (disposed || !body || !matches(body) || body.status !== 'detached' || !body.commandId
@@ -136,6 +218,8 @@ export function useDetachedComposerSource(input: {
     handled.add(body.commandId)
     void (async () => {
       const sourceGeneration = body.scope.sourceGeneration
+      const sourceSessionId = body.scope.sessionId
+      const sourceUserScope = body.scope.userScope
       const version = { leaseId: body.scope.leaseId, version: body.version, commandId: body.commandId! }
       let result: { consumed: boolean, draft: ComposerDraft } | undefined
       try {
@@ -149,7 +233,8 @@ export function useDetachedComposerSource(input: {
         }
       }
       catch {
-        failed.value = true
+        if (isCurrentScope(sourceGeneration, sourceSessionId, sourceUserScope))
+          deliveryFailed.value = true
         // A thrown send has no proven outcome. Keep its original command and
         // draft quarantined; never turn transport failure into a retryable send.
         await invalidateInvoke({ sourceGeneration }).catch(() => undefined)
@@ -160,9 +245,12 @@ export function useDetachedComposerSource(input: {
       if (result) {
         try {
           await settleInvoke({ ...version, ...result })
+          if (isCurrentScope(sourceGeneration, sourceSessionId, sourceUserScope))
+            deliveryFailed.value = false
         }
         catch {
-          failed.value = true
+          if (isCurrentScope(sourceGeneration, sourceSessionId, sourceUserScope))
+            deliveryFailed.value = true
           await invalidateInvoke({ sourceGeneration }).catch(() => undefined)
           // Retry only the acknowledgement, with the exact proven outcome.
           await settleInvoke({ ...version, ...result }).catch(() => undefined)
@@ -179,6 +267,7 @@ export function useDetachedComposerSource(input: {
     const sourceGeneration = generation
     detaching.value = true
     failed.value = false
+    anotherDetached.value = false
     try {
       // The release point is verified against the real cursor position in the
       // main process. Waiting for an older checkpoint here makes that check
@@ -198,9 +287,15 @@ export function useDetachedComposerSource(input: {
       recoverable.value = false
       draftDirty = false
       checkpointFailed.value = false
+      deliveryFailed.value = false
     }
-    catch {
-      failed.value = true
+    catch (error) {
+      if (isCurrentScope(sourceGeneration, sessionId, userScope)) {
+        if (isAnotherDetachedOwner(error))
+          anotherDetached.value = true
+        else if (!isOwnershipRace(error))
+          failed.value = true
+      }
     }
     finally {
       detaching.value = false
@@ -209,11 +304,68 @@ export function useDetachedComposerSource(input: {
   async function requestReturn() {
     if (!snapshot.value || input.busy() || snapshot.value.busy)
       return
+    const current = snapshot.value
     try {
-      await returnInvoke({ leaseId: snapshot.value.scope.leaseId, version: snapshot.value.version })
+      await returnInvoke({ leaseId: current.scope.leaseId, version: current.version })
+    }
+    catch (error) {
+      if (snapshot.value?.scope.leaseId === current.scope.leaseId && snapshot.value.version === current.version && !isOwnershipRace(error))
+        failed.value = true
+    }
+  }
+  /** Save the source draft and finish a detached handoff before changing sessions. */
+  async function prepareSessionSwitch(): Promise<boolean> {
+    await scopeReady
+    const sourceGeneration = generation
+    const sessionId = input.sessionId()
+    const userScope = input.userScope()
+    if (disposed || hydrating.value || detaching.value || recoveryUncertain.value)
+      return false
+
+    if (detached.value) {
+      const current = snapshot.value!
+      if (input.busy() || current.busy)
+        return false
+      // Subscribe before sending the request: the editor may flush and return
+      // before the invoke resolves. A timeout preserves the existing input.
+      let stop: (() => void) | undefined
+      let finish: (value: boolean) => void = () => undefined
+      const returned = new Promise<boolean>((resolve) => {
+        finish = resolve
+        stop = watch(snapshot, value => {
+          if (!isCurrentScope(sourceGeneration, sessionId, userScope))
+            resolve(false)
+          else if (value?.scope.leaseId === current.scope.leaseId && value.status === 'returned')
+            resolve(!value.uncertain)
+        }, { flush: 'sync' })
+      })
+      const timeout = setTimeout(() => finish(false), 12_000)
+      try {
+        void returnInvoke({ leaseId: current.scope.leaseId, version: current.version }).catch(() => finish(false))
+        if (!await returned)
+          return false
+      }
+      catch {
+        return false
+      }
+      finally {
+        clearTimeout(timeout)
+        stop?.()
+      }
+    }
+    if (!isCurrentScope(sourceGeneration, sessionId, userScope))
+      return false
+    // An inline command already owns its durable original draft. Browsing
+    // another conversation after optimistic consumption must not replay it.
+    if (inlineSending.value || executing)
+      return !input.draft().text && input.draft().images.length === 0
+    try {
+      await checkpoint()
+      return isCurrentScope(sourceGeneration, sessionId, userScope)
+        && !draftDirty && !checkpointFailed.value && !readonly.value
     }
     catch {
-      failed.value = true
+      return false
     }
   }
   function sendInline() {
@@ -227,6 +379,8 @@ export function useDetachedComposerSource(input: {
       if (disposed || readonly.value || !binding)
         return
       const current = binding
+      const sourceSessionId = current.sessionId
+      const sourceUserScope = current.userScope
       const original = structuredClone(toRaw(input.draft()))
       inlineSending.value = true
       let command: ComposerSnapshot | undefined
@@ -247,12 +401,14 @@ export function useDetachedComposerSource(input: {
         if (current.sourceGeneration === generation) {
           current.version = settled.version
           draftDirty = JSON.stringify(input.draft()) !== JSON.stringify(settled.draft)
+          deliveryFailed.value = false
           recoveryUncertain.value = false
           recoverable.value = !!settled.draft.text || !!settled.draft.images.length
         }
       }
       catch {
-        failed.value = true
+        if (isCurrentScope(current.sourceGeneration, sourceSessionId, sourceUserScope))
+          deliveryFailed.value = true
         if (!command || result) {
           try {
             // Read without rebinding the source. Main can prove a failed
@@ -263,7 +419,7 @@ export function useDetachedComposerSource(input: {
                 if (command) {
                   current.version = saved.version
                   draftDirty = JSON.stringify(input.draft()) !== JSON.stringify(saved.draft ?? { text: '', images: [] })
-                  failed.value = false
+                  deliveryFailed.value = false
                 }
                 recoveryUncertain.value = false
                 recoverable.value = saved.exists
@@ -291,6 +447,8 @@ export function useDetachedComposerSource(input: {
   }
   watch(() => [input.sessionId(), input.userScope(), input.group()], () => {
     clearTimeout(checkpointTimer)
+    clearTimeout(hydrationRetryTimer)
+    hydrationFailures = 0
     const previousGeneration = generation
     const previousBinding = binding
     const previousDraft = lastDraft
@@ -318,6 +476,14 @@ export function useDetachedComposerSource(input: {
     binding = undefined
     hydrating.value = true
     draftDirty = false
+    // Error state belongs to a renderer generation. Without this reset, a
+    // rejected checkpoint from the previous conversation was displayed over
+    // the next conversation as a fictitious disk or detach failure.
+    failed.value = false
+    anotherDetached.value = false
+    sourceUnavailable.value = false
+    deliveryFailed.value = false
+    checkpointFailed.value = false
     const sessionId = input.sessionId()
     const userScope = input.userScope()
     recoverable.value = false
@@ -328,6 +494,53 @@ export function useDetachedComposerSource(input: {
     binding = activeBinding
     const previousReady = scopeReady
     const previousQueue = checkpointQueue
+    const finishHydration = (saved: { version: number, draft?: ComposerDraft, uncertain: boolean, returned?: boolean }, exists: { exists: boolean, uncertain: boolean }) => {
+      if (!disposed && recoveryGeneration === generation && sessionId === input.sessionId() && userScope === input.userScope()) {
+        const fallback = unsavedDrafts.get(draftScopeKey(request))
+        const inputIsEmpty = !input.draft().text && !input.draft().images.length
+        binding = activeBinding
+        recoverable.value = exists.exists
+        recoveryUncertain.value = exists.uncertain || saved.uncertain
+        failed.value = false
+        checkpointFailed.value = false
+        sourceUnavailable.value = false
+        hydrationFailures = 0
+        let restoredFallback = false
+        if (fallback && !saved.uncertain && draftEpoch === hydrationEpoch && inputIsEmpty) {
+          applyDraft(fallback)
+          restoredFallback = true
+        }
+        else if (saved.draft && !saved.uncertain && draftEpoch === hydrationEpoch
+          && (saved.returned || (!initialDraft.text && !initialDraft.images.length && !input.draft().text && !input.draft().images.length))) {
+          applyDraft(saved.draft)
+        }
+        draftDirty = !saved.uncertain && (restoredFallback || !saved.draft || JSON.stringify(input.draft()) !== JSON.stringify(saved.draft))
+        hydrating.value = false
+        if (draftDirty)
+          scheduleCheckpoint()
+      }
+    }
+    const hydrate = async () => {
+      const saved = await sourceReadInvoke(request)
+      activeBinding.version = saved.version
+      const exists = await recoveryInvoke({ sessionId, userScope, surface: input.surface })
+      finishHydration(saved, exists)
+    }
+    const retryHydration = () => {
+      clearTimeout(hydrationRetryTimer)
+      hydrationRetryTimer = setTimeout(() => {
+        if (!isCurrentScope(recoveryGeneration, sessionId, userScope))
+          return
+        void hydrate().catch(() => {
+          if (!isCurrentScope(recoveryGeneration, sessionId, userScope))
+            return
+          hydrationFailures += 1
+          if (hydrationFailures >= 3)
+            sourceUnavailable.value = true
+          retryHydration()
+        })
+      }, 750)
+    }
     scopeReady = (async () => {
       await previousReady
       await previousQueue
@@ -336,42 +549,48 @@ export function useDetachedComposerSource(input: {
           await checkpointInvoke({ ...previousBinding, draft: previousDraft })
         }
         catch {
-          checkpointFailed.value = true
+          // Keep the exact old draft locally until that scope accepts a later
+          // checkpoint. The visible input may already have been cleared for
+          // this new conversation, so merely hiding the old error would lose
+          // data after a genuine persistence failure.
+          rememberUnsavedDraft(previousBinding, previousDraft)
         }
       }
-      const saved = await sourceReadInvoke(request)
-      activeBinding.version = saved.version
-      const exists = await recoveryInvoke({ sessionId, userScope, surface: input.surface })
-      if (!disposed && recoveryGeneration === generation && sessionId === input.sessionId() && userScope === input.userScope()) {
-        binding = activeBinding
-        recoverable.value = exists.exists
-        recoveryUncertain.value = exists.uncertain || saved.uncertain
-        if (saved.draft && !saved.uncertain && draftEpoch === hydrationEpoch
-          && !initialDraft.text && !initialDraft.images.length && !input.draft().text && !input.draft().images.length) {
-          applyDraft(saved.draft)
+      try {
+        await hydrate()
+      }
+      catch {
+        if (!isCurrentScope(recoveryGeneration, sessionId, userScope))
+          return
+        // Initial source binding is an IPC handshake, not proof that disk
+        // persistence failed. Keep the editor read only and retry the bind
+        // instead of showing a false storage error at application startup.
+        const fallback = unsavedDrafts.get(draftScopeKey(request))
+        if (fallback && !input.draft().text && !input.draft().images.length) {
+          applyDraft(fallback)
+          draftDirty = true
         }
-        draftDirty = !saved.uncertain && (draftEpoch !== hydrationEpoch || !saved.draft)
-        hydrating.value = false
-        if (draftDirty)
-          scheduleCheckpoint()
+        hydrationFailures += 1
+        retryHydration()
       }
-    })().catch(() => {
-      if (recoveryGeneration === generation) {
-        checkpointFailed.value = true
-        hydrating.value = false
-      }
-    })
+    })()
   }, { immediate: true, flush: 'sync' })
   const offFlushSource = context.value.on(composerFlushSource, ({ body }) => {
     if (!body || body.sourceGeneration !== generation || disposed)
       return
+    const sourceGeneration = body.sourceGeneration
+    const sessionId = input.sessionId()
+    const userScope = input.userScope()
     void (async () => {
       await scopeReady
       await inlinePromise
       await checkpoint()
-      if (body.sourceGeneration === generation && !checkpointFailed.value)
-        await closeAckInvoke({ sourceGeneration: generation, closeAttemptId: body.closeAttemptId })
-    })().catch(() => checkpointFailed.value = true)
+      if (sourceGeneration === generation && !checkpointFailed.value)
+        await closeAckInvoke({ sourceGeneration, closeAttemptId: body.closeAttemptId })
+    })().catch((error) => {
+      if (isCurrentScope(sourceGeneration, sessionId, userScope) && !isOwnershipRace(error))
+        checkpointFailed.value = true
+    })
   })
   const offDiscarded = context.value.on(composerDraftDiscarded, ({ body }) => {
     if (!body || disposed || body.userScope !== input.userScope() || body.sessionId !== input.sessionId() || body.surface !== input.surface)
@@ -392,6 +611,7 @@ export function useDetachedComposerSource(input: {
     offFlushSource()
     offDiscarded()
     clearTimeout(checkpointTimer)
+    clearTimeout(hydrationRetryTimer)
     void invalidateInvoke({ sourceGeneration: generation }).catch(() => undefined)
   })
   function viewRecovery() {
@@ -408,5 +628,5 @@ export function useDetachedComposerSource(input: {
       return undefined
     return { leaseId: value.scope.leaseId, version: value.version, sourceGeneration: value.scope.sourceGeneration }
   }
-  return { detach, detached, readonly, detaching, recoverable, recoveryUncertain, failed, checkpointFailed, checkpoint, sendInline, requestReturn, viewRecovery, getSourceActionScope, startDrag: drag.start, dragging: drag.dragging, clickDetach }
+  return { detach, detached, readonly, detaching, recoverable, recoveryUncertain, failed, anotherDetached, sourceUnavailable, deliveryFailed, checkpointFailed, checkpoint, sendInline, requestReturn, prepareSessionSwitch, viewRecovery, getSourceActionScope, startDrag: drag.start, dragging: drag.dragging, clickDetach }
 }

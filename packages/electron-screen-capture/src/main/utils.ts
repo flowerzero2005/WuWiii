@@ -7,6 +7,8 @@ import { isMacOS } from 'std-env'
 
 import { serializeSourceAppIcon, serializeSourceThumbnail } from './source-thumbnail'
 
+export { serializeSourceThumbnail }
+
 /**
  * Serializes a DesktopCapturerSource to a format that can be sent over IPC.
  *

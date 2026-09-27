@@ -658,8 +658,8 @@ const showLoader = computed(() => {
     return false
   }
 
-  // 原始逻辑：没有任何 slice 时显示加载器
-  if (props.showPlaceholder && resolvedSlices.value.length === 0) {
+  // Empty text slices can arrive before any visible reply; retain the loader.
+  if (props.showPlaceholder && !resolvedText.value.trim()) {
     return true
   }
 

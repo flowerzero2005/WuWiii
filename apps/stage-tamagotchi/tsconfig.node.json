@@ -2,6 +2,17 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "composite": true,
+    "paths": {
+      "@proj-airi/server-shared/vision-limits": [
+        "../../packages/server-shared/src/vision-limits.ts"
+      ],
+      "@proj-airi/electron-screen-capture": [
+        "../../packages/electron-screen-capture/src/index.ts"
+      ],
+      "@proj-airi/electron-screen-capture/*": [
+        "../../packages/electron-screen-capture/src/*"
+      ]
+    },
     "target": "ESNext",
     "jsx": "preserve",
     "lib": [
@@ -20,6 +31,11 @@
     "skipLibCheck": true
   },
   "include": [
+    "../../packages/server-shared/src/vision-limits.ts",
+    "../../packages/electron-screen-capture/src/index.ts",
+    "../../packages/electron-screen-capture/src/main/index.ts",
+    "../../packages/electron-screen-capture/src/main/utils.ts",
+    "../../packages/electron-screen-capture/src/main/source-thumbnail.ts",
     "../../uno.config.ts",
     "uno.config.ts",
     "electron.vite.config.ts",

@@ -12,10 +12,12 @@ export const DETACHED_COMPOSER_TOP_LEVEL = 7
 export async function createDetachedComposerWindow(onCreated: (window: BrowserWindow) => void) {
   const window = new BrowserWindow({
     title: 'Wuwiii',
-    width: 520,
-    height: 288,
-    minWidth: 400,
-    minHeight: 240,
+    // The editor itself is one compact card. Keep its native bounds close to
+    // that card so users do not have to resize an invisible outer rectangle.
+    width: 480,
+    height: 180,
+    minWidth: 340,
+    minHeight: 168,
     maximizable: false,
     show: false,
     icon: windowIcon,

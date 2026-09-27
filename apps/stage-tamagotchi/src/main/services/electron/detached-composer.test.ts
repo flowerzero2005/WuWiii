@@ -33,7 +33,7 @@ vi.mock('../../windows/shared/window', () => ({
 function window(id: number, route = '/chat') {
   const hooks = new Map<string, (...args: any[]) => void>()
   const webHooks = new Map<string, (...args: any[]) => void>()
-  return { hooks, webHooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, getZoomFactor: () => 1, on: (event: string, handler: (...args: any[]) => void) => webHooks.set(event, handler), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: vi.fn(), isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 100, y: 100, width: 800, height: 600 }), getBounds: () => ({ x: 100, y: 100, width: 640, height: 430 }), setPosition: vi.fn(), setAlwaysOnTop: vi.fn(), moveTop: vi.fn(), show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
+  return { hooks, webHooks, webContents: { id, getURL: () => `file:///renderer/index.html#${route}`, getZoomFactor: () => 1, on: (event: string, handler: (...args: any[]) => void) => webHooks.set(event, handler), once: vi.fn(), setWindowOpenHandler: vi.fn() }, on: (event: string, handler: (...args: any[]) => void) => hooks.set(event, handler), once: (event: string, handler: (...args: any[]) => void) => hooks.set(`once:${event}`, handler), isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 100, y: 100, width: 800, height: 600 }), getBounds: () => ({ x: 100, y: 100, width: 640, height: 430 }), setPosition: vi.fn(), setAlwaysOnTop: vi.fn(), moveTop: vi.fn(), show: vi.fn(), focus: vi.fn(), close: vi.fn(), destroy: vi.fn() }
 }
 const input: ComposerDetach = { userScope: 'account-a', sessionId: 'room-a', surface: 'page', sourceGeneration: 'source-a', group: false, draft: { text: 'Hello', images: [] } }
 let durable: ComposerRecoveryData
@@ -149,7 +149,7 @@ describe('composer main sender and close guards', () => {
     await expect(invoke(1, composerSettle, { ...version, commandId: 'command-a', consumed: false, draft: input.draft })).resolves.toMatchObject({ busy: false })
   })
 
-  it('keeps the editor alive until it acknowledges the returned revision', async () => {
+  it('focuses the returned source only after the editor has closed', async () => {
     const service = createService()
     const detached = await invoke(1, composerDetach, input)
     const preventDefault = vi.fn()
@@ -164,7 +164,7 @@ describe('composer main sender and close guards', () => {
     })
     expect(service.read()!.status).toBe('returned')
     expect(reply).toMatchObject({ status: 'returned' })
-    expect(mocks.windows[0].focus).toHaveBeenCalledOnce()
+    expect(mocks.windows[0].focus).not.toHaveBeenCalled()
     expect(mocks.windows[2].close).not.toHaveBeenCalled()
     await new Promise<void>(resolve => setImmediate(resolve))
     expect(mocks.windows[2].close).not.toHaveBeenCalled()
@@ -181,6 +181,8 @@ describe('composer main sender and close guards', () => {
     expect(mocks.windows[2].close).not.toHaveBeenCalled()
     await new Promise<void>(resolve => setImmediate(resolve))
     expect(mocks.windows[2].close).toHaveBeenCalledOnce()
+    mocks.windows[2].hooks.get('once:closed')!()
+    expect(mocks.windows[0].focus).toHaveBeenCalledOnce()
   })
 
   it('keeps the editor open when its original chat window is no longer a return target', async () => {

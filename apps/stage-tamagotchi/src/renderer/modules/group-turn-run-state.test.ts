@@ -1,3 +1,4 @@
+import { OFFICIAL_CHAT_IDLE_TIMEOUT_MS, resolveChatTurnIdleTimeoutMs } from '@proj-airi/stage-ui/constants/chat-timeouts'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -14,6 +15,30 @@ import {
 } from './group-turn-run-state'
 
 describe('group turn run ownership', () => {
+  it('freezes the official speaker budget past 35 and 90 seconds, then restores the next speaker default', () => {
+    let state = startGroupTurn(undefined, { runId: 'run-1', sessionId: 'room-1' })
+    state = startGroupSpeaker(state, 'run-1', 'official-speaker', 0, resolveChatTurnIdleTimeoutMs(true, GROUP_SPEAKER_IDLE_TIMEOUT_MS))
+    expect(state?.speaker?.idleTimeoutMs).toBe(OFFICIAL_CHAT_IDLE_TIMEOUT_MS)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'official-speaker', 35_000)).toBe(false)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'official-speaker', 90_000)).toBe(false)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'official-speaker', 119_999)).toBe(false)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'official-speaker', 120_000)).toBe(true)
+    state = finishGroupSpeaker(state, 'run-1', 'official-speaker', 'error', 120_000)
+    state = startGroupSpeaker(state, 'run-1', 'third-party-speaker', 120_000)
+    expect(state?.speaker?.idleTimeoutMs).toBe(35_000)
+    expect(state?.speakers['run-1\u0000official-speaker'].idleTimeoutMs).toBe(120_000)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'third-party-speaker', 154_999)).toBe(false)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'third-party-speaker', 155_000)).toBe(true)
+  })
+
+  it('retains explicit timeout overrides and accepts older state without a frozen budget', () => {
+    let state = startGroupTurn(undefined, { runId: 'run-1', sessionId: 'room-1' })
+    state = startGroupSpeaker(state, 'run-1', 'speaker-1', 0, 120_000)
+    expect(isGroupSpeakerIdle(state, 'run-1', 'speaker-1', 35_000, 35_000)).toBe(true)
+    delete state!.speaker!.idleTimeoutMs
+    expect(isGroupSpeakerIdle(state, 'run-1', 'speaker-1', 35_000)).toBe(true)
+  })
+
   it('renews a slow streaming speaker from its latest progress instead of total run time', () => {
     let state = startGroupTurn(undefined, { runId: 'run-1', sessionId: 'room-1' })
     state = startGroupSpeaker(state, 'run-1', 'speaker-1', 0)

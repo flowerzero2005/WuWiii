@@ -3,6 +3,37 @@ import { describe, expect, it } from 'vitest'
 import { createStreamingCategorizer } from './response-categoriser'
 
 describe('createStreamingCategorizer', () => {
+  it('never emits private text for any split of nested mixed-case tags', () => {
+    const text = 'Hello <THINK>outer <reasoning>inner</reasoning>private tail</ThInK> world!'
+    for (let split = 1; split < text.length; split++) {
+      const categorizer = createStreamingCategorizer()
+      let speech = ''
+      for (const chunk of [text.slice(0, split), text.slice(split)]) {
+        const position = categorizer.getCurrentPosition()
+        categorizer.consume(chunk)
+        speech += categorizer.filterToSpeech(chunk, position)
+      }
+      expect(speech).toBe('Hello  world!')
+      expect(categorizer.end().speech).toBe('Hello world!')
+    }
+  })
+
+  it('releases an ambiguous prefix when it turns into ordinary markup', () => {
+    const categorizer = createStreamingCategorizer()
+    categorizer.consume('Use <th')
+    expect(categorizer.filterToSpeech('Use <th', 0)).toBe('Use ')
+    categorizer.consume('ing> literally.')
+    expect(categorizer.filterToSpeech('ing> literally.', 7)).toBe('<thing> literally.')
+  })
+
+  it('keeps unfinished reasoning private across paragraphs and at EOF', () => {
+    const categorizer = createStreamingCategorizer()
+    const text = 'Hello <think>first private paragraph\n\nsecond private paragraph'
+    categorizer.consume(text)
+    expect(categorizer.filterToSpeech(text, 0)).toBe('Hello ')
+    expect(categorizer.end().speech).toBe('Hello')
+  })
+
   it('should handle pure speech without tags', () => {
     const categorizer = createStreamingCategorizer()
     const text = 'Hello, world! This is a test.'
@@ -48,8 +79,8 @@ describe('createStreamingCategorizer', () => {
     categorizer.consume('Hello <reasoning>thinking')
     const filtered1 = categorizer.filterToSpeech('Hello <reasoning>thinking', 0)
 
-    // Before tag closes, everything should be filtered (tag is incomplete)
-    expect(filtered1).toBe('')
+    // Speech before the private envelope is safe to release immediately.
+    expect(filtered1).toBe('Hello ')
 
     // Complete the tag - the important thing is the final result is correct
     categorizer.consume(' about this</reasoning> world!')
@@ -333,7 +364,7 @@ describe('createStreamingCategorizer', () => {
     // Stream incomplete tag
     categorizer.consume('Hello <reasoning>thinking')
     let filtered = categorizer.filterToSpeech('Hello <reasoning>thinking', 0)
-    expect(filtered).toBe('') // Tag not closed, filter everything
+    expect(filtered).toBe('Hello ') // Only the private envelope is withheld.
 
     // Stream closing tag
     categorizer.consume('</reasoning>')
@@ -341,8 +372,9 @@ describe('createStreamingCategorizer', () => {
     expect(filtered).toBe('') // This is the closing tag itself
 
     // Stream speech after
+    const speechStart = categorizer.getCurrentPosition()
     categorizer.consume(' world!')
-    filtered = categorizer.filterToSpeech(' world!', 38)
+    filtered = categorizer.filterToSpeech(' world!', speechStart)
     expect(filtered).toBe(' world!')
 
     const result = categorizer.end()

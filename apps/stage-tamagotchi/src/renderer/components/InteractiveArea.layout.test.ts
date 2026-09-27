@@ -35,7 +35,7 @@ describe('chat composer branches', () => {
   it('uses the resize divider to detach either composer and keeps a return target', () => {
     const source = readFileSync(new URL('./InteractiveArea.vue', import.meta.url), 'utf8')
 
-    expect(source).toContain('v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"')
+    expect(source).toContain('v-if="isCollapsed && (detachedComposer.failed.value || detachedComposer.anotherDetached.value || detachedComposer.sourceUnavailable.value || detachedComposer.deliveryFailed.value || detachedComposer.recoveryUncertain.value || detachedComposer.checkpointFailed.value)"')
     expect(source).toContain('data-chat-composer-recovery')
     expect(source).toContain('@click.stop="requestWidgetExpand()"')
     expect(source).toContain(':placeholder="isInitialized ? t(\'stage.chat.composer.placeholder\') : t(\'tamagotchi.stage.bootstrap.conversation\')"')

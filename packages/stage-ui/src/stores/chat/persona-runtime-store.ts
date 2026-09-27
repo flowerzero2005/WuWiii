@@ -226,6 +226,24 @@ export const useChatPersonaRuntimeStore = defineStore('chat-persona-runtime', ()
     delete latestSceneModes.value[sessionId]
   }
 
+  /** Restore once; local turn state always wins over a disk snapshot. */
+  function restoreRuntimeSnapshot(sessionId: string, snapshot: AiriPersonaRuntimeSnapshot) {
+    if (snapshot.sessionId !== sessionId || getLatestRuntimeSnapshot(sessionId))
+      return
+    if (snapshot.evaluation)
+      latestEvaluations.value[sessionId] = snapshot.evaluation
+    if (snapshot.sceneMode)
+      latestSceneModes.value[sessionId] = snapshot.sceneMode
+    if (snapshot.relationshipState)
+      latestRelationshipStates.value[sessionId] = snapshot.relationshipState
+    if (snapshot.personaState)
+      latestPersonaStates.value[sessionId] = snapshot.personaState
+    if (snapshot.antiTemplateGuard)
+      latestAntiTemplateGuards.value[sessionId] = snapshot.antiTemplateGuard
+    if (snapshot.emotionHistory?.length)
+      latestEmotionHistories.value[sessionId] = snapshot.emotionHistory.slice(-8)
+  }
+
   function clearLatestRelationshipState(sessionId: string) {
     if (!latestRelationshipStates.value[sessionId]) {
       return
@@ -307,6 +325,7 @@ export const useChatPersonaRuntimeStore = defineStore('chat-persona-runtime', ()
     commitAcceptedTurn,
     getEmotionHistory,
     getLatestRuntimeSnapshot,
+    restoreRuntimeSnapshot,
     clearLatestSceneMode,
     clearLatestRelationshipState,
     clearLatestPersonaState,

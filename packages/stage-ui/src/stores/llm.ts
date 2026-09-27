@@ -11,6 +11,7 @@ import { streamText } from '@xsai/stream-text'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+import { OFFICIAL_STREAM_FIRST_EVENT_TIMEOUT_MS } from '../constants/chat-timeouts'
 import { bindSearchToolExecution, createSearchExecutionBudget } from '../tools/web-search/execution-budget'
 import { normalizeChatProviderError } from '../utils/chat-error'
 import { createChatTraceHeaders, createChatTraceRequest, isChatDiagnosticsEnabled, logChatTrace } from './chat/chat-diagnostics'
@@ -117,6 +118,27 @@ function getErrorSearchText(error: unknown): string {
   return String(error)
 }
 
+function isTerminalProviderFailure(error: unknown): boolean {
+  let current = error
+  for (let depth = 0; depth < 8 && current && typeof current === 'object'; depth++) {
+    const record = current as Record<string, unknown>
+    const details = record.details && typeof record.details === 'object' ? record.details as Record<string, unknown> : undefined
+    const code = typeof record.code === 'string' ? record.code.toUpperCase() : ''
+    const reason = typeof details?.reason === 'string' ? details.reason : ''
+    if (record.name === 'AbortError'
+      || code.startsWith('OFFICIAL_') || code === 'LLM_EMPTY_RESULT'
+      || code === 'UNAUTHORIZED' || code === 'INSUFFICIENT_POINTS'
+      || code === 'DELIVERY_ACK_UNAVAILABLE' || code.includes('RATE_LIMIT')
+      || ['401', '403', '409', '429'].includes(code)
+      || [401, 403, 409, 429].includes(Number(record.status))
+      || [401, 403, 429].includes(Number(details?.upstreamStatus))
+      || ['rate-limited', 'empty-response', 'content-filtered', 'truncated-response', 'invalid-response', 'delivery-failed'].includes(reason))
+      return true
+    current = record.cause
+  }
+  return false
+}
+
 export type ToolModeFailureKind = 'unsupported' | 'transient'
 export type LLMToolRoutePhase = 'tool-bundle-router' | 'tool-bundle' | 'direct-tools' | 'fallback-without-tools' | 'plain-stream'
 export type LLMToolRouteStatus = 'attempt' | 'success' | 'failure' | 'fallback' | 'skipped'
@@ -144,6 +166,10 @@ export interface LLMToolRouteDiagnostic {
 }
 
 function getKnownToolModeFailureKind(error: unknown): ToolModeFailureKind | undefined {
+  // Structured gateway failures have already used the server's recovery
+  // budget. A generic 502 message must not start another client attempt.
+  if (isTerminalProviderFailure(error))
+    return undefined
   const message = getErrorSearchText(error)
 
   if (message.includes('Tool stream timed out before first response event')) {
@@ -191,6 +217,7 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
     ? createChatTraceHeaders(options?.headers, requestTrace)
     : options?.headers
   const chatConfig = chatProvider.chat(model)
+  const officialCloud = chatConfig.apiKey === 'official-cloud'
   const requestStartedAt = performance.now()
 
   if (requestTrace) {
@@ -209,6 +236,8 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
   const toolChoice = tools ? (options?.toolChoice ?? 'auto') : undefined
 
   return new Promise<StreamAttemptResult>((resolve, reject) => {
+    const attemptAbort = new AbortController()
+    let removeParentAbortListener = () => {}
     let settled = false
     let hasReceivedEvent = false
     let terminalFinishSeen = false
@@ -232,10 +261,13 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
       clearTimeout(firstEventTimeout)
       firstEventTimeout = undefined
     }
-    const resolveOnce = (result: StreamAttemptResult) => {
+    const resolveOnce = (result: StreamAttemptResult, abortPending = false) => {
       if (settled)
         return
       settled = true
+      removeParentAbortListener()
+      if (abortPending)
+        attemptAbort.abort(new DOMException('The model request exceeded its response deadline.', 'TimeoutError'))
       clearFirstEventTimeout()
       if (resultSettleTimeout) {
         clearTimeout(resultSettleTimeout)
@@ -255,6 +287,8 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
       if (settled)
         return
       settled = true
+      removeParentAbortListener()
+      attemptAbort.abort(err)
       clearFirstEventTimeout()
       if (resultSettleTimeout) {
         clearTimeout(resultSettleTimeout)
@@ -272,11 +306,21 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
       }
       reject(normalizeChatProviderError(err))
     }
-    const firstEventTimeoutMs = options?.firstEventTimeoutMs
+    const onParentAbort = () => rejectOnce(options?.abortSignal?.reason ?? new DOMException('The model request was cancelled.', 'AbortError'))
+    if (options?.abortSignal?.aborted) {
+      onParentAbort()
+      return
+    }
+    options?.abortSignal?.addEventListener('abort', onParentAbort, { once: true })
+    removeParentAbortListener = () => options?.abortSignal?.removeEventListener('abort', onParentAbort)
+
+    const firstEventTimeoutMs = officialCloud
+      ? Math.max(OFFICIAL_STREAM_FIRST_EVENT_TIMEOUT_MS, options?.firstEventTimeoutMs ?? 0)
+      : options?.firstEventTimeoutMs
     if (firstEventTimeoutMs && firstEventTimeoutMs > 0) {
       firstEventTimeout = setTimeout(() => {
         if (options?.emptyOnFirstEventTimeout) {
-          resolveOnce({ hasVisibleText: false })
+          resolveOnce({ hasVisibleText: false }, true)
           return
         }
         rejectOnce(new Error(`Tool stream timed out before first response event after ${firstEventTimeoutMs}ms.`))
@@ -312,10 +356,14 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
 
       eventQueue = eventQueue
         .then(async () => {
+          if (settled)
+            return
           await options?.onStreamEvent?.(event as StreamEvent)
+          if (settled)
+            return
           if (event && (event as StreamEvent).type === 'finish') {
             const finishReason = String((event as { finishReason?: unknown }).finishReason ?? '')
-            if (finishReason !== 'tool_calls' || !options?.waitForTools) {
+            if (finishReason !== 'tool_calls' || (!tools?.length && !options?.waitForTools)) {
               terminalFinishSeen = true
               const timeoutMs = options?.resultSettleTimeoutMs ?? DEFAULT_RESULT_SETTLE_TIMEOUT_MS
               if (!resultSettleTimeout && timeoutMs > 0) {
@@ -364,12 +412,14 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
           steps: 'unavailable-before-timeout',
         })
       }
-      resolveOnce({ hasVisibleText: Boolean(createReadableFinalText(streamedText)) })
+      resolveOnce({ hasVisibleText: Boolean(createReadableFinalText(streamedText)) }, true)
     }
 
     const settleFromResult = async (messages: unknown, steps: CompletionStep[]) => {
       try {
         await eventQueue
+        if (settled)
+          return
 
         // NOTICE: `@xsai/stream-text@0.4.3` exposes executed tools in `steps`
         // as the authoritative completion result. Its `onEvent` callback is
@@ -399,7 +449,7 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
         // `<think>`, ACT markers, tool envelopes, or whitespace do not block
         // the authoritative answer recovery.
         if (!createReadableFinalText(streamedText)) {
-          const recoveredText = extractAssistantTextFromMessages(messages)
+          const recoveredText = extractAssistantTextFromMessages(messages, sanitized.length)
           if (createReadableFinalText(recoveredText)) {
             onEvent({ type: 'text-delta', text: recoveredText })
           }
@@ -417,9 +467,6 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
           }
         }
         await eventQueue
-        if (firstEventTimeoutMs && !hasReceivedEvent)
-          return
-
         resolveOnce({ hasVisibleText: Boolean(createReadableFinalText(streamedText)) })
       }
       catch (error) {
@@ -439,9 +486,24 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
     }
 
     try {
+      const guardedTools = tools?.map((tool) => {
+        if (typeof tool.execute !== 'function')
+          return tool
+        return {
+          ...tool,
+          execute: async (input: Parameters<Tool['execute']>[0], executionOptions: Parameters<Tool['execute']>[1]) => {
+            // The SDK passes a signal but does not check it before executing.
+            // Already-started tools can only cancel cooperatively; never replay
+            // them to recover a missing reply.
+            if (settled || attemptAbort.signal.aborted)
+              throw attemptAbort.signal.reason ?? new DOMException('The model request has ended.', 'AbortError')
+            return tool.execute(input, { ...executionOptions, abortSignal: attemptAbort.signal })
+          },
+        }
+      })
       const streamResult = streamText({
         ...chatConfig,
-        abortSignal: options?.abortSignal,
+        abortSignal: attemptAbort.signal,
         // Execute one batch of app tools, then hand their authoritative results
         // to a separate no-tools reply. Letting the provider keep tools across
         // recursive steps can repeat stateful actions such as creating alarms.
@@ -449,7 +511,7 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
         messages: sanitized,
         headers,
         toolChoice,
-        tools,
+        tools: guardedTools,
         onEvent,
       })
 
@@ -657,11 +719,14 @@ function summarizeProviderMessages(messages: unknown) {
   }
 }
 
-function extractAssistantTextFromMessages(messages: unknown): string {
+function extractAssistantTextFromMessages(messages: unknown, inputMessageCount: number): string {
   if (!Array.isArray(messages))
     return ''
 
-  for (let index = messages.length - 1; index >= 0; index--) {
+  // NOTICE: xsai returns the input transcript followed by this attempt's output.
+  // Never recover an older answer when the new completion contains no public text.
+  // See `node_modules/@xsai/stream-text/dist/index.js:45,161,218` (0.4.3).
+  for (let index = messages.length - 1; index >= inputMessageCount; index--) {
     const message = messages[index]
     if (!message || typeof message !== 'object' || (message as { role?: unknown }).role !== 'assistant')
       continue
@@ -948,6 +1013,7 @@ interface ToolBundleRouteResult {
   acknowledgement: string
   acknowledgementSource?: 'model' | 'fallback'
   bundleIds: string[]
+  hasVisibleText: boolean
   selected: boolean
 }
 
@@ -968,7 +1034,7 @@ async function runToolBundleRouter(model: string, chatProvider: ChatProvider, me
     await options?.onStreamEvent?.({ text, type: 'text-delta' })
   }
 
-  await streamFrom(model, chatProvider, createToolBundleRouterMessages(messages, toolBundles), {
+  const result = await streamFrom(model, chatProvider, createToolBundleRouterMessages(messages, toolBundles), {
     ...options,
     firstEventTimeoutMs: TOOL_BUNDLE_ROUTER_FIRST_EVENT_TIMEOUT_MS,
     trace: traceStage(options, 'tool-router'),
@@ -1027,6 +1093,7 @@ async function runToolBundleRouter(model: string, chatProvider: ChatProvider, me
       bundleIds: selectedBundleIds,
       acknowledgement: selectedAcknowledgement,
       acknowledgementSource,
+      hasVisibleText: result.hasVisibleText,
       selected: true,
     }
   }
@@ -1034,6 +1101,7 @@ async function runToolBundleRouter(model: string, chatProvider: ChatProvider, me
   return {
     acknowledgement: '',
     bundleIds: [],
+    hasVisibleText: result.hasVisibleText,
     selected: false,
   }
 }
@@ -1259,6 +1327,9 @@ export const useLLM = defineStore('llm', () => {
 
   async function stream(model: string, chatProvider: ChatProvider, messages: Message[], options?: StreamOptions): Promise<LLMEmptyResult | undefined> {
     options = { ...options, searchExecution: options?.searchExecution ?? { budget: createSearchExecutionBudget(), trace: options?.trace } }
+    if (options.abortSignal?.aborted)
+      throw options.abortSignal.reason ?? new DOMException('The model request was cancelled.', 'AbortError')
+    const officialCloud = chatProvider.chat(model).apiKey === 'official-cloud'
     const cacheKey = getToolsCompatibilityKey(model, chatProvider)
     const hasCustomTools = options?.tools !== undefined
     const hasToolBundles = (options?.toolBundles?.length ?? 0) > 0
@@ -1279,7 +1350,7 @@ export const useLLM = defineStore('llm', () => {
       // can collide with providers that allow one in-flight request per turn.
       // Keep routing for multiple bundles, where the model still needs to
       // choose the smallest sufficient capability set.
-      if (options?.toolBundleRoutingMode === 'auto' && resolvedBundles.length > 1) {
+      if (!officialCloud && options?.toolBundleRoutingMode === 'auto' && resolvedBundles.length > 1) {
         const toolNames = resolvedBundles.flatMap(bundle => bundle.tools.map(getToolName))
         recordToolRouteDiagnostic('tool bundle router attempt', chatProvider, {
           bundleIds: resolvedBundles.map(bundle => bundle.id),
@@ -1294,6 +1365,8 @@ export const useLLM = defineStore('llm', () => {
           route = await runToolBundleRouter(model, chatProvider, messages, resolvedBundles, options)
         }
         catch (error) {
+          if (options?.abortSignal?.aborted)
+            throw error
           if (getKnownToolModeFailureKind(error) !== 'transient')
             throw error
 
@@ -1309,6 +1382,8 @@ export const useLLM = defineStore('llm', () => {
           })
         }
         if (route && !route.selected) {
+          if (!route.hasVisibleText)
+            return createLLMEmptyResult('no-visible-text')
           recordToolRouteDiagnostic('tool bundle router answered without tools', chatProvider, {
             bundleIds: resolvedBundles.map(bundle => bundle.id),
             model,
@@ -1349,7 +1424,7 @@ export const useLLM = defineStore('llm', () => {
         let textAfterLastToolResult = ''
         let finalReplyAttempted = false
         try {
-          if (options?.toolBundleRoutingMode === 'eager' && !eagerAcknowledgementEmitted) {
+          if (!officialCloud && options?.toolBundleRoutingMode === 'eager' && !eagerAcknowledgementEmitted) {
             eagerAcknowledgementEmitted = true
             try {
               const acknowledgement = await generateToolAcknowledgement(model, chatProvider, messages, options)
@@ -1359,6 +1434,8 @@ export const useLLM = defineStore('llm', () => {
               }
             }
             catch (error) {
+              if (options?.abortSignal?.aborted || isTerminalProviderFailure(error))
+                throw error
               recordToolRouteDiagnostic('eager acknowledgement unavailable; continuing with tool', chatProvider, {
                 bundleIds: attempt.bundleIds,
                 message: getErrorSearchText(error),
@@ -1380,7 +1457,7 @@ export const useLLM = defineStore('llm', () => {
             tools: toolNames,
           })
 
-          await streamFrom(model, chatProvider, messages, {
+          const attemptResult = await streamFrom(model, chatProvider, messages, {
             ...options,
             firstEventTimeoutMs: options?.toolBundleRoutingMode === 'auto'
               ? AUTO_ROUTED_TOOL_STREAM_FIRST_EVENT_TIMEOUT_MS
@@ -1401,6 +1478,9 @@ export const useLLM = defineStore('llm', () => {
               await options?.onStreamEvent?.(event)
             },
           })
+
+          if (!attemptResult.hasVisibleText && attemptToolResults.length === 0)
+            return createLLMEmptyResult('no-visible-text')
 
           toolBundleCompatibility.value.set(bundleCacheKey, true)
           toolsCompatibility.value.set(cacheKey, true)
@@ -1448,13 +1528,15 @@ export const useLLM = defineStore('llm', () => {
           return
         }
         catch (error) {
+          if (options?.abortSignal?.aborted)
+            throw error
           if (finalReplyAttempted) {
             if (await completeTurnFromConfirmedToolResult(attemptToolResults, options))
               return
             throw error
           }
 
-          const failureKind = getKnownToolModeFailureKind(error)
+          const failureKind = officialCloud ? undefined : getKnownToolModeFailureKind(error)
           if (!failureKind) {
             recordToolRouteDiagnostic('tool bundle failure', chatProvider, {
               bundleIds: attempt.bundleIds,
@@ -1592,7 +1674,7 @@ export const useLLM = defineStore('llm', () => {
           tools: toolNames,
         })
 
-        await streamFrom(model, chatProvider, messages, {
+        const attemptResult = await streamFrom(model, chatProvider, messages, {
           ...options,
           firstEventTimeoutMs: TOOL_STREAM_FIRST_EVENT_TIMEOUT_MS,
           trace: traceStage(options, 'tool-execution'),
@@ -1609,6 +1691,9 @@ export const useLLM = defineStore('llm', () => {
             await options?.onStreamEvent?.(event)
           },
         })
+        if (!attemptResult.hasVisibleText && completedToolResults.length === 0)
+          return createLLMEmptyResult('no-visible-text')
+
         toolsCompatibility.value.set(cacheKey, true)
         recordToolRouteDiagnostic('direct tools success', chatProvider, {
           model,
@@ -1644,13 +1729,15 @@ export const useLLM = defineStore('llm', () => {
         return
       }
       catch (error) {
+        if (options?.abortSignal?.aborted)
+          throw error
         if (finalReplyAttempted) {
           if (await completeTurnFromConfirmedToolResult(completedToolResults, options))
             return
           throw error
         }
 
-        const failureKind = getKnownToolModeFailureKind(error)
+        const failureKind = officialCloud ? undefined : getKnownToolModeFailureKind(error)
         if (!failureKind) {
           recordToolRouteDiagnostic('direct tools failure', chatProvider, {
             message: getErrorSearchText(error),
