@@ -5,6 +5,18 @@ chat:
       core-system: Sistema Central
       you: Tu
   reasoning: Razonamiento
+  vision:
+    screen-capture: Capturar pantalla o ventana
+    screen-select: Elige una fuente y revísala antes de adjuntarla.
+    screen-preview: Vista previa de la fuente seleccionada
+    screen-attach: Adjuntar captura
+    screen-loading: Cargando vista previa…
+    screen-failed: No se pudo iniciar la captura de pantalla. Inténtalo de nuevo.
+    screen-source-unavailable: No se pudo capturar esta fuente. Vuelve a seleccionar una pantalla o ventana disponible.
+    screen-thumbnail-unavailable: La fuente seleccionada no proporcionó una imagen. Revisa el permiso de grabación de pantalla y vuelve a seleccionarla.
+    screen-timeout: Se agotó el tiempo de espera de la captura de pantalla. Inténtalo de nuevo.
+    screen-permission-denied: El sistema denegó el permiso de grabación de pantalla. Permite que Wuwiii grabe la pantalla en los ajustes del sistema y vuelve a intentarlo.
+    screen-no-sources: No hay pantallas ni ventanas disponibles.
 message: Dile algo...
 operations:
   load-models: Cargar Modelos

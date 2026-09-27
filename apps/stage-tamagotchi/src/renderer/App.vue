@@ -18,6 +18,7 @@ import { useSettingsGeneral } from '@proj-airi/stage-ui/stores/settings/general'
 import { getSettingsSurfaceStyle, useSettingsTheme } from '@proj-airi/stage-ui/stores/settings/theme'
 import { Button, useTheme } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
+import { isMacOS } from 'std-env'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
@@ -183,11 +184,11 @@ const notifyButlerRendererRuntimeReady = useElectronEventaInvoke(electronButlerR
 const notifyQuickChatRendererRuntimeReady = useElectronEventaInvoke(quickChatRendererRuntimeReady)
 provideDisplayModelFilePicker(createDesktopDisplayModelFilePicker(pickDisplayModelFile))
 let visionCaptureOptions = { types: ['screen', 'window'] as Array<'screen' | 'window'>, thumbnailSize: { width: 480, height: 270 } }
-const { getSources: getVisionScreenSources } = useElectronScreenCapture(window.electron.ipcRenderer, () => visionCaptureOptions)
+const { checkMacOSPermission: checkVisionScreenRecordingPermission, getSources: getVisionScreenSources } = useElectronScreenCapture(window.electron.ipcRenderer, () => visionCaptureOptions)
 const visionScreenCapture = createDesktopVisionScreenCapture((options) => {
   visionCaptureOptions = options
   return getVisionScreenSources()
-})
+}, undefined, undefined, isMacOS ? checkVisionScreenRecordingPermission : undefined)
 provideVisionScreenCapture(visionScreenCapture)
 // Capture the window role before routing initializes; auxiliary windows must
 // not acquire ownership while their route temporarily looks like the stage.

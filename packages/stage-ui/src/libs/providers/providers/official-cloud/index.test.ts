@@ -198,7 +198,7 @@ describe('providerOfficialCloud', () => {
   it('refreshes account points after an official chat request', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
 
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions', {
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions', {
       method: 'POST',
     })
     await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalledOnce())
@@ -456,7 +456,7 @@ describe('providerOfficialCloud', () => {
       },
     }), { status: 502 })))
 
-    await expect(officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions', {
+    await expect(officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions', {
       method: 'POST',
     })).rejects.toThrow('Provider returned 502 Bad Gateway. The official cloud model is temporarily unavailable. Please try again later. Upstream status: 503. Trace ID: trace-test.')
   })
@@ -488,8 +488,8 @@ describe('providerOfficialCloud', () => {
       },
     })))
 
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
     await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalled())
 
     expect(toastInfoMock).toHaveBeenCalledOnce()
@@ -514,8 +514,8 @@ describe('providerOfficialCloud', () => {
         },
       })))
 
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
     await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalled())
 
     expect(toastInfoMock).toHaveBeenCalledTimes(2)
@@ -526,7 +526,7 @@ describe('providerOfficialCloud', () => {
   it('does not show a fallback notice without the structured headers', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
 
-    await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
+    await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
     await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalledOnce())
 
     expect(toastInfoMock).not.toHaveBeenCalled()
@@ -545,7 +545,7 @@ describe('providerOfficialCloud', () => {
       },
     })))
 
-    const response = await officialCloudFetch('https://airi-api.moeru.ai/api/model-gateway/v1/chat/completions')
+    const response = await officialCloudFetch('https://fixtures.example.invalid/api/model-gateway/v1/chat/completions')
     await vi.waitFor(() => expect(fetchAccountStateMock).toHaveBeenCalledOnce())
 
     expect(response.bodyUsed).toBe(false)

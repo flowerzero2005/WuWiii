@@ -137,9 +137,10 @@ function officialVisionTraceHeaders(options: VisionRequestOptions | undefined) {
 
 /**
  * Separate image-understanding settings. Uploads and screenshots use this
- * service; chat providers receive its visual summary as private text context.
- * The previous comment described direct image forwarding, which was removed
- * so selecting a local chat model cannot bypass the chosen visual service.
+ * service unless the active chat model explicitly declares the `vision`
+ * capability. In that case, the chat request receives the image directly;
+ * unknown and text-only models continue to receive only this service's
+ * private text summary.
  */
 export const useVisionStore = defineStore('vision-store', () => {
   const auth = useAuthStore()

@@ -633,6 +633,17 @@ const speechPipeline = createSpeechPipeline<SpeechAudio>({
       if (useRealtime) {
         for (let attempt = 0; attempt < 2 && !signal.aborted; attempt += 1) {
           try {
+            const realtimeTimeoutMs = resolveTtsRequestTimeoutMs({
+              configuredTimeoutMs: playbackSettings.value.ttsRequestTimeout,
+              model: modelId,
+              providerId,
+              rateLimitRetryDelayMs: 0,
+              textLength: normalizedText.length,
+            })
+            speechDisplaySyncStore.markIntentSynthesisStart({
+              intentId: request.intentId,
+              synthesisDeadlineAt: Date.now() + realtimeTimeoutMs,
+            })
             realtime = await runWithTimeout(
               abortSignal => generateAlibabaRealtimeSpeech({
                 providerConfig,
@@ -641,13 +652,7 @@ const speechPipeline = createSpeechPipeline<SpeechAudio>({
                 voice: voice.id,
                 abortSignal,
               }),
-              resolveTtsRequestTimeoutMs({
-                configuredTimeoutMs: playbackSettings.value.ttsRequestTimeout,
-                model: modelId,
-                providerId,
-                rateLimitRetryDelayMs: 0,
-                textLength: normalizedText.length,
-              }),
+              realtimeTimeoutMs,
               signal,
             )
             if (realtime)
@@ -694,6 +699,17 @@ const speechPipeline = createSpeechPipeline<SpeechAudio>({
       }
 
       retryCount = realtimeFallback ? 1 : 0
+      const ttsTimeoutMs = resolveTtsRequestTimeoutMs({
+        configuredTimeoutMs: playbackSettings.value.ttsRequestTimeout,
+        model: modelId,
+        providerId,
+        rateLimitRetryDelayMs: playbackSettings.value.ttsRateLimitRetryDelayMs,
+        textLength: normalizedText.length,
+      })
+      speechDisplaySyncStore.markIntentSynthesisStart({
+        intentId: request.intentId,
+        synthesisDeadlineAt: Date.now() + ttsTimeoutMs,
+      })
       const res = await runWithTimeout(
         async (abortSignal) => {
           return generateChatSpeechWithRateLimit({
@@ -706,13 +722,7 @@ const speechPipeline = createSpeechPipeline<SpeechAudio>({
             voice: voice.id,
           }, abortSignal, count => retryCount = count)
         },
-        resolveTtsRequestTimeoutMs({
-          configuredTimeoutMs: playbackSettings.value.ttsRequestTimeout,
-          model: modelId,
-          providerId,
-          rateLimitRetryDelayMs: playbackSettings.value.ttsRateLimitRetryDelayMs,
-          textLength: normalizedText.length,
-        }),
+        ttsTimeoutMs,
         signal,
       )
 

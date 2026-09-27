@@ -5,6 +5,18 @@ chat:
       core-system: Système central
       you: Vous
   reasoning: Raisonnement
+  vision:
+    screen-capture: Capturer l’écran ou une fenêtre
+    screen-select: Choisissez une source et prévisualisez-la avant de l’ajouter.
+    screen-preview: Aperçu de la source sélectionnée
+    screen-attach: Ajouter la capture
+    screen-loading: Chargement de l’aperçu…
+    screen-failed: Impossible de démarrer la capture d’écran. Réessayez.
+    screen-source-unavailable: Impossible de capturer cette source. Sélectionnez à nouveau un écran ou une fenêtre disponible.
+    screen-thumbnail-unavailable: La source sélectionnée n’a pas fourni d’image. Vérifiez l’autorisation d’enregistrement de l’écran, puis sélectionnez-la à nouveau.
+    screen-timeout: Le délai de capture d’écran a expiré. Réessayez.
+    screen-permission-denied: Le système a refusé l’autorisation d’enregistrement de l’écran. Autorisez Wuwiii à enregistrer votre écran dans les réglages système, puis réessayez.
+    screen-no-sources: Aucun écran ou fenêtre n’est disponible.
 message: Dites quelque chose...
 operations:
   load-models: Charger les modèles

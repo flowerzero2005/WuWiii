@@ -6,6 +6,8 @@ import { computed } from 'vue'
 
 import { useProvidersStore } from '../providers'
 
+const OFFICIAL_PROVIDER_ID_PREFIX = 'official-cloud'
+
 export const useConsciousnessStore = defineStore('consciousness', () => {
   const providersStore = useProvidersStore()
 
@@ -13,6 +15,7 @@ export const useConsciousnessStore = defineStore('consciousness', () => {
   const activeProvider = useLocalStorageManualReset<string>('settings/consciousness/active-provider', 'official-cloud')
   const activeModel = useLocalStorageManualReset<string>('settings/consciousness/active-model', 'airi-default')
   const activeCustomModelName = useLocalStorageManualReset<string>('settings/consciousness/active-custom-model', '')
+  const visionCapableModels = useLocalStorageManualReset<Record<string, string[]>>('settings/consciousness/vision-capable-models', {})
   const expandedDescriptions = refManualReset<Record<string, boolean>>(() => ({}))
   const modelSearchQuery = refManualReset<string>('')
 
@@ -58,6 +61,54 @@ export const useConsciousnessStore = defineStore('consciousness', () => {
     )
   })
 
+  function modelDeclaresVision(providerId: string | undefined, modelId: string | undefined) {
+    const provider = providerId?.trim()
+    const model = modelId?.trim()
+    if (!provider || !model)
+      return false
+    return providersStore.getModelsForProvider(provider)
+      .find(candidate => candidate.id === model)
+      ?.capabilities
+      ?.includes('vision') === true
+  }
+
+  function canConfigureModelVision(providerId: string | undefined) {
+    const provider = providerId?.trim()
+    return Boolean(provider
+      && !provider.startsWith(OFFICIAL_PROVIDER_ID_PREFIX)
+      && providersStore.providerMetadata[provider]?.category === 'chat')
+  }
+
+  function modelSupportsVision(providerId: string | undefined, modelId: string | undefined) {
+    const provider = providerId?.trim()
+    const model = modelId?.trim()
+    if (!provider || !model)
+      return false
+    const configuredModels = visionCapableModels.value[provider]
+    return modelDeclaresVision(provider, model)
+      || (canConfigureModelVision(provider) && Array.isArray(configuredModels) && configuredModels.includes(model))
+  }
+
+  function setModelVisionCapability(providerId: string, modelId: string, enabled: boolean) {
+    const provider = providerId.trim()
+    const model = modelId.trim()
+    if (!model || !canConfigureModelVision(provider))
+      return
+
+    const current = Array.isArray(visionCapableModels.value[provider])
+      ? visionCapableModels.value[provider]
+      : []
+    const nextModels = enabled
+      ? [...new Set([...current, model])]
+      : current.filter(candidate => candidate !== model)
+    const next = { ...visionCapableModels.value }
+    if (nextModels.length > 0)
+      next[provider] = nextModels
+    else
+      delete next[provider]
+    visionCapableModels.value = next
+  }
+
   function resetModelSelection() {
     activeModel.reset()
     activeCustomModelName.reset()
@@ -94,6 +145,7 @@ export const useConsciousnessStore = defineStore('consciousness', () => {
     activeProvider,
     activeModel,
     customModelName: activeCustomModelName,
+    visionCapableModels,
     expandedDescriptions,
     modelSearchQuery,
 
@@ -103,9 +155,13 @@ export const useConsciousnessStore = defineStore('consciousness', () => {
     isLoadingActiveProviderModels,
     activeProviderModelError,
     filteredModels,
+    modelDeclaresVision,
+    canConfigureModelVision,
+    modelSupportsVision,
 
     // Actions
     resetModelSelection,
+    setModelVisionCapability,
     loadModelsForProvider,
     getModelsForProvider,
     resetState,

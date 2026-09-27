@@ -80,6 +80,9 @@ function mapModelsToMetadataModels(providerId: string, models: any[]) {
       name: model.name || model.display_name || model.id,
       provider: providerId,
       description: model.description || '',
+      capabilities: Array.isArray(model.capabilities) && model.capabilities.every((capability: unknown) => typeof capability === 'string')
+        ? model.capabilities
+        : undefined,
       contextLength: model.context_length || 0,
       deprecated: false,
     }

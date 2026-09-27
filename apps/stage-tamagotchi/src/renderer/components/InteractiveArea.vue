@@ -58,7 +58,6 @@ import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings/audio-device'
 import { resolveChatBubblePresentation, useChatAppearanceSettingsStore } from '@proj-airi/stage-ui/stores/settings/chat-appearance'
 import {
-  CHAT_LAYOUT_HISTORY_MIN_HEIGHT,
   CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT,
   CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT,
   CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT,
@@ -92,14 +91,16 @@ import ChatSpeechSwitcher from './chat-speech-switcher.vue'
 import GroupMentionPicker from './group-mention-picker.vue'
 
 import { createDesktopFeatureManifest } from '../../shared/desktop-feature-manifest'
-import { composerSourceAction, composerSourceActionStatus, composerSourceReveal, composerSourceTextAppend } from '../../shared/detached-composer-events'
+import { composerSourceAction, composerSourceActionStatus, composerSourceReturnTargetState, composerSourceReveal, composerSourceTextAppend } from '../../shared/detached-composer-events'
 import { electronOpenSettings } from '../../shared/eventa'
 import { useDetachedComposerSource } from '../composables/use-detached-composer'
 import { createChatAppCapabilityContext, ingestChatAppCapabilityContext } from '../modules/chat-app-capability-context'
-import { createChatSendLifecycle, matchesComposerSubmission } from '../modules/chat-send-lifecycle'
+import { canRollbackPreIngestTurn, createChatSendLifecycle, matchesComposerSubmission, removeOptimisticUserMessage } from '../modules/chat-send-lifecycle'
 import { buildChatToolBundles, BUTLER_TASKS_TOOL_BUNDLE_ID, WEB_SEARCH_TOOL_BUNDLE_ID } from '../modules/chat-tool-bundles'
+import { resolveChatVisionRouting } from '../modules/chat-vision-routing'
 import { drainGroupSpeaker, drainGroupTurn, finishGroupSpeaker, finishGroupTurn, GROUP_SPEAKER_IDLE_TIMEOUT_MS, isGroupSpeakerIdle, noteGroupSpeakerMilestone, noteGroupSpeakerProgress, startGroupSpeaker, startGroupTurn } from '../modules/group-turn-run-state'
 import { isCurrentWindowHearingStreamOwner, QUICK_CHAT_PRESENT_CHANNEL_NAME, QUICK_CHAT_PRESENT_LOCAL_EVENT, readHearingStreamOwner, setHearingStreamOwner, splitQuickChatBubbleSegments } from '../modules/quick-chat-present'
+import { getVisionScreenCaptureErrorKey } from '../modules/vision-screen-capture'
 import { createVoiceCallHangupState } from '../modules/voice-call-hangup'
 import { startVoiceCallRingtone, stopVoiceCallRingtone } from '../modules/voice-call-ringtone'
 import { createVoiceCallTranscriptQueue } from '../modules/voice-call-transcripts'
@@ -139,7 +140,6 @@ interface BasicTextareaExposed {
 }
 const quickChatTextareaRef = ref<BasicTextareaExposed>()
 const mainChatTextareaRef = ref<BasicTextareaExposed>()
-const composerReturnTargetRef = ref<HTMLElement>()
 const lastInputSelection = { start: 0, end: 0 }
 let hasInputSelection = false
 const INPUT_WHITESPACE_RE = /\s/u
@@ -343,6 +343,10 @@ function closeScreenPicker() {
   screenCaptureLoading.value = false
 }
 
+function screenCaptureFailure(cause: unknown) {
+  return t(`stage.chat.vision.${getVisionScreenCaptureErrorKey(cause)}`)
+}
+
 async function openScreenPicker() {
   if (isComposerReadonly())
     return
@@ -361,9 +365,9 @@ async function openScreenPicker() {
       return
     screenSources.value = sources
   }
-  catch {
+  catch (cause) {
     if (revision === screenPickerRevision)
-      screenCaptureError.value = t('stage.chat.vision.screen-failed')
+      screenCaptureError.value = screenCaptureFailure(cause)
   }
   finally {
     if (revision === screenPickerRevision)
@@ -387,9 +391,9 @@ async function attachSelectedScreen() {
     attachments.value.push({ ...image, url: `data:${image.mimeType};base64,${image.data}` })
     closeScreenPicker()
   }
-  catch {
+  catch (cause) {
     if (revision === screenPickerRevision)
-      screenCaptureError.value = t('stage.chat.vision.screen-failed')
+      screenCaptureError.value = screenCaptureFailure(cause)
   }
   finally {
     if (revision === screenPickerRevision)
@@ -434,7 +438,8 @@ const { settings: speechPlayback } = storeToRefs(speechPlaybackSettings)
 const { chatSurfaceOpacity } = storeToRefs(settingsThemeStore)
 const { handleResizeStart } = useElectronWindowResize()
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
-const { activeModel, activeProvider } = storeToRefs(useConsciousnessStore())
+const consciousnessStore = useConsciousnessStore()
+const { activeModel, activeProvider } = storeToRefs(consciousnessStore)
 const isComposing = ref(false)
 const isInitialized = ref(false)
 const personaContactsDrawerOpen = ref(false)
@@ -1209,10 +1214,16 @@ const activeHistoryRatio = computed(() => isWidgetSurface.value
   ? chatLayoutSettingsStore.widgetHistoryRatio
   : chatLayoutSettingsStore.pageHistoryRatio)
 const composerDetached = ref(false)
-const hasChatLayoutHandle = computed(() => !isCollapsed.value && !voiceCallSessionActive.value && !composerDetached.value)
 const composerMinimumHeight = computed(() => isWidgetSurface.value
   ? CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT
   : CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)
+const isChatLayoutTooShort = computed(() => !composerDetached.value
+  && !isCollapsed.value
+  && chatLayoutRootHeight.value <= composerMinimumHeight.value + CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT)
+const hasChatLayoutHandle = computed(() => !isCollapsed.value
+  && !voiceCallSessionActive.value
+  && !composerDetached.value
+  && !isChatLayoutTooShort.value)
 const chatLayoutRatioBounds = computed(() => getChatHistoryRatioBoundsForHeight(
   chatLayoutRootHeight.value,
   composerMinimumHeight.value,
@@ -1225,16 +1236,18 @@ const effectiveHistoryRatio = computed(() => constrainChatHistoryRatioForHeight(
 const chatLayoutGridStyle = computed(() => ({
   gridTemplateRows: composerDetached.value
     ? 'minmax(0, 1fr) 32px'
-    : hasChatLayoutHandle.value
-      ? [
-          `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc((100% - ${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px) * ${effectiveHistoryRatio.value / 100}))`,
-          `${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px`,
-          `minmax(${composerMinimumHeight.value}px, 1fr)`,
-        ].join(' ')
-      : [
-          `minmax(${CHAT_LAYOUT_HISTORY_MIN_HEIGHT}px, calc(100% * ${effectiveHistoryRatio.value / 100}))`,
-          `minmax(${composerMinimumHeight.value}px, 1fr)`,
-        ].join(' '),
+    : isChatLayoutTooShort.value
+      ? 'minmax(0, 1fr)'
+      : hasChatLayoutHandle.value
+        ? [
+            `minmax(0, calc((100% - ${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px) * ${effectiveHistoryRatio.value / 100}))`,
+            `${CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT}px`,
+            'minmax(0, 1fr)',
+          ].join(' ')
+        : [
+            `minmax(0, calc(100% * ${effectiveHistoryRatio.value / 100}))`,
+            'minmax(0, 1fr)',
+          ].join(' '),
 }))
 let historyResizePointerId: number | undefined
 let historyResizeTarget: HTMLElement | undefined
@@ -1275,13 +1288,13 @@ function handleHistoryResizePointerMove(event: PointerEvent) {
   setHistoryRatioFromPointer(event.clientY)
 }
 
-function stopHistoryResize(event?: PointerEvent) {
+function stopHistoryResize(event?: PointerEvent, allowDetach = false) {
   if (historyResizePointerId === undefined)
     return
 
   const releasedOutsideWindow = !!event && (event.clientX < 0 || event.clientY < 0
     || event.clientX > window.innerWidth || event.clientY > window.innerHeight)
-  const shouldDetach = event?.type === 'pointerup'
+  const shouldDetach = (event?.type === 'pointerup' || allowDetach)
     && historyResizeOutsideWindow.value
     && releasedOutsideWindow
     && !composerDetached.value
@@ -1296,6 +1309,23 @@ function stopHistoryResize(event?: PointerEvent) {
   historyResizeTarget = undefined
   if (shouldDetach && event)
     detachFromResize?.({ x: event.screenX, y: event.screenY })
+}
+
+function handleHistoryResizeLostPointerCapture(event: PointerEvent) {
+  if (historyResizePointerId === undefined || event.pointerId !== historyResizePointerId)
+    return
+
+  const releasedOutsideWindow = event.clientX < 0 || event.clientY < 0
+    || event.clientX > window.innerWidth || event.clientY > window.innerHeight
+  if (releasedOutsideWindow) {
+    // Electron can release DOM capture before it reports pointerup after a
+    // cursor crosses a native window boundary. The main process verifies the
+    // real cursor again before it creates the detached composer.
+    historyResizeOutsideWindow.value = true
+    stopHistoryResize(event, true)
+    return
+  }
+  stopHistoryResize(event)
 }
 
 function handleHistoryResizeStart(event: PointerEvent) {
@@ -1515,14 +1545,6 @@ const detachedComposer = useDetachedComposerSource({
   group: () => !!activeGroupMeta.value,
   busy: composerSourceIsBusy,
   draft: getComposerDraft,
-  region: () => {
-    const textarea = (props.surface === 'widget' ? quickChatTextareaRef.value : mainChatTextareaRef.value)?.textareaRef
-    const target = textarea ?? composerReturnTargetRef.value
-    if (!target)
-      return undefined
-    const rect = target.getBoundingClientRect()
-    return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, viewport: { width: window.innerWidth, height: window.innerHeight } }
-  },
   applyDraft: (draft) => {
     attachments.value.forEach(image => URL.revokeObjectURL(image.url))
     messageInput.value = draft.text
@@ -1545,11 +1567,14 @@ const detachedComposer = useDetachedComposerSource({
   },
 })
 const composerActionContext = useElectronEventaContext()
+const composerReturnTargetActive = ref(false)
 const reportComposerSourceAction = useElectronEventaInvoke(composerSourceActionStatus)
 const appendDetachedComposerText = useElectronEventaInvoke(composerSourceTextAppend)
 const revealDetachedComposerSource = useElectronEventaInvoke(composerSourceReveal)
 watch(detachedComposer.detached, (detached) => {
   composerDetached.value = detached
+  if (!detached)
+    composerReturnTargetActive.value = false
 }, { immediate: true, flush: 'sync' })
 watch(detachedComposer.readonly, (readonly) => {
   if (readonly)
@@ -2321,6 +2346,13 @@ const offDetachedComposerSourceAction = composerActionContext.value.on(composerS
     void handleDetachedComposerSourceAction(body)
 })
 onUnmounted(offDetachedComposerSourceAction)
+const offComposerSourceReturnTargetState = composerActionContext.value.on(composerSourceReturnTargetState, ({ body }) => {
+  const scope = detachedComposer.getSourceActionScope()
+  if (!body || !scope || body.sourceGeneration !== scope.sourceGeneration)
+    return
+  composerReturnTargetActive.value = body.active
+})
+onUnmounted(offComposerSourceReturnTargetState)
 
 function composerSourceIsBusy() {
   return !isInitialized.value || manualSendPending.value || sending.value || responding.value || groupSendingForActiveSession.value || voiceCallActive.value || isManualSpeechInputDictating.value
@@ -2583,6 +2615,7 @@ async function sendConfiguredChatMessage(
     displayAttachments?: Array<{ type: 'image', data: string, mimeType: string, url: string }>
     disableMessageMerging?: boolean
     modelId?: string
+    onIngestStart?: () => void
     onResponseReady?: () => void
     providerId?: string
     reusePersistedUserMessage?: boolean
@@ -2671,6 +2704,9 @@ async function sendConfiguredChatMessage(
   })
 
   try {
+    // Once ingest starts, the provider may accept or charge the turn even if
+    // the caller later receives an abort or transport error.
+    options.onIngestStart?.()
     await ingest(text, {
       model: modelId,
       chatProvider,
@@ -3384,6 +3420,11 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
   trackSubmission?.(targetSessionId, sourceUserMessageId)
   const sourceCreatedAt = Date.now()
   const attachmentsToSend = attachments.value.map(att => ({ ...att }))
+  const { shouldUseVisionAnalysis, useNativeChatVision } = resolveChatVisionRouting(
+    attachmentsToSend.length > 0,
+    activeChatModelSupportsVision(providerId, modelId),
+    providerId,
+  )
   const submittedComposerRevision = composerRevision
   const visionConfigurationRevision = visionStore.configurationRevision
   const collapsedSend = isCollapsed.value
@@ -3426,6 +3467,11 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
   manualSendPending.value = true
   let draftCleared = false
   let clearedComposerRevision: number | undefined
+  let optimisticImageMessagePersisted = false
+  let visualAnalysisStarted = false
+  let chatIngestStarted = false
+  let terminalErrorRecorded = false
+  const canRollbackDraft = () => canRollbackPreIngestTurn({ visualAnalysisStarted, chatIngestStarted })
   const restoreSubmittedDraft = () => {
     if (!draftCleared || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope || composerRevision !== clearedComposerRevision)
       return
@@ -3435,13 +3481,42 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       url: URL.createObjectURL(new Blob([Uint8Array.from(atob(att.data), c => c.charCodeAt(0))], { type: att.mimeType })),
     }))
   }
+  const rollbackPreIngestImageMessage = async () => {
+    if (!optimisticImageMessagePersisted || !canRollbackDraft())
+      return
+
+    const targetMessages = chatSession.getSessionMessages(targetSessionId)
+    if (!removeOptimisticUserMessage(targetMessages, sourceUserMessageId))
+      return
+    optimisticImageMessagePersisted = false
+    await chatSession.persistSessionMessages(targetSessionId, { immediate: true }).catch((rollbackPersistError) => {
+      console.warn('[Chat] Failed to persist rolled-back image message:', rollbackPersistError)
+    })
+  }
+  const recordPotentialTurnError = async (error: unknown) => {
+    if (terminalErrorRecorded)
+      return getLocalizedChatErrorMessage(error)
+
+    terminalErrorRecorded = true
+    const errorMessage = getLocalizedChatErrorMessage(error)
+    const errorActions = getChatErrorActions(errorMessage)
+    chatSession.getSessionMessages(targetSessionId).push({
+      role: 'error',
+      content: errorMessage,
+      ...(errorActions?.length ? { actions: errorActions } : {}),
+    })
+    await chatSession.persistSessionMessages(targetSessionId, { immediate: true }).catch((persistError) => {
+      console.warn('[Chat] Failed to persist direct-chat error:', persistError)
+    })
+    return errorMessage
+  }
   try {
-    if (attachmentsToSend.length > 0 && visionProvider.value === 'official-cloud'
+    if (shouldUseVisionAnalysis && visionProvider.value === 'official-cloud'
       && !await ensureOfficialCapabilityConsent('vision')) {
       return
     }
     if (!chatSendLifecycle.isCurrent(run) || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope || composerRevision !== submittedComposerRevision
-      || (attachmentsToSend.length > 0 && visionStore.configurationRevision !== visionConfigurationRevision)) {
+      || (shouldUseVisionAnalysis && visionStore.configurationRevision !== visionConfigurationRevision)) {
       return
     }
 
@@ -3472,7 +3547,14 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
           })),
         ],
       })
-      await chatSession.persistSessionMessages(targetSessionId, { immediate: true })
+      optimisticImageMessagePersisted = true
+      try {
+        await chatSession.persistSessionMessages(targetSessionId, { immediate: true })
+      }
+      catch (persistError) {
+        await rollbackPreIngestImageMessage()
+        throw persistError
+      }
     }
 
     let recommendationsScheduled = false
@@ -3495,8 +3577,11 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
     }
 
     let visualUnderstanding: Awaited<ReturnType<typeof visionStore.analyze>>
-    if (attachmentsToSend.length > 0) {
+    if (shouldUseVisionAnalysis) {
       try {
+        // The visual service can accept and charge this request before its
+        // promise settles, so it is the same no-retry boundary as chat ingest.
+        visualAnalysisStarted = true
         visualUnderstanding = await visionStore.analyze(textToSend, attachmentsToSend, {
           configurationRevision: visionConfigurationRevision,
           signal: run.controller.signal,
@@ -3509,29 +3594,35 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       catch (error) {
         if (run.controller.signal.aborted || (error instanceof Error && error.name === 'AbortError'))
           throw error
-        // With text present, preserve the user's text-only turn. A picture-only
-        // request stays in the composer so we never imply that it was seen.
+        // With text present, the text-only turn can continue after the visual
+        // service fails; a picture-only attempt records its terminal outcome.
         if (!textToSend.trim())
           throw error
         toast.warning(t('stage.chat.vision.failed-text-only'))
       }
     }
     if (!chatSendLifecycle.isCurrent(run) || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope) {
-      restoreSubmittedDraft()
+      await rollbackPreIngestImageMessage()
+      if (canRollbackDraft())
+        restoreSubmittedDraft()
+      else
+        await recordPotentialTurnError(new Error('The chat request was cancelled before its result was confirmed.'))
       return
     }
     pendingComposedClear = { sessionId: targetSessionId, userScope: targetUserScope, revision: clearedComposerRevision!, messageId: sourceUserMessageId }
     await sendConfiguredChatMessage(textToSend, {
+      attachments: useNativeChatVision ? attachmentsToSend : undefined,
       displayAttachments: attachmentsToSend,
       modelId: modelId ?? undefined,
+      onIngestStart: () => chatIngestStarted = true,
       onResponseReady: scheduleDirectRecommendations,
       providerId: providerId ?? undefined,
       sourceSurface: props.surface === 'widget' ? 'quick-chat' : 'chat',
       sourceUserMessageId,
       reusePersistedUserMessage: attachmentsToSend.length > 0,
       targetSessionId,
-      // The visual service is the only recipient of original image bytes.
-      // Local and text-only chat providers receive its private text summary.
+      // Only models that explicitly advertise vision receive original image
+      // bytes. All other models receive the selected visual service's summary.
       visionContext: [visualUnderstanding?.text, visionEnabled.value ? visionScreenContext.getContext() : undefined].filter(Boolean).join('\n\n') || undefined,
     })
 
@@ -3543,33 +3634,30 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
   catch (error) {
     if (run.controller.signal.aborted || !chatSendLifecycle.isCurrent(run)
       || (error instanceof Error && error.name === 'AbortError')) {
-      restoreSubmittedDraft()
+      await rollbackPreIngestImageMessage()
+      if (canRollbackDraft())
+        restoreSubmittedDraft()
+      else
+        await recordPotentialTurnError(error)
       return
     }
 
-    const errorMessage = getLocalizedChatErrorMessage(error)
-    const errorActions = getChatErrorActions(errorMessage)
+    if (canRollbackDraft()) {
+      await rollbackPreIngestImageMessage()
+      restoreSubmittedDraft()
+      if (chatSendLifecycle.isCurrent(run) && activeSessionId.value === targetSessionId && composerUserScope.value === targetUserScope) {
+        emit('sendError', {
+          collapsed: collapsedSend,
+          message: getLocalizedChatErrorMessage(error),
+        })
+      }
+      return
+    }
 
-    // Restore the draft only if the user is still looking at the session that
-    // failed. Otherwise an old request would inject its text into the newly
-    // selected contact's input field.
-    restoreSubmittedDraft()
-    const targetMessages = chatSession.getSessionMessages(targetSessionId)
-    // Keep the submitted user message as the durable request record. Removing
-    // it on failure made a refresh erase what the user actually sent and left
-    // an orphaned error bubble with no context. The restored composer still
-    // makes an explicit retry convenient without rewriting history.
-    targetMessages.push({
-      role: 'error',
-      content: errorMessage,
-      ...(errorActions?.length ? { actions: errorActions } : {}),
-    })
-    // Error bubbles are user-visible terminal state. Persist them before
-    // returning so a refresh cannot erase the failure and make a charged turn
-    // look as though it never happened.
-    await chatSession.persistSessionMessages(targetSessionId, { immediate: true }).catch((persistError) => {
-      console.warn('[Chat] Failed to persist direct-chat error:', persistError)
-    })
+    // Once a visual request or chat ingest has started, retain the exact user
+    // message and a durable terminal result. Restoring this draft would make a
+    // potentially charged turn look safe to send again.
+    const errorMessage = await recordPotentialTurnError(error)
     if (chatSendLifecycle.isCurrent(run) && activeSessionId.value === targetSessionId && composerUserScope.value === targetUserScope) {
       emit('sendError', {
         collapsed: collapsedSend,
@@ -3651,6 +3739,10 @@ function handleAttachmentPickerChange(event: Event) {
   const files = Array.from(input.files ?? [])
   input.value = ''
   void handleFilePaste(files)
+}
+
+function activeChatModelSupportsVision(providerId: string | undefined, modelId: string | undefined) {
+  return consciousnessStore.modelSupportsVision(providerId, modelId)
 }
 
 function removeAttachment(index: number) {
@@ -5351,7 +5443,7 @@ const chatSurfaceStyle = computed(() => {
       :style="isCollapsed ? undefined : chatLayoutGridStyle"
     >
       <div
-        v-show="!isCollapsed"
+        v-show="!isCollapsed && !isChatLayoutTooShort"
         ref="historyPaneRef"
         data-quick-chat-history
         :class="[
@@ -5616,7 +5708,7 @@ const chatSurfaceStyle = computed(() => {
         tabindex="0"
         data-chat-layout-resize
         @pointerdown.stop.prevent="handleHistoryResizeStart"
-        @lostpointercapture="stopHistoryResize"
+        @lostpointercapture="handleHistoryResizeLostPointerCapture"
         @keydown="handleHistoryResizeKeydown"
       >
         <span
@@ -6139,11 +6231,15 @@ const chatSurfaceStyle = computed(() => {
         </template>
         <div
           v-else
-          ref="composerReturnTargetRef"
           data-chat-composer-return-target
           :title="t('stage.chat.composer.drag-return')"
           :aria-label="t('stage.chat.composer.drag-return')"
-          :class="['h-8 shrink-0 border-t border-[var(--airi-accent)]/60 bg-[var(--airi-accent-surface)]/40']"
+          :class="[
+            'h-8 shrink-0 border-t transition-colors duration-100',
+            composerReturnTargetActive
+              ? 'border-[var(--airi-accent)] bg-[var(--airi-accent-surface)] ring-1 ring-[var(--airi-accent)]'
+              : 'border-[var(--airi-accent)]/60 bg-[var(--airi-accent-surface)]/40',
+          ]"
         >
           <span class="pointer-events-none h-full flex items-center justify-center text-[10px] text-[var(--airi-text-soft)]">
             {{ t('stage.chat.composer.drag-return') }}

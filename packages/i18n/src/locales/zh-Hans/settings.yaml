@@ -1934,6 +1934,9 @@ pages:
             show_more: 收起
             subtitle: 选择一个默认模型
             title: 模型
+            vision_input:
+              label: 此模型支持图片输入
+              description: 仅在当前模型和其 API 确实支持图片时开启。图片会在当前回合直接发送给该聊天模型。
       title: 意识
     description: 在这里管理思考、视觉、声音、记忆与游戏能力，按需启用对应模块。
     gaming-factorio:
@@ -2538,7 +2541,7 @@ pages:
                   openai-compatible-check-connectivity:
                     label: Ollama需要额外的配置
                     content: >-
-                      很抱歉，Ollama 连接检查失败。不要担心，如果是 Ollama，需要额外配置才能通过 Ollama。您需要在启动 Ollama 应用程序或 Ollama CLI 服务器时明确设置 OLLAMA_HOST。详情请查看 Project AIRI 上游 Ollama 集成指南：https://airi.moeru.ai/docs/en/docs/manual/integrations/providers/chat/ollama
+                      很抱歉，Ollama 连接检查失败。不要担心，如果是 Ollama，需要额外配置才能通过 Ollama。您需要在启动 Ollama 应用程序或 Ollama CLI 服务器时明确设置 OLLAMA_HOST。详情请查看 Ollama 部署文档：https://docs.ollama.com/
     common:
       continueAnyway: 仍然继续
       fields:

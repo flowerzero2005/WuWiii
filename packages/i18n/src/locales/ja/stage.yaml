@@ -5,6 +5,18 @@ chat:
       core-system: コアシステム
       you: あなた
   reasoning: 推論
+  vision:
+    screen-capture: 画面またはウィンドウをキャプチャ
+    screen-select: ソースを選択し、プレビューしてから追加します。
+    screen-preview: 選択したソースのプレビュー
+    screen-attach: スクリーンショットを追加
+    screen-loading: プレビューを読み込み中…
+    screen-failed: 画面キャプチャを開始できませんでした。もう一度お試しください。
+    screen-source-unavailable: このソースをキャプチャできませんでした。利用可能な画面またはウィンドウを選択し直してください。
+    screen-thumbnail-unavailable: 選択したソースから画像を取得できませんでした。画面収録の権限を確認してから、もう一度選択してください。
+    screen-timeout: 画面キャプチャがタイムアウトしました。もう一度お試しください。
+    screen-permission-denied: システムが画面収録の権限を拒否しました。システム設定で Wuwiii に画面収録を許可してから、もう一度お試しください。
+    screen-no-sources: 利用可能な画面またはウィンドウがありません。
 message: 何か話しかけてみましょう…
 operations:
   load-models: モデルの読み込み

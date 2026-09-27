@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { ComposerToolbarAction, ComposerToolbarState } from '../../shared/detached-composer-toolbar'
 
-import { useVisionScreenCapture, VisionScreenSourceUnavailableError } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
+import { useVisionScreenCapture } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
-import { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
+import { useVisionStore, VISION_MAX_IMAGES } from '@proj-airi/stage-ui/stores/modules/vision'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
 import { BasicTextarea } from '@proj-airi/ui'
@@ -17,6 +17,7 @@ import DetachedComposerToolbar from '../components/detached-composer-toolbar.vue
 
 import { validateComposerDraft } from '../../shared/detached-composer'
 import { useDetachedComposerEditor } from '../composables/use-detached-composer-editor'
+import { getVisionScreenCaptureErrorKey } from '../modules/vision-screen-capture'
 
 const { t } = useI18n()
 const key = 'stage.chat.composer'
@@ -31,6 +32,7 @@ const officialPricingStore = useOfficialPricingStore()
 const { error: visionPricingError } = storeToRefs(officialPricingStore)
 officialPricingStore.start()
 const imageInputRef = ref<HTMLInputElement>()
+const expandedImage = ref<string>()
 const toolbarPending = ref<{ action: ComposerToolbarAction, requestId?: string }>()
 const toolbarState = ref<ComposerToolbarState>()
 const toolbarError = ref('')
@@ -85,11 +87,7 @@ function closeScreenPicker() {
 }
 
 function screenCaptureFailure(cause: unknown) {
-  if (cause instanceof VisionScreenSourceUnavailableError)
-    return cause.message
-  if (cause instanceof Error && cause.message)
-    return cause.message
-  return t('stage.chat.vision.screen-failed')
+  return t(`stage.chat.vision.${getVisionScreenCaptureErrorKey(cause)}`)
 }
 
 async function refreshScreenSources(revision: number) {
@@ -127,6 +125,10 @@ async function openScreenPicker() {
 async function attachSelectedScreen() {
   if (!screenCapture || !selectedScreenSource.value || !state.value || busy.value)
     return
+  if (draft.value.images.length >= VISION_MAX_IMAGES) {
+    screenCaptureError.value = t('stage.chat.vision.image-limit', { count: VISION_MAX_IMAGES })
+    return
+  }
   const revision = screenPickerRevision
   screenCaptureLoading.value = true
   try {
@@ -197,15 +199,19 @@ async function handleToolbarAction(action: ComposerToolbarAction) {
     return
   }
   toolbarPending.value.requestId = requestId
-  for (const status of Object.values(editor.actionState.value))
-    if (status?.requestId === requestId)
+  for (const status of Object.values(editor.actionState.value)) {
+    if (status?.requestId === requestId) {
       applySourceActionStatus(status)
+    }
+  }
 }
 
 watch(editor.actionState, (statuses) => {
-  for (const status of Object.values(statuses))
-    if (status)
+  for (const status of Object.values(statuses)) {
+    if (status) {
       applySourceActionStatus(status)
+    }
+  }
 }, { deep: true })
 
 watch(editor.actionError, (errors) => {
@@ -228,11 +234,17 @@ async function send() {
   await submitDraft()
 }
 
+function refreshToolbarState() {
+  void editor.requestAction('get-toolbar-state')
+}
+
 onMounted(async () => {
   await editor.initialize()
-  await editor.requestAction('get-toolbar-state')
+  refreshToolbarState()
+  window.addEventListener('focus', refreshToolbarState)
 })
 onUnmounted(() => {
+  window.removeEventListener('focus', refreshToolbarState)
   closeScreenPicker()
   officialPricingStore.stop()
 })
@@ -295,7 +307,9 @@ onUnmounted(() => {
     <section class="composer-card mx-2 mb-2 min-h-0 flex flex-1 flex-col border rounded-[18px] p-2.5">
       <div v-if="draft.images.length" class="mb-1.5 max-h-12 flex gap-1.5 overflow-x-auto overflow-y-hidden px-0.5 pt-0.5">
         <div v-for="(image, index) in draft.images" :key="image.id" class="relative shrink-0">
-          <img :src="`data:${image.mimeType};base64,${image.data}`" :alt="t(`${key}.image`)" class="size-10 rounded-md object-cover">
+          <button type="button" :aria-label="t(`${key}.image`)" class="size-10 cursor-zoom-in rounded-md" @click="expandedImage = `data:${image.mimeType};base64,${image.data}`">
+            <img :src="`data:${image.mimeType};base64,${image.data}`" :alt="t(`${key}.image`)" class="size-full rounded-md object-cover">
+          </button>
           <button type="button" :disabled="busy" :aria-label="t(`${key}.remove-image`)" class="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-red-500 text-white shadow-sm disabled:opacity-50" @click="draft.images.splice(index, 1)">
             <span class="i-lucide:x size-2.5" />
           </button>
@@ -348,6 +362,16 @@ onUnmounted(() => {
         <span v-if="toolbarError" class="text-red-500" role="alert">{{ toolbarError }}</span>
       </footer>
     </section>
+
+    <button
+      v-if="expandedImage"
+      type="button"
+      class="fixed inset-0 z-100 grid cursor-zoom-out place-items-center bg-black/70 p-6"
+      :aria-label="t('stage.actions.cancel')"
+      @click="expandedImage = undefined"
+    >
+      <img :src="expandedImage" :alt="t(`${key}.image`)" class="max-h-full max-w-full rounded-xl object-contain shadow-2xl">
+    </button>
 
     <AlertDialogRoot :open="screenPickerOpen" @update:open="open => !open && closeScreenPicker()">
       <AlertDialogPortal>

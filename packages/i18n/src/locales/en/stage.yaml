@@ -53,7 +53,11 @@ chat:
     screen-preview: Selected source preview
     screen-attach: Attach screenshot
     screen-loading: Loading preview…
-    screen-failed: Could not capture this source. Select an available screen or window again.
+    screen-failed: Could not start screen capture. Try again.
+    screen-source-unavailable: Could not capture this source. Select an available screen or window again.
+    screen-thumbnail-unavailable: The selected source did not provide an image. Check screen-recording permission, then select it again.
+    screen-timeout: Screen capture timed out. Try again.
+    screen-permission-denied: The system denied screen-recording permission. Allow Wuwiii to record your screen in system settings, then try again.
     screen-no-sources: No screens or windows are available.
     image-limit: 'Send up to {count} images at once.'
     image-too-large: Each image must be smaller than 10 MB.

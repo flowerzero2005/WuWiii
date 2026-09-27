@@ -101,6 +101,9 @@ export function buildOpenAICompatibleProvider(
           name: model.name || model.display_name || model.id,
           provider: id,
           description: model.description || '',
+          capabilities: Array.isArray(model.capabilities) && model.capabilities.every((capability: unknown) => typeof capability === 'string')
+            ? model.capabilities
+            : undefined,
           contextLength: model.context_length || 0,
           deprecated: false,
         } satisfies ModelInfo

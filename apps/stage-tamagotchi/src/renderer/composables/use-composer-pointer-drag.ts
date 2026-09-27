@@ -1,6 +1,7 @@
 import { onScopeDispose, ref } from 'vue'
 
 interface ComposerPointerDragOptions {
+  cancel?: () => void
   move?: (point: { x: number, y: number }, origin: { x: number, y: number }) => void
 }
 
@@ -31,10 +32,13 @@ export function useComposerPointerDrag(drop: (point: { x: number, y: number }, o
       if (next.pointerId !== pointerId)
         return
       const completed = dragging.value && next.type === 'pointerup'
+      const cancelled = dragging.value && next.type === 'pointercancel'
       cleanup?.()
       suppressClick = completed
       if (completed)
         void drop({ x: next.screenX, y: next.screenY }, origin).catch(() => undefined)
+      else if (cancelled)
+        options.cancel?.()
     }
     const continueAfterLostCapture = (next: PointerEvent) => {
       if (next.pointerId !== pointerId || usingWindowFallback)

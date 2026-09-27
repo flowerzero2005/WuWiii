@@ -543,7 +543,7 @@ pages:
                   openai-compatible-check-connectivity:
                     label: Configuración extra necesaria para Ollama
                     content: >-
-                      Lamentamos escuchar que la conexion con Ollama falló. No te preocupes, para las instancias de Ollama, es necesaria una configuración extra para que pase por Ollama. Debe establecer OLLAMA_HOST explícitamente al iniciar la aplicación Ollama o el servidor CLI de Ollama, para obtener información detallada, consulte la guía de integración Ollama del proyecto Project AIRI original: https://airi.moeru.ai/docs/en/docs/manual/integrations/providers/chat/ollama
+                      Lamentamos escuchar que la conexion con Ollama falló. No te preocupes, para las instancias de Ollama, es necesaria una configuración extra para que pase por Ollama. Debe establecer OLLAMA_HOST explícitamente al iniciar la aplicación Ollama o el servidor CLI de Ollama, para obtener información detallada, consulte la documentación de Ollama: https://docs.ollama.com/
     common:
       continueAnyway: Continuar de todos modos
       fields:

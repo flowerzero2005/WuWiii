@@ -35,21 +35,27 @@ export function clampChatHistoryRatio(value: number, fallback: number) {
 export function getChatHistoryRatioBoundsForHeight(containerHeight: number, composerMinHeight = CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT) {
   const availableHeight = Math.round(containerHeight) - CHAT_LAYOUT_RESIZE_HANDLE_HEIGHT
   if (availableHeight <= 0)
-    return { max: CHAT_LAYOUT_RATIO_MAX, min: CHAT_LAYOUT_RATIO_MIN }
+    return { max: 0, min: 0 }
 
-  const minRatio = Math.max(
-    CHAT_LAYOUT_RATIO_MIN,
-    Math.ceil((CHAT_LAYOUT_HISTORY_MIN_HEIGHT / availableHeight) * 100),
-  )
+  const protectedComposerHeight = Math.min(Math.max(0, composerMinHeight), availableHeight)
+  const remainingHistoryHeight = Math.max(0, availableHeight - protectedComposerHeight)
+
+  const minRatio = remainingHistoryHeight >= CHAT_LAYOUT_HISTORY_MIN_HEIGHT
+    ? Math.max(
+        CHAT_LAYOUT_RATIO_MIN,
+        Math.ceil((CHAT_LAYOUT_HISTORY_MIN_HEIGHT / availableHeight) * 100),
+      )
+    : 0
   const maxRatio = Math.min(
     CHAT_LAYOUT_RATIO_MAX,
-    Math.floor(((availableHeight - composerMinHeight) / availableHeight) * 100),
+    Math.floor((remainingHistoryHeight / availableHeight) * 100),
   )
 
-  // At a size below the window's supported minimum, preserve the stored
-  // preference. CSS pane minimums provide the final guard against clipping.
+  // When a window is shorter than both preferred panes, the history may take
+  // every remaining pixel but the composer still owns its usable minimum.
+  // This is a render-time limit only: the stored preference is never changed.
   if (minRatio > maxRatio)
-    return { max: CHAT_LAYOUT_RATIO_MAX, min: CHAT_LAYOUT_RATIO_MIN }
+    return { max: maxRatio, min: 0 }
 
   return { max: maxRatio, min: minRatio }
 }

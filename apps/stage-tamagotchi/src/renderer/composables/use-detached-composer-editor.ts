@@ -5,7 +5,7 @@ import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/el
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot, validateComposerDraft } from '../../shared/detached-composer'
-import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
+import { composerChanged, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
 import { useComposerPointerDrag } from './use-composer-pointer-drag'
 
 function readImage(file: File): Promise<string> {
@@ -31,6 +31,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
   const edit = useElectronEventaInvoke(composerEdit)
   const submit = useElectronEventaInvoke(composerSubmit)
   const release = useElectronEventaInvoke(composerRelease)
+  const dragCancel = useElectronEventaInvoke(composerDragCancel)
   const dragMove = useElectronEventaInvoke(composerDragMove)
   const dragReturn = useElectronEventaInvoke(composerDragReturn)
   const requestSourceAction = useElectronEventaInvoke(composerSourceActionRequest)
@@ -235,6 +236,14 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       actionTimers.delete(actionKey)
     }
   }
+  function cancelDragReturnTarget() {
+    dragMoveRevision += 1
+    dragOverReturnTarget.value = false
+    const value = state.value
+    if (!value || value.status !== 'detached' || value.busy || value.uncertain)
+      return
+    void dragCancel({ leaseId: value.scope.leaseId, sourceGeneration: value.scope.sourceGeneration, version: value.version }).catch(() => undefined)
+  }
   const drag = useComposerPointerDrag(async (point, origin) => {
     dragMoveRevision += 1
     dragOverReturnTarget.value = false
@@ -257,6 +266,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
       error.value = t(`${key}.return-target-unavailable`)
     }
   }, {
+    cancel: cancelDragReturnTarget,
     move: (point, origin) => {
       if (!state.value || state.value.status !== 'detached' || busy.value || (lastDragMoveAt && performance.now() - lastDragMoveAt < 16))
         return
@@ -269,6 +279,7 @@ export function useDetachedComposerEditor(t: (key: string) => string, imageReade
     },
   })
   onScopeDispose(() => {
+    cancelDragReturnTarget()
     disposed = true
     imageEpoch += 1
     clearTimeout(timer)

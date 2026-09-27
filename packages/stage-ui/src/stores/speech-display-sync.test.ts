@@ -7,12 +7,15 @@ class MockBroadcastChannel {
   static instances: MockBroadcastChannel[] = []
 
   onmessage: ((message: MessageEvent) => void) | null = null
+  messages: unknown[] = []
 
   constructor(_name: string) {
     MockBroadcastChannel.instances.push(this)
   }
 
-  postMessage() {}
+  postMessage(message: unknown) {
+    this.messages.push(message)
+  }
 }
 
 describe('speech display synchronization', () => {
@@ -100,5 +103,54 @@ describe('speech display synchronization', () => {
 
     expect(received).toHaveBeenCalledTimes(242)
     expect(received.mock.calls[241]?.[0]).toEqual(firstEvent)
+  })
+
+  it('keeps IDs distinct when separate renderer stores emit the same event in one millisecond', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(123_456)
+    try {
+      const firstStore = useSpeechDisplaySyncStore()
+      const firstReceived = vi.fn()
+      firstStore.onEvent(firstReceived)
+      firstStore.markIntentEnd('turn-duplicate-check')
+
+      setActivePinia(createPinia())
+      const secondStore = useSpeechDisplaySyncStore()
+      const secondReceived = vi.fn()
+      secondStore.onEvent(secondReceived)
+      secondStore.markIntentEnd('turn-duplicate-check')
+
+      expect(firstReceived.mock.calls[0]?.[0]).toMatchObject({
+        emittedAt: 123_456,
+        type: 'intent-end',
+      })
+      expect(secondReceived.mock.calls[0]?.[0]).toMatchObject({
+        emittedAt: 123_456,
+        type: 'intent-end',
+      })
+      expect(firstReceived.mock.calls[0]?.[0]?.id).not.toBe(secondReceived.mock.calls[0]?.[0]?.id)
+    }
+    finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('broadcasts the synthesis deadline as a plain cross-window event', () => {
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
+    const sender = useSpeechDisplaySyncStore()
+    sender.onEvent(() => {})
+    sender.markIntentSynthesisStart({ intentId: 'turn-slow-tts', synthesisDeadlineAt: 123_456 })
+    const event = MockBroadcastChannel.instances[0]?.messages[0]
+
+    setActivePinia(createPinia())
+    const receiver = useSpeechDisplaySyncStore()
+    const received = vi.fn()
+    receiver.onEvent(received)
+    MockBroadcastChannel.instances[1]?.onmessage?.({ data: event } as MessageEvent)
+
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'intent-synthesis-start',
+      intentId: 'turn-slow-tts',
+      synthesisDeadlineAt: 123_456,
+    }))
   })
 })

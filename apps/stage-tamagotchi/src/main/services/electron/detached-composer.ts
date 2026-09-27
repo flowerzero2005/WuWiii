@@ -8,7 +8,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow as ElectronWindow, screen } from 'electron'
 
 import { createComposerState, validateComposerScope } from '../../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionNames, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReveal, composerSourceSubmit, composerSourceTextAppend, composerSourceTextChanged, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDraftDiscarded, composerDragCancel, composerDragDetach, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerRequestReturn, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionNames, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSourceTextAppend, composerSourceTextChanged, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { composerContainsPoint, composerScreenRegion } from '../../../shared/detached-composer-geometry'
 import { createDetachedComposerWindow } from '../../windows/composer'
 import { createWindowEventaContext, isIpcEventFromWindow } from '../../windows/shared/window'
@@ -99,6 +99,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         const value = snapshot()
         sourceActions.clear()
         if (value) {
+          publishSourceReturnTargetState(value, false)
           void commit(() => {
             state.invalidate(value.scope.sourceWebContentsId)
             return state.release({ leaseId: value.scope.leaseId, version: value.version })
@@ -144,11 +145,15 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
     if (!source || source.isDestroyed() || !source.isVisible() || source.isMinimized())
       return
     // Once detached, the source replaces its inline input with a narrow
-    // return strip. Requiring that strip makes an otherwise valid release in
-    // the original conversation look like a no-op, particularly after the
-    // background renderer delays its region update. The content bounds are
-    // native screen DIP coordinates and remain correct while the window moves.
+    // return strip. The whole source content area remains a valid drop target
+    // so a return does not depend on renderer layout timing.
     return source
+  }
+  function publishSourceReturnTargetState(value: NonNullable<ReturnType<typeof snapshot>>, active: boolean) {
+    contexts.get(value.scope.sourceWebContentsId)?.emit(composerSourceReturnTargetState, {
+      sourceGeneration: value.scope.sourceGeneration,
+      active,
+    })
   }
   function clearSourceActions(predicate: (action: { leaseId: string, version: number, sourceWebContentsId: number, sourceGeneration: string, action: string, at: number }) => boolean) {
     for (const [requestId, action] of sourceActions) {
@@ -250,6 +255,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         finishedEditorDrag = undefined
       if (finishedEditorDrag?.leaseId === input.leaseId && finishedEditorDrag.version === input.version
         && finishedEditorDrag.origin.x === input.origin.x && finishedEditorDrag.origin.y === input.origin.y) {
+        publishSourceReturnTargetState(value, false)
         return false
       }
       if (!editorDrag || editorDrag.leaseId !== input.leaseId || editorDrag.version !== input.version
@@ -261,7 +267,9 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       const y = Math.round(Math.max(display.y, Math.min(editorDrag.bounds.y + input.point.y - editorDrag.origin.y, display.y + display.height - editorDrag.bounds.height)))
       editor!.setPosition(x, y)
       const source = returnTarget(value)
-      return !!source && composerContainsPoint(source.getContentBounds(), screen.getCursorScreenPoint())
+      const active = !!source && composerContainsPoint(source.getContentBounds(), screen.getCursorScreenPoint())
+      publishSourceReturnTargetState(value, active)
+      return active
     })
     defineInvokeHandler(context, composerSourceRead, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -291,6 +299,15 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         return state.sourceDraft(id, input)
       })
     })
+    defineInvokeHandler(context, composerSourceRegion, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireConversation(window)
+      if (bindings.get(id)?.sourceGeneration !== input.sourceGeneration)
+        throw new Error('The composer region belongs to an older conversation.')
+      composerScreenRegion(input.region, window.getContentBounds(), window.webContents.getZoomFactor())
+      regions.set(id, { generation: input.sourceGeneration, region: structuredClone(input.region), at: Date.now() })
+    })
     defineInvokeHandler(context, composerSourceSubmit, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
         return
@@ -303,15 +320,6 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         }
         return state.sourceSubmit(id, input)
       })
-    })
-    defineInvokeHandler(context, composerSourceRegion, (input, options) => {
-      if (!isIpcEventFromWindow(window, options))
-        return
-      requireConversation(window)
-      if (bindings.get(id)?.sourceGeneration !== input.sourceGeneration)
-        throw new Error('The composer region belongs to an older conversation.')
-      composerScreenRegion(input.region, window.getContentBounds(), window.webContents.getZoomFactor())
-      regions.set(id, { generation: input.sourceGeneration, region: structuredClone(input.region), at: Date.now() })
     })
     defineInvokeHandler(context, composerSourceActionRequest, (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -387,7 +395,25 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
         finishedEditorDrag = { leaseId: input.leaseId, version: input.version, origin: input.origin, at: Date.now() }
       editorDrag = undefined
       const source = returnTarget(value)
-      return !!source && composerContainsPoint(source.getContentBounds(), verifiedCursor(input.point))
+      try {
+        return !!source && composerContainsPoint(source.getContentBounds(), verifiedCursor(input.point))
+      }
+      finally {
+        publishSourceReturnTargetState(value, false)
+      }
+    })
+    defineInvokeHandler(context, composerDragCancel, (input, options) => {
+      if (!isIpcEventFromWindow(window, options))
+        return
+      requireEditor(id)
+      const value = snapshot()
+      if (!value || value.scope.leaseId !== input.leaseId || value.version !== input.version
+        || value.scope.sourceGeneration !== input.sourceGeneration || value.status !== 'detached' || value.busy) {
+        throw new Error('The composer ownership changed during the drag.')
+      }
+      editorDrag = undefined
+      finishedEditorDrag = undefined
+      publishSourceReturnTargetState(value, false)
     })
     defineInvokeHandler(context, composerSourceCloseAck, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))
@@ -474,6 +500,7 @@ export function createDetachedComposerService(persistence: ComposerPersistence =
       editorDrag = undefined
       finishedEditorDrag = undefined
       sourceActions.clear()
+      publishSourceReturnTargetState(value, false)
       publish()
       const source = returnTarget(value)
       source?.focus()

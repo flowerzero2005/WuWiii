@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createChatSendLifecycle, matchesComposerSubmission } from './chat-send-lifecycle'
+import { canRollbackPreIngestTurn, createChatSendLifecycle, matchesComposerSubmission, removeOptimisticUserMessage } from './chat-send-lifecycle'
 
 describe('manual chat preparation', () => {
   it('locks synchronously so repeated clicks cannot prepare duplicate billed requests', () => {
@@ -33,5 +33,26 @@ describe('manual chat preparation', () => {
     expect(matchesComposerSubmission(submission, { ...submission, revision: 8 }, receipt)).toBe(false)
     expect(matchesComposerSubmission(submission, submission, { ...receipt, messageId: 'other-turn' })).toBe(false)
     expect(matchesComposerSubmission(undefined, submission, receipt)).toBe(false)
+  })
+
+  it('rolls back only the cancelled pre-ingest user message by its source id', () => {
+    const messages = [
+      { role: 'user', id: 'earlier-turn' },
+      { role: 'assistant', id: 'assistant-turn' },
+      { role: 'user', id: 'cancelled-image-turn' },
+    ]
+
+    expect(removeOptimisticUserMessage(messages, 'cancelled-image-turn')).toBe(true)
+    expect(messages).toEqual([
+      { role: 'user', id: 'earlier-turn' },
+      { role: 'assistant', id: 'assistant-turn' },
+    ])
+    expect(removeOptimisticUserMessage(messages, 'cancelled-image-turn')).toBe(false)
+  })
+
+  it('allows a draft rollback only before both potentially billable requests begin', () => {
+    expect(canRollbackPreIngestTurn({ visualAnalysisStarted: false, chatIngestStarted: false })).toBe(true)
+    expect(canRollbackPreIngestTurn({ visualAnalysisStarted: true, chatIngestStarted: false })).toBe(false)
+    expect(canRollbackPreIngestTurn({ visualAnalysisStarted: false, chatIngestStarted: true })).toBe(false)
   })
 })

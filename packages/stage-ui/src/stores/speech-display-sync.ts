@@ -11,7 +11,16 @@ export interface SpeechDisplaySyncSpeechRef {
 }
 
 export type SpeechDisplaySyncEvent
-  = | {
+  = {
+    /** The speech host accepted work for this intent and may still be synthesizing. */
+    type: 'intent-synthesis-start'
+    id: string
+    intentId: string
+    /** Derived from the provider request timeout; never contains request content. */
+    synthesisDeadlineAt?: number
+    emittedAt: number
+  }
+  | {
     type: 'segment-ready'
     id: string
     trigger: SpeechDisplaySyncTrigger
@@ -70,18 +79,29 @@ export interface SpeechDisplaySyncSegmentCursorOptions {
 
 const MAX_RECENT_EVENTS = 240
 
+function createEventOriginId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function')
+    return globalThis.crypto.randomUUID()
+
+  // BroadcastChannel runs in renderer processes that do not share module
+  // state, so a per-process counter cannot identify the emitting instance.
+  // This fallback still separates older runtimes that do not expose randomUUID.
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 export const useSpeechDisplaySyncStore = defineStore('speech-display-sync', () => {
   const listeners = new Set<(event: SpeechDisplaySyncEvent) => void>()
   const recentEvents: SpeechDisplaySyncEvent[] = []
   const seenEventIds = new Set<string>()
 
+  const originId = createEventOriginId()
   let eventSequence = 0
   let channelReady = false
   let channel: BroadcastChannel | null = null
 
   function createEventId(type: SpeechDisplaySyncEvent['type']) {
     eventSequence += 1
-    return `${Date.now()}:${eventSequence}:${type}`
+    return `${originId}:${Date.now()}:${eventSequence}:${type}`
   }
 
   function isSpeechDisplaySyncEvent(value: unknown): value is SpeechDisplaySyncEvent {
@@ -328,6 +348,17 @@ export const useSpeechDisplaySyncStore = defineStore('speech-display-sync', () =
     })
   }
 
+  function markIntentSynthesisStart(input: string | { intentId: string, synthesisDeadlineAt?: number }) {
+    const intentId = typeof input === 'string' ? input : input.intentId
+    emit({
+      type: 'intent-synthesis-start',
+      id: createEventId('intent-synthesis-start'),
+      intentId,
+      synthesisDeadlineAt: typeof input === 'string' ? undefined : input.synthesisDeadlineAt,
+      emittedAt: Date.now(),
+    })
+  }
+
   function markIntentCancel(input: string | { intentId: string, reason?: string }) {
     const intentId = typeof input === 'string' ? input : input.intentId
     const reason = typeof input === 'string' ? undefined : input.reason
@@ -344,6 +375,7 @@ export const useSpeechDisplaySyncStore = defineStore('speech-display-sync', () =
     createSegmentCursor,
     markIntentCancel,
     markIntentEnd,
+    markIntentSynthesisStart,
     markPlaybackEnd,
     markPlaybackStart,
     markTtsResult,

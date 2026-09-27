@@ -1945,6 +1945,9 @@ pages:
             show_more: Show more
             subtitle: Select a default model from the provider
             title: Model
+            vision_input:
+              label: This model accepts image input
+              description: Enable only when the selected model and its API support images. Images are sent directly to this chat model for the current turn.
       title: Consciousness
     description: Manage the current resident's thinking, vision, voice, memory, and game abilities
     gaming-factorio:
@@ -2561,8 +2564,8 @@ pages:
                       needed for making it pass for Ollama. You need to set
                       OLLAMA_HOST explicitly when starting the Ollama
                       application or Ollama CLI server. For detailed
-                      information, check the Project AIRI upstream Ollama integration guide:
-                      https://airi.moeru.ai/docs/en/docs/manual/integrations/providers/chat/ollama
+                      information, check the Ollama documentation:
+                      https://docs.ollama.com/
     common:
       continueAnyway: Continue Anyway
       fields:

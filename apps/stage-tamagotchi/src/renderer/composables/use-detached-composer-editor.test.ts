@@ -4,13 +4,14 @@ import type { ComposerPoint } from '../../shared/detached-composer-geometry'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 
-import { composerChanged, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
+import { composerChanged, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerEdit, composerFlushAndClose, composerRead, composerRelease, composerSourceActionChanged, composerSourceActionRequest, composerSourceTextChanged, composerSubmit } from '../../shared/detached-composer-events'
 import { composerSourceActionKey, useDetachedComposerEditor } from './use-detached-composer-editor'
 
-const mocks = vi.hoisted(() => ({ handlers: new Map<unknown, (event: { body?: ComposerSnapshot }) => void>(), invokes: new Map<unknown, ReturnType<typeof vi.fn>>(), drop: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => Promise<void>), move: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => void) }))
-vi.mock('./use-composer-pointer-drag', () => ({ useComposerPointerDrag: (drop: (point: ComposerPoint, origin: ComposerPoint) => Promise<void>, options?: { move?: (point: ComposerPoint, origin: ComposerPoint) => void }) => {
+const mocks = vi.hoisted(() => ({ handlers: new Map<unknown, (event: { body?: ComposerSnapshot }) => void>(), invokes: new Map<unknown, ReturnType<typeof vi.fn>>(), drop: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => Promise<void>), move: undefined as undefined | ((point: ComposerPoint, origin: ComposerPoint) => void), cancel: undefined as undefined | (() => void) }))
+vi.mock('./use-composer-pointer-drag', () => ({ useComposerPointerDrag: (drop: (point: ComposerPoint, origin: ComposerPoint) => Promise<void>, options?: { cancel?: () => void, move?: (point: ComposerPoint, origin: ComposerPoint) => void }) => {
   mocks.drop = drop
   mocks.move = options?.move
+  mocks.cancel = options?.cancel
   return { start: vi.fn(), dragging: { value: false } }
 } }))
 vi.mock('@proj-airi/electron-vueuse', () => ({
@@ -31,7 +32,8 @@ describe('detached editor close and image lifecycle', () => {
   beforeEach(() => {
     mocks.handlers.clear()
     mocks.invokes.clear()
-    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragMove, composerDragReturn, composerSourceActionRequest])
+    mocks.cancel = undefined
+    for (const event of [composerEdit, composerRead, composerRelease, composerSubmit, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerSourceActionRequest])
       mocks.invokes.set(event, vi.fn(async () => undefined))
     mocks.invokes.get(composerRead)!.mockResolvedValue(structuredClone(initial))
   })
@@ -104,6 +106,32 @@ describe('detached editor close and image lifecycle', () => {
       origin: { x: 160, y: 120 },
       point: { x: 560, y: 420 },
     })
+  })
+
+  it('clears the source return highlight without releasing when a drag is cancelled', async () => {
+    const item = editor()
+    await item.initialize()
+    mocks.invokes.get(composerDragMove)!.mockResolvedValue(true)
+    mocks.move!({ x: 560, y: 420 }, { x: 160, y: 120 })
+    await vi.waitFor(() => expect(item.dragOverReturnTarget.value).toBe(true))
+
+    mocks.cancel!()
+
+    expect(item.dragOverReturnTarget.value).toBe(false)
+    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0 })
+    expect(mocks.invokes.get(composerDragReturn)).not.toHaveBeenCalled()
+    expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
+  })
+
+  it('clears the source return highlight when the editor scope is disposed', async () => {
+    const item = editor()
+    await item.initialize()
+
+    scopes[scopes.length - 1]!.stop()
+
+    expect(item.dragOverReturnTarget.value).toBe(false)
+    expect(mocks.invokes.get(composerDragCancel)).toHaveBeenCalledWith({ leaseId: 'lease-a', sourceGeneration: 'source-a', version: 0 })
+    expect(mocks.invokes.get(composerRelease)).not.toHaveBeenCalled()
   })
 
   it('preserves a detached draft when a drop misses the actual composer region', async () => {

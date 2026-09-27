@@ -74,6 +74,15 @@ describe('chat layout settings store', () => {
     expect(constrainChatHistoryRatioForHeight(64, 720)).toBe(64)
   })
 
+  it('gives the composer all available height when the window cannot fit both panes', () => {
+    expect(getChatHistoryRatioBoundsForHeight(220, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toEqual({ min: 0, max: 43 })
+    expect(constrainChatHistoryRatioForHeight(72, 220, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toBe(43)
+    expect(getChatHistoryRatioBoundsForHeight(128, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toEqual({ min: 0, max: 0 })
+    expect(getChatHistoryRatioBoundsForHeight(112, CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT)).toEqual({ min: 0, max: 0 })
+    expect(constrainChatHistoryRatioForHeight(72, 128, CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT)).toBe(0)
+    expect(constrainChatHistoryRatioForHeight(68, 112, CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT)).toBe(0)
+  })
+
   it('keeps previously saved ratios for each surface', () => {
     localStorage.setItem(CHAT_LAYOUT_STORAGE_KEYS.page, '64')
     localStorage.setItem(CHAT_LAYOUT_STORAGE_KEYS.widget, '58')

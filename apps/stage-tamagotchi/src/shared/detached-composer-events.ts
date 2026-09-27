@@ -24,6 +24,10 @@ export interface ComposerSourceTextAppend {
 export interface ComposerSourceTextChanged extends ComposerSourceTextAppend {
   version: number
 }
+export interface ComposerSourceReturnTargetState {
+  sourceGeneration: string
+  active: boolean
+}
 
 export const composerDetach = defineInvokeEventa<ComposerSnapshot, ComposerDetach>('eventa:invoke:composer:detach')
 export const composerRead = defineInvokeEventa<ComposerSnapshot | undefined>('eventa:invoke:composer:read')
@@ -44,6 +48,7 @@ export const composerSourceRegion = defineInvokeEventa<void, { sourceGeneration:
 export const composerDragDetach = defineInvokeEventa<ComposerSnapshot, ComposerDetach & { point: ComposerPoint }>('eventa:invoke:composer:drag-detach')
 export const composerDragMove = defineInvokeEventa<boolean, ComposerVersion & { origin: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-move')
 export const composerDragReturn = defineInvokeEventa<boolean, ComposerVersion & { origin?: ComposerPoint, point: ComposerPoint }>('eventa:invoke:composer:drag-return')
+export const composerDragCancel = defineInvokeEventa<void, ComposerVersion & { sourceGeneration: string }>('eventa:invoke:composer:drag-cancel')
 export const composerDiscard = defineInvokeEventa<ComposerSnapshot, ComposerVersion>('eventa:invoke:composer:discard')
 export const composerFlushSource = defineEventa<{ sourceGeneration: string }>('eventa:event:composer:flush-source')
 export const composerSourceCloseAck = defineInvokeEventa<void, { sourceGeneration: string }>('eventa:invoke:composer:source-close-ack')
@@ -53,6 +58,7 @@ export const composerSourceActionRequest = defineInvokeEventa<void, ComposerSour
 export const composerSourceAction = defineEventa<ComposerSourceAction>('eventa:event:composer:source-action')
 export const composerSourceActionStatus = defineInvokeEventa<void, ComposerSourceActionStatus>('eventa:invoke:composer:source-action-status')
 export const composerSourceActionChanged = defineEventa<ComposerSourceActionStatus>('eventa:event:composer:source-action-changed')
+export const composerSourceReturnTargetState = defineEventa<ComposerSourceReturnTargetState>('eventa:event:composer:source-return-target-state')
 /** A trusted source-owned speech recognizer appends confirmed text to the detached draft. */
 export const composerSourceTextAppend = defineInvokeEventa<void, ComposerSourceTextAppend>('eventa:invoke:composer:source-text-append')
 export const composerSourceTextChanged = defineEventa<ComposerSourceTextChanged>('eventa:event:composer:source-text-changed')

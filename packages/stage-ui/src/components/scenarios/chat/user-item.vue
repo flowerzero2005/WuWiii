@@ -27,11 +27,11 @@ const content = computed(() => {
     return raw
 
   if (Array.isArray(raw)) {
-    const textPart = raw.find(part => 'type' in part && part.type === 'text') as { text?: string } | undefined
-    if (textPart?.text)
-      return textPart.text
-
-    return raw.map(entry => JSON.stringify(entry)).join('\n')
+    return raw.flatMap((part) => {
+      if (part.type !== 'text' || typeof part.text !== 'string')
+        return []
+      return [part.text]
+    }).join('\n')
   }
 
   return ''

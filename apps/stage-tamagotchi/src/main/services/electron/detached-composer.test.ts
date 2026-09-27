@@ -2,7 +2,7 @@ import type { ComposerDetach, ComposerRecoveryData } from '../../../shared/detac
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { composerChanged, composerDetach, composerDiscard, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReveal, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDiscard, composerDragCancel, composerDragMove, composerDragReturn, composerEdit, composerExecute, composerFlushAndClose, composerFlushSource, composerInvalidate, composerRead, composerRecovery, composerRelease, composerSettle, composerSourceAction, composerSourceActionChanged, composerSourceActionRequest, composerSourceActionStatus, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceReturnTargetState, composerSourceReveal, composerSourceSubmit, composerSubmit, composerViewRecovery } from '../../../shared/detached-composer-events'
 import { createDetachedComposerService } from './detached-composer'
 
 const mocks = vi.hoisted(() => ({
@@ -269,6 +269,22 @@ describe('composer main sender and close guards', () => {
       point: { x: 620, y: 520 },
     })
     expect(mocks.windows[2].setPosition).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the source return highlight for a verified cancelled editor drag without returning it', async () => {
+    createService()
+    const detached = await invoke(1, composerDetach, input)
+    const version = { leaseId: detached.scope.leaseId, version: detached.version }
+    mocks.cursor = { x: 600, y: 500 }
+    await invoke(3, composerDragMove, { ...version, origin: { x: 200, y: 200 }, point: mocks.cursor })
+
+    await invoke(3, composerDragCancel, { ...version, sourceGeneration: input.sourceGeneration })
+
+    expect(mocks.contexts.get(1).emit).toHaveBeenLastCalledWith(composerSourceReturnTargetState, {
+      sourceGeneration: input.sourceGeneration,
+      active: false,
+    })
+    await expect(invoke(3, composerDragCancel, { ...version, sourceGeneration: 'stale-source' })).rejects.toThrow('ownership changed')
   })
 
   it('keeps corrupt storage unavailable without replacing it or opening an editor', async () => {

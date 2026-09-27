@@ -126,6 +126,7 @@ export class OfficialCloudRequestError extends Error {
 }
 
 interface OfficialCloudModelListItem {
+  capabilities?: unknown
   description?: unknown
   descriptionZh?: unknown
   id?: unknown
@@ -512,6 +513,9 @@ async function listOfficialCloudModels(baseURL: string) {
         name,
         provider: 'official-cloud',
         description,
+        capabilities: Array.isArray(model.capabilities) && model.capabilities.every(capability => typeof capability === 'string')
+          ? model.capabilities
+          : undefined,
         contextLength: typeof model.maxContextTokens === 'number' ? model.maxContextTokens : undefined,
         maxOutputTokens: typeof model.maxOutputTokens === 'number' ? model.maxOutputTokens : undefined,
         pointsPerTokenUnit: typeof model.pointsPerTokenUnit === 'number' ? model.pointsPerTokenUnit : undefined,

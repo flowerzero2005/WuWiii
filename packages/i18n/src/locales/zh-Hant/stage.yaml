@@ -5,6 +5,18 @@ chat:
       core-system: 核心系統
       you: 你
   reasoning: 推理
+  vision:
+    screen-capture: 擷取螢幕或視窗
+    screen-select: 選擇來源並預覽後再加入。
+    screen-preview: 所選來源預覽
+    screen-attach: 加入螢幕截圖
+    screen-loading: 正在載入預覽…
+    screen-failed: 無法啟動螢幕擷取，請稍後再試。
+    screen-source-unavailable: 無法擷取此來源，請重新選擇可用的螢幕或視窗。
+    screen-thumbnail-unavailable: 所選來源沒有提供可用畫面。請在系統設定中檢查螢幕錄製權限，然後重新選擇。
+    screen-timeout: 螢幕擷取要求逾時，請稍後再試。
+    screen-permission-denied: 系統拒絕了螢幕錄製權限。請在系統設定中允許 Wuwiii 錄製螢幕，然後重試。
+    screen-no-sources: 暫無可用的螢幕或視窗。
 message: 說點什麼...
 operations:
   load-models: 載入模型

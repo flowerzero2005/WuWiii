@@ -5,6 +5,18 @@ chat:
       core-system: Hệ thống lõi
       you: Bạn
   reasoning: Reasoning
+  vision:
+    screen-capture: Chụp màn hình hoặc cửa sổ
+    screen-select: Chọn nguồn và xem trước trước khi thêm.
+    screen-preview: Xem trước nguồn đã chọn
+    screen-attach: Thêm ảnh chụp màn hình
+    screen-loading: Đang tải bản xem trước…
+    screen-failed: Không thể bắt đầu chụp màn hình. Hãy thử lại.
+    screen-source-unavailable: Không thể chụp nguồn này. Hãy chọn lại màn hình hoặc cửa sổ khả dụng.
+    screen-thumbnail-unavailable: Nguồn đã chọn không cung cấp hình ảnh. Hãy kiểm tra quyền ghi màn hình rồi chọn lại.
+    screen-timeout: Yêu cầu chụp màn hình đã hết thời gian chờ. Hãy thử lại.
+    screen-permission-denied: Hệ thống đã từ chối quyền ghi màn hình. Hãy cho phép Wuwiii ghi màn hình trong cài đặt hệ thống rồi thử lại.
+    screen-no-sources: Không có màn hình hoặc cửa sổ khả dụng.
 message: Nói gì đó...
 operations:
   load-models: Tải mô hình

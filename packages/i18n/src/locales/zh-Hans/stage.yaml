@@ -53,7 +53,11 @@ chat:
     screen-preview: 所选来源预览
     screen-attach: 添加截图
     screen-loading: 正在加载预览…
-    screen-failed: 无法截取此来源，请重新选择可用的屏幕或窗口。
+    screen-failed: 无法启动屏幕截图，请稍后重试。
+    screen-source-unavailable: 无法截取此来源，请重新选择可用的屏幕或窗口。
+    screen-thumbnail-unavailable: 所选来源没有提供可用画面。请在系统设置中检查屏幕录制权限，然后重新选择。
+    screen-timeout: 截图请求超时，请稍后重试。
+    screen-permission-denied: 系统拒绝了屏幕录制权限。请在系统设置中允许 Wuwiii 录制屏幕，然后重试。
     screen-no-sources: 暂无可用的屏幕或窗口。
     image-limit: '一次最多发送 {count} 张图片。'
     image-too-large: 每张图片必须小于 10 MB。

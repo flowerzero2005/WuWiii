@@ -29,7 +29,8 @@ export function resolveSpeechDisplayStartTimeoutMs(input: {
 
 /**
  * A TTS result is not proof that playback has started. Keep its segment on
- * the same bounded clock as the whole reply unless text-first was selected. */
+ * the same bounded clock as the whole reply unless text-first was selected.
+ */
 export function resolveSegmentDisplayFallbackMs(input: {
   boundedFallbackMs: number
   fallbackMs: number

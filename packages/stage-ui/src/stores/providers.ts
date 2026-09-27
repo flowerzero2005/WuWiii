@@ -2277,6 +2277,7 @@ export const useProvidersStore = defineStore('providers', () => {
           id: model.id,
           name: model.name,
           description: model.description,
+          capabilities: model.capabilities,
           contextLength: model.contextLength,
           maxOutputTokens: model.maxOutputTokens,
           pointsPerTokenUnit: model.pointsPerTokenUnit,

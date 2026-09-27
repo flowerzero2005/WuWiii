@@ -45,7 +45,7 @@ describe('chat composer branches', () => {
     expect(source).toContain('detachFromResize = point => void detachedComposer.detach(false, point)')
     expect(source).toContain('releasedOutsideWindow')
     expect(source).toContain('data-chat-composer-return-target')
-    expect(source).toContain('ref="composerReturnTargetRef"')
+    expect(source).not.toContain('composerReturnTargetRef')
     expect(source).toContain('v-if="isWidgetSurface && !composerDetached"')
     expect(source).toContain("? 'minmax(0, 1fr) 32px'")
     expect(source).not.toContain('data-chat-composer-detach-controls')

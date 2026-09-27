@@ -75,6 +75,7 @@ import { createChatTurnContext } from './chat/turn-context'
 import { finalizePendingAssistantDisplayState } from './chat/turn-display-state'
 import { createChatTurnSnapshot } from './chat/turn-snapshot'
 import { createAssistantTypingCompletionGate } from './chat/typing-completion-gate'
+import { prepareUserMessageForProvider } from './chat/visual-message-input'
 import { useLLM } from './llm'
 import { useAiriCardStore } from './modules/airi-card'
 import { useSpeechStore } from './modules/speech'
@@ -2119,10 +2120,15 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         const delayTimers = new Set<ReturnType<typeof setTimeout>>()
         let displayedText = ''
         let finalText = ''
+        let finalTextReady = false
         let intentEnded = false
+        let intentCancelled = false
+        let finishRequestedBeforeFinalText = false
+        let synthesisStarted = false
         let completed = false
         let fallbackTimer: ReturnType<typeof setTimeout> | undefined
         let playbackCompletionGuardTimer: ReturnType<typeof setTimeout> | undefined
+        let synthesisWatchdogKeepaliveTimer: ReturnType<typeof setTimeout> | undefined
         let disposeEventListener: () => void = () => {}
         let resolveCompletion: () => void = () => {}
         const completion = new Promise<void>((resolve) => {
@@ -2143,6 +2149,39 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
           clearTimeout(playbackCompletionGuardTimer)
           playbackCompletionGuardTimer = undefined
+        }
+
+        const clearSynthesisWatchdogKeepalive = () => {
+          if (!synthesisWatchdogKeepaliveTimer)
+            return
+
+          clearTimeout(synthesisWatchdogKeepaliveTimer)
+          synthesisWatchdogKeepaliveTimer = undefined
+        }
+
+        const keepSynthesisWatchdogAliveUntil = (deadlineAt: number | undefined) => {
+          clearSynthesisWatchdogKeepalive()
+          if (typeof deadlineAt !== 'number' || !Number.isFinite(deadlineAt) || deadlineAt <= 0 || completed || intentEnded)
+            return
+          const synthesisDeadlineAt = deadlineAt
+
+          const tick = () => {
+            if (completed || intentEnded)
+              return
+
+            const remainingMs = synthesisDeadlineAt - Date.now()
+            if (remainingMs <= 0)
+              return
+
+            // The provider's own request timeout remains the upper bound. This
+            // only prevents the chat UI watchdog from treating a healthy, slow
+            // synthesis request as a stalled model turn.
+            bumpTurnWatchdog()
+            options.onProgress?.()
+            synthesisWatchdogKeepaliveTimer = setTimeout(tick, Math.min(10_000, remainingMs))
+          }
+
+          tick()
         }
 
         const clearDelayTimers = () => {
@@ -2214,9 +2253,19 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           if (completed)
             return
 
+          // Cross-window events can arrive before the originating renderer
+          // has handed us the final model text. Do not commit an empty
+          // assistant turn in that interval: `setFinalText`, including its
+          // explicit empty-text branch, is the terminal hand-off point.
+          if (!finalTextReady) {
+            finishRequestedBeforeFinalText = true
+            return
+          }
+
           completed = true
           clearFallbackTimer()
           clearPlaybackCompletionGuardTimer()
+          clearSynthesisWatchdogKeepalive()
           clearAllSegmentDisplayFallbackTimers()
           clearDelayTimers()
 
@@ -2285,8 +2334,11 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         // setFinalText 即启动。事件链健康时计时器持续被推后、播完立即完成；
         // 断链时最多 20s 强制 finish → completion resolve → 消息落库（短期记忆）
         // + streamingMessage 清空（打断按钮消失、打断后消息不再丢）。
-        // A missing playback event must never leave a reply pending forever,
-        // but 30s gives slow TTS enough time to start in wait-for-speech mode.
+        // A missing speech-runtime event must never leave a reply pending
+        // forever. This is a startup watchdog only: once the host confirms
+        // synthesis has started, a slow provider must be allowed to settle via
+        // its own timeout and terminal intent event instead of revealing text
+        // ahead of audio.
         const PLAYBACK_COMPLETION_IDLE_GUARD_MS = 30_000
 
         const schedulePlaybackCompletionGuard = () => {
@@ -2294,6 +2346,13 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
             return
 
           if (groupRuntime && !groupDisplayReleased)
+            return
+
+          // Before the host has accepted synthesis, this bounds a missing
+          // runtime/bridge. During synthesis, wait for intent-end/cancel. Once
+          // synthesis has ended, the same bounded guard covers audio that was
+          // generated but never reached playback-start.
+          if (synthesisStarted && !intentEnded)
             return
 
           if (playbackCompletionGuardTimer)
@@ -2380,7 +2439,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           }, fallbackMs))
         }
 
-        disposeEventListener = speechDisplaySyncStore.onEvent((event) => {
+        const stopSpeechDisplayEvents = speechDisplaySyncStore.onEvent((event) => {
           if (event.intentId !== speechRef.intentId || completed)
             return
 
@@ -2413,6 +2472,13 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
             return
           }
 
+          if (event.type === 'intent-synthesis-start') {
+            synthesisStarted = true
+            clearPlaybackCompletionGuardTimer()
+            keepSynthesisWatchdogAliveUntil(event.synthesisDeadlineAt)
+            return
+          }
+
           if (event.type === 'playback-end') {
             playbackEndedSegmentIds.add(event.segmentId)
             maybeComplete()
@@ -2421,6 +2487,19 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
           if (event.type === 'intent-end') {
             intentEnded = true
+            clearSynthesisWatchdogKeepalive()
+            // No TTS result means the provider declined, failed, or timed out;
+            // there is no audio event left to wait for. Final text is released
+            // immediately when ready, or deferred to setFinalText if this
+            // terminal event arrived first. With generated audio, retain a
+            // bounded playback-start/end guard for a broken playback chain.
+            if (ttsSegmentIds.size === 0) {
+              clearPlaybackCompletionGuardTimer()
+              clearFallbackTimer()
+              clearAllSegmentDisplayFallbackTimers()
+              finish()
+              return
+            }
             schedulePlaybackCompletionGuard()
             scheduleFallback()
             maybeComplete()
@@ -2428,13 +2507,35 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           }
 
           if (event.type === 'intent-cancel') {
+            intentCancelled = true
+            clearSynthesisWatchdogKeepalive()
+            clearPlaybackCompletionGuardTimer()
+            clearFallbackTimer()
+            clearAllSegmentDisplayFallbackTimers()
+            clearDelayTimers()
             finish()
           }
-        })
+        }, { replayIntentId: speechRef.intentId })
+        // `onEvent` replays synchronously. A replayed cancellation can call
+        // finish before this cleanup function is assigned, so assign it first
+        // and then release the just-registered listener if that happened.
+        disposeEventListener = stopSpeechDisplayEvents
+        if (completed)
+          disposeEventListener()
 
         function setFinalText(text: string) {
           finalText = text
+          finalTextReady = true
           if (!finalText.trim()) {
+            finish()
+            return
+          }
+
+          // Speech can settle before the final model text reaches this
+          // controller. Once that text is available, a terminal intent with
+          // no generated audio should release it immediately rather than
+          // leave a needless playback-start wait behind.
+          if (intentCancelled || finishRequestedBeforeFinalText || (intentEnded && ttsSegmentIds.size === 0)) {
             finish()
             return
           }
@@ -2450,6 +2551,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           dispose: () => {
             clearFallbackTimer()
             clearPlaybackCompletionGuardTimer()
+            clearSynthesisWatchdogKeepalive()
             clearAllSegmentDisplayFallbackTimers()
             clearDelayTimers()
             disposeEventListener()
@@ -3410,21 +3512,15 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
               return toRaw(rest)
             }
 
-            // Visual summaries are injected only for the turn that produced
-            // them. Preserve image data in local history for the user, while
-            // keeping it out of later text-model requests and cloud uploads.
-            if (rawMessage.role === 'user' && Array.isArray(rawMessage.content)) {
-              const hasImage = rawMessage.content.some(part => part.type === 'image_url')
-              return {
-                ...rawMessage,
-                content: [
-                  ...rawMessage.content.filter(part => part.type === 'text'),
-                  ...(hasImage ? [{ type: 'text' as const, text: '[图片]' }] : []),
-                ],
-              }
-            }
+            if (rawMessage.role !== 'user')
+              return rawMessage
 
-            return rawMessage
+            return prepareUserMessageForProvider(
+              rawMessage,
+              msg.id,
+              options.sourceUserMessageId,
+              options.attachments?.length ? contentParts : undefined,
+            )
           })) as Message[]
 
       // A room turn may be persisted by another window while this speaker is

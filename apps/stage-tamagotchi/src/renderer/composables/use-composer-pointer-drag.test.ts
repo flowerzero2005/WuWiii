@@ -75,4 +75,21 @@ describe('composer drag handle', () => {
     target.dispatchEvent(pointer('pointerup', 500, 400))
     expect(drop).not.toHaveBeenCalled()
   })
+  it('reports a moved cancellation without treating it as a drop', () => {
+    vi.stubGlobal('HTMLElement', PointerTarget)
+    const scope = effectScope()
+    const drop = vi.fn(async () => undefined)
+    const cancel = vi.fn()
+    const drag = scope.run(() => useComposerPointerDrag(drop, { cancel }))!
+    const target = new PointerTarget()
+
+    drag.start({ button: 0, isPrimary: true, currentTarget: target, screenX: 100, screenY: 100, pointerId: 1 } as unknown as PointerEvent)
+    target.dispatchEvent(pointer('pointermove', 500, 400))
+    target.dispatchEvent(pointer('pointercancel', 500, 400))
+
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(drop).not.toHaveBeenCalled()
+    expect(drag.dragging.value).toBe(false)
+    scope.stop()
+  })
 })

@@ -4,7 +4,7 @@ import { useAnalytics } from '@proj-airi/stage-ui/composables'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { storeToRefs } from 'pinia'
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
@@ -38,6 +38,16 @@ const emptyProviderLinkClass = [
 ]
 const manualModelInputClass = ['airi-input px-3 py-2']
 const watermarkClass = ['text-[var(--airi-text-soft)] opacity-20 dark:opacity-16']
+const canConfigureActiveModelVision = computed(() => Boolean(
+  activeProvider.value.trim()
+  && activeModel.value.trim()
+  && consciousnessStore.canConfigureModelVision(activeProvider.value)
+  && !consciousnessStore.modelDeclaresVision(activeProvider.value, activeModel.value),
+))
+const activeModelVisionEnabled = computed({
+  get: () => consciousnessStore.modelSupportsVision(activeProvider.value, activeModel.value),
+  set: enabled => consciousnessStore.setModelVisionCapability(activeProvider.value, activeModel.value, enabled),
+})
 
 watch(activeProvider, async (provider, oldProvider) => {
   if (!provider)
@@ -254,6 +264,23 @@ function handleDeleteProvider(providerId: string) {
           >
         </div>
       </div>
+    </div>
+
+    <div v-if="canConfigureActiveModelVision" class="flex items-start gap-3 airi-card rounded-lg p-4">
+      <input
+        id="active-model-vision-capability"
+        v-model="activeModelVisionEnabled"
+        type="checkbox"
+        class="mt-1 size-4 accent-[var(--airi-accent)]"
+      >
+      <label for="active-model-vision-capability" class="cursor-pointer">
+        <span class="block text-sm airi-text font-medium">
+          {{ t('settings.pages.modules.consciousness.sections.section.provider-model-selection.vision_input.label') }}
+        </span>
+        <span class="mt-1 block text-xs airi-text-muted">
+          {{ t('settings.pages.modules.consciousness.sections.section.provider-model-selection.vision_input.description') }}
+        </span>
+      </label>
     </div>
   </div>
 

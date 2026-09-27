@@ -1,11 +1,11 @@
 import type { ComposerDetach, ComposerDraft, ComposerSnapshot } from '../../shared/detached-composer'
-import type { ComposerClientRegion, ComposerPoint } from '../../shared/detached-composer-geometry'
+import type { ComposerPoint } from '../../shared/detached-composer-geometry'
 
 import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { computed, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue'
+import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { mergeComposerSnapshot } from '../../shared/detached-composer'
-import { composerChanged, composerDetach, composerDraftDiscarded, composerDragDetach, composerExecute, composerFlushSource, composerInvalidate, composerRecovery, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceRegion, composerSourceSubmit, composerViewRecovery } from '../../shared/detached-composer-events'
+import { composerChanged, composerDetach, composerDraftDiscarded, composerDragDetach, composerExecute, composerFlushSource, composerInvalidate, composerRecovery, composerRequestReturn, composerSettle, composerSourceCheckpoint, composerSourceCloseAck, composerSourceRead, composerSourceSubmit, composerViewRecovery } from '../../shared/detached-composer-events'
 import { useComposerPointerDrag } from './use-composer-pointer-drag'
 
 export function useDetachedComposerSource(input: {
@@ -17,7 +17,6 @@ export function useDetachedComposerSource(input: {
   draft: () => ComposerDraft
   applyDraft: (draft: ComposerDraft) => void
   send: () => Promise<{ consumed: boolean, draft: ComposerDraft }>
-  region?: () => ComposerClientRegion | undefined
 }) {
   const context = useElectronEventaContext()
   const detachInvoke = useElectronEventaInvoke(composerDetach)
@@ -29,7 +28,6 @@ export function useDetachedComposerSource(input: {
   const viewRecoveryInvoke = useElectronEventaInvoke(composerViewRecovery)
   const sourceReadInvoke = useElectronEventaInvoke(composerSourceRead)
   const checkpointInvoke = useElectronEventaInvoke(composerSourceCheckpoint)
-  const regionInvoke = useElectronEventaInvoke(composerSourceRegion)
   const closeAckInvoke = useElectronEventaInvoke(composerSourceCloseAck)
   const inlineSubmitInvoke = useElectronEventaInvoke(composerSourceSubmit)
   const snapshot = ref<ComposerSnapshot>()
@@ -52,7 +50,6 @@ export function useDetachedComposerSource(input: {
   let scopeReady: Promise<void> = Promise.resolve()
   let checkpointQueue = Promise.resolve()
   let checkpointTimer: ReturnType<typeof setTimeout> | undefined
-  let regionTimer: ReturnType<typeof setInterval> | undefined
   let inlinePromise: Promise<void> | undefined
   function applyDraft(draft: ComposerDraft) {
     mirroredDraft = structuredClone(toRaw(draft))
@@ -97,11 +94,6 @@ export function useDetachedComposerSource(input: {
     clearTimeout(checkpointTimer)
     checkpointTimer = setTimeout(() => void checkpoint().catch(() => undefined), 150)
   }
-  function reportRegion() {
-    const region = input.region?.()
-    if (region && binding?.sourceGeneration === generation)
-      void regionInvoke({ sourceGeneration: generation, region }).catch(() => undefined)
-  }
   watch(() => input.draft(), () => {
     if (applyingDraft)
       return
@@ -114,14 +106,6 @@ export function useDetachedComposerSource(input: {
   watch(() => input.busy(), (busy) => {
     if (!busy && draftDirty && !readonly.value)
       scheduleCheckpoint()
-  })
-  watch(detached, (value) => {
-    clearInterval(regionTimer)
-    if (value) {
-      reportRegion()
-      void nextTick(reportRegion)
-      regionTimer = setInterval(reportRegion, 250)
-    }
   })
   const offChanged = context.value.on(composerChanged, ({ body }) => {
     if (disposed || !body || !matches(body))
@@ -214,7 +198,6 @@ export function useDetachedComposerSource(input: {
       recoverable.value = false
       draftDirty = false
       checkpointFailed.value = false
-      reportRegion()
     }
     catch {
       failed.value = true
@@ -369,7 +352,6 @@ export function useDetachedComposerSource(input: {
         }
         draftDirty = !saved.uncertain && (draftEpoch !== hydrationEpoch || !saved.draft)
         hydrating.value = false
-        reportRegion()
         if (draftDirty)
           scheduleCheckpoint()
       }
@@ -410,7 +392,6 @@ export function useDetachedComposerSource(input: {
     offFlushSource()
     offDiscarded()
     clearTimeout(checkpointTimer)
-    clearInterval(regionTimer)
     void invalidateInvoke({ sourceGeneration: generation }).catch(() => undefined)
   })
   function viewRecovery() {

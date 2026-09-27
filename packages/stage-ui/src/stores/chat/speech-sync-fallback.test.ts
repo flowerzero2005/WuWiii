@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const chatSource = readFileSync(new URL('../chat.ts', import.meta.url), 'utf8')
+const speechRuntimeSource = readFileSync(new URL('../../../components/speech/chat-speech-runtime.vue', import.meta.url), 'utf8')
 
 describe('direct speech display fallback contract', () => {
   it('does not turn wait-for-speech into the short configured fallback', () => {
@@ -15,5 +16,19 @@ describe('direct speech display fallback contract', () => {
     expect(chatSource).toContain('if (groupRuntime || !allowTextFirstFallback)')
     expect(chatSource).toContain('const noProgressFallbackMs = groupRuntime\n              ? playbackFallbackMs\n              : directSpeechStartFallbackMs')
     expect(chatSource).toContain('const PLAYBACK_COMPLETION_IDLE_GUARD_MS = 30_000')
+  })
+
+  it('does not let the startup watchdog reveal text while synthesis is active', () => {
+    expect(speechRuntimeSource).toContain('speechDisplaySyncStore.markIntentSynthesisStart({')
+    expect(speechRuntimeSource).toContain('synthesisDeadlineAt: Date.now() + ttsTimeoutMs')
+    expect(chatSource).toContain("if (event.type === 'intent-synthesis-start')")
+    expect(chatSource).toContain('if (synthesisStarted && !intentEnded)')
+    expect(chatSource).toContain('keepSynthesisWatchdogAliveUntil(event.synthesisDeadlineAt)')
+    expect(chatSource).toContain('}, { replayIntentId: speechRef.intentId })')
+    expect(chatSource).toContain('const stopSpeechDisplayEvents = speechDisplaySyncStore.onEvent')
+    expect(chatSource).toContain('let finalTextReady = false')
+    expect(chatSource).toContain('if (!finalTextReady) {')
+    expect(chatSource).toContain('finishRequestedBeforeFinalText = true')
+    expect(chatSource).toContain('intentCancelled || finishRequestedBeforeFinalText || (intentEnded && ttsSegmentIds.size === 0)')
   })
 })
