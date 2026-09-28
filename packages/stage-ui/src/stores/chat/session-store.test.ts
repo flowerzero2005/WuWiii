@@ -203,6 +203,51 @@ describe('chat session sync conflicts', () => {
     return { store, sessionId }
   }
 
+  it('starts from a valid record when its indexed metadata is incomplete', async () => {
+    const { sessionId } = await createStarHistory()
+    const persisted = structuredClone(mocks.indexes.get('user-1')!)
+    persisted.characters['character-1'].sessions[sessionId] = undefined as unknown as ChatSessionRecord['meta']
+    mocks.indexes.set('user-1', persisted)
+    mocks.listSessionIds.mockResolvedValueOnce([sessionId])
+
+    const restarted = useChatSessionStore(createPinia())
+    await restarted.initialize()
+
+    expect(restarted.activeSessionId).toBe(sessionId)
+    expect(restarted.getSessionMessages(sessionId).some(message => message.id === 'old')).toBe(true)
+    expect(mocks.indexes.get('user-1')?.characters['character-1'].sessions[sessionId]).toEqual(records.get(sessionId)?.meta)
+  })
+
+  it('repairs a record missing metadata from its valid index without losing messages', async () => {
+    const { sessionId } = await createStarHistory()
+    const original = records.get(sessionId)!
+    records.set(sessionId, { ...original, meta: undefined as unknown as ChatSessionRecord['meta'] })
+
+    const restarted = useChatSessionStore(createPinia())
+    await restarted.initialize()
+
+    expect(restarted.activeSessionId).toBe(sessionId)
+    expect(records.get(sessionId)?.meta.sessionId).toBe(sessionId)
+    expect(records.get(sessionId)?.messages.map(message => message.id)).toEqual(original.messages.map(message => message.id))
+  })
+
+  it('keeps an unreadable record intact and starts a usable conversation', async () => {
+    const { sessionId } = await createStarHistory()
+    const original = records.get(sessionId)!
+    records.set(sessionId, { ...original, meta: undefined as unknown as ChatSessionRecord['meta'] })
+    const persisted = structuredClone(mocks.indexes.get('user-1')!)
+    persisted.characters['character-1'].sessions[sessionId] = undefined as unknown as ChatSessionRecord['meta']
+    mocks.indexes.set('user-1', persisted)
+    mocks.listSessionIds.mockResolvedValueOnce([sessionId])
+
+    const restarted = useChatSessionStore(createPinia())
+    await restarted.initialize()
+
+    expect(restarted.activeSessionId).not.toBe(sessionId)
+    expect(records.get(sessionId)?.messages).toEqual(original.messages)
+    expect(restarted.getSessionMeta(restarted.activeSessionId)).toBeDefined()
+  })
+
   it('persists independent stars and explicit unstars through stale writes, exports and restarts', async () => {
     const { store, sessionId } = await createStarHistory()
     const other = useChatSessionStore(createPinia())
@@ -372,7 +417,11 @@ describe('chat session sync conflicts', () => {
     await store.initialize()
     const original = store.activeSessionId
     store.getSessionMessages(original).push({
-      id: 'proactive-greeting', role: 'assistant', content: 'Welcome back.', slices: [], tool_results: [],
+      id: 'proactive-greeting',
+      role: 'assistant',
+      content: 'Welcome back.',
+      slices: [],
+      tool_results: [],
     })
     await store.persistSessionMessages(original, { immediate: true })
     const next = await store.createDirectSession('character-1')
@@ -386,7 +435,11 @@ describe('chat session sync conflicts', () => {
     await store.initialize()
     const original = store.activeSessionId
     store.getSessionMessages(original).push({
-      id: 'unsaved-assistant', role: 'assistant', content: 'A draft reply.', slices: [], tool_results: [],
+      id: 'unsaved-assistant',
+      role: 'assistant',
+      content: 'A draft reply.',
+      slices: [],
+      tool_results: [],
     })
     const next = await store.createDirectSession('character-1')
     expect(next).not.toBe(original)
