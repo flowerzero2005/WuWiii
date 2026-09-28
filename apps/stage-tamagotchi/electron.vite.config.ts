@@ -93,6 +93,10 @@ function DesktopRegressionBuildMetadata(): Plugin {
 }
 
 function resolveDesktopAppEdition(): DesktopAppEdition {
+  // Explicit consumer packaging must win over local development env files.
+  if (process.env.AIRI_CONSUMER_PACKAGE === '1')
+    return 'consumer'
+
   const edition = process.env.VITE_APP_EDITION
 
   if (edition === 'consumer' || edition === 'creator' || edition === 'dev') {

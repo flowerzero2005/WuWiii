@@ -2467,9 +2467,9 @@ pages:
         description: 关闭后聊天保持纯文本，不会上传或分析图片。
       provider:
         label: 视觉服务来源
-        description: 官方云默认使用阿里云视觉模型；自带密钥由你自己的服务商计费。
+        description: 选择呜异屋官方云按官方点数计费；自带密钥由你自己的服务商计费。
       provider-options:
-        official-cloud: 呜异屋官方云（阿里云视觉）
+        official-cloud: 呜异屋官方云
         aliyun: 阿里云百炼
         openai-compatible: OpenAI 兼容视觉接口
         gemini: Google Gemini 原生接口

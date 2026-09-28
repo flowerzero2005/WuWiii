@@ -2479,9 +2479,9 @@ pages:
         description: When disabled, chat stays text-only and does not upload or analyze images.
       provider:
         label: Vision provider
-        description: Official cloud uses an Alibaba Cloud vision model by default. Your own provider charges for bring-your-own-key requests.
+        description: Wuwiii Official Cloud uses official points. Your own provider charges for bring-your-own-key requests.
       provider-options:
-        official-cloud: Wuwiii Official Cloud (Alibaba Cloud Vision)
+        official-cloud: Wuwiii Official Cloud
         aliyun: Alibaba Cloud Model Studio (own API key)
         openai-compatible: OpenAI-compatible vision API
         gemini: Google Gemini native API

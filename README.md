@@ -24,6 +24,7 @@ Windows PowerShell 如果拦截 `pnpm.ps1`，将上面的 `pnpm` 写成 `pnpm.cm
 | 文档 | 内容 |
 | --- | --- |
 | [快速开始](guides/getting-started.md) | 安装、启动、配置第一个模型 |
+| [本地部署与构建](guides/deployment.md) | 从克隆仓库到运行、编译和本机打包的具体步骤 |
 | [开发指南](guides/development.md) | 目录、依赖、编译、测试与修改位置 |
 | [使用指南](guides/user-guide.md) | 聊天、角色、语音、视觉、剧本与日记 |
 | [配置与费用](guides/configuration.md) | 自配接口、环境变量、官方能力和费用边界 |
