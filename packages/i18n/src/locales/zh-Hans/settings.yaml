@@ -2180,23 +2180,77 @@ pages:
     memory-short-term:
       description: 查看已保存的对话记录，管理短期记忆。
       title: 短期记忆
+      status:
+        loading: 正在加载…
+        failed: 未能加载已保存的消息。
+      stats:
+        user: 用户消息
+        assistant: 助手消息
+      time:
+        just-now: 刚刚
+        minutes-ago: '{count} 分钟前'
+        hours-ago: '{count} 小时前'
+      history:
+        title: '消息历史（{count}）'
+        empty: 暂无消息
+        user: 用户
+        assistant: 助手
+        system: 系统
+      favorites:
+        star: 收藏消息
+        unstar: 取消收藏
+        unavailable: 这条消息尚无已保存的标识，暂时无法收藏。
+        count: '已收藏 {count} 条消息 · 优先显示'
+        empty: 暂无收藏，点击消息时间旁的星标即可收藏。
+        description: 收藏消息会在常规清理时保留于本地记录。收藏只改变本页查看顺序，模型上下文仍有容量限制，也不会自动写入长期记忆。取消收藏不会立即删除消息。
+        saved: 消息已收藏。
+        removed: 已取消收藏，消息仍然保留。
+        failed: 未能保存收藏状态，请重试。
+      manual-cleanup:
+        title: 手动清理
+        keep-count: '保留最近消息数：{count} 条'
+        description: 二次确认后保留最近的消息、全部收藏和系统消息。只会删除被清理消息关联的心声札记。
+        keep: 保留最近 {count} 条
+        confirm-keep: 确认保留最近 {count} 条
+        clear-all: 清空所有消息
+        confirm-clear: 确认清空「{title}」的所有消息，包含 {count} 条收藏及关联心声札记？清空后无法恢复。
+        confirm-clear-action: 确认清空所有消息
+        cleared: 消息已清空。
+        notes-failed: 消息清理已保存，但部分心声札记未能删除。请刷新后重试清理心声。
+        clear-failed: 未能完成清空，请刷新后重新确认；其他窗口中的收藏可能已变化。
+        retained: 已删除 {removed} 条旧消息，保留最近 {count} 条消息及全部收藏、系统消息。
+        nothing-to-remove: 没有可清理的未收藏旧消息。
+        retain-failed: 未能完成清理，请刷新这段对话后重试。
+      inner-voice:
+        title: 心声札记
+        clear: 一键清理心声
+        confirm-clear: 确认清理全部心声
+        cleared: 已清理 {count} 条心声札记。
+        none: 没有可删除的心声札记。
+        delete: 只删除这条心声札记
+        deleted: 心声札记已删除，可在聊天继续时重新生成。
+        delete-failed: 未能完成删除心声札记，请重试。
+        generating: 心声札记正在后台生成，还没有写入记忆页。
+        generation-failed: '心声札记没有写入：{error}'
+        unattached: '未关联到消息行的心声札记（{count}）'
+        message: 消息 {id}
       delete-conversation:
         title: 删除对话
         description: 从此角色的对话列表中移除当前选中的对话。
         scope: 对话消息及关联心声札记将一并删除，角色的长期记忆会保留。删除后无法恢复。
-        confirm-description: 确认删除「{title}」？
+        confirm-description: 确认删除「{title}」，包含 {count} 条收藏消息？
         action: 删除所选对话
         confirm: 确认删除
         cancel: 取消
         pending: 正在删除…
         success: 已删除对话「{title}」。
-        failed: 未能完成删除，请刷新对话列表后重试。
+        failed: 未能完成删除，请刷新后重新确认；其他窗口中的收藏可能已变化。
       auto-cleanup:
         title: 自动清理
         enabled-label: 自动清理短期记忆
-        enabled-description: 开启后，当短期记忆消息数量达到清理上限时自动清空（与手动清空行为一致）。
+        enabled-description: 默认关闭。开启后，未收藏且非系统的消息数超过上限时，保留最近的消息及全部收藏、系统消息。
         limit-label: 清理上限
-        limit-description: 消息数量达到或超过该值时触发自动清理，范围 1-400 条。
+        limit-description: 收藏和系统消息不计入触发数量。清理后保留最近 N 条非系统消息及全部收藏，范围 1–400 条。
         unit: 条
       session-selector:
         label: 对话

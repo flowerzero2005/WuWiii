@@ -38,6 +38,7 @@ describe('chatSessionsRepo', () => {
       messages: reactive([
         { id: 'message-1', role: 'user', content: 'hello', createdAt: 1 },
       ]),
+      messageStars: reactive({ 'message-1': { starred: false, revision: 2 } }),
     })
 
     await expect(chatSessionsRepo.saveSession('session-1', record)).resolves.toBeUndefined()
@@ -45,6 +46,7 @@ describe('chatSessionsRepo', () => {
     expect(storageMock.setItemRaw).toHaveBeenCalledWith(
       'local:chat/sessions/session-1',
       expect.objectContaining({
+        messageStars: { 'message-1': { starred: false, revision: 2 } },
         meta: expect.objectContaining({
           participants: [
             { characterId: 'character-1', displayName: 'AIRI' },

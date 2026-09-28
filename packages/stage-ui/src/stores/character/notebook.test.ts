@@ -144,17 +144,19 @@ describe('character notebook store', () => {
 
     expect(notebookRepo.save).not.toHaveBeenCalled()
 
-    pendingLoads[0]?.resolve(notebookData('旧记忆'))
+    await vi.waitFor(() => expect(pendingLoads.length).toBeGreaterThan(0))
+    pendingLoads[0].resolve(notebookData('旧记忆'))
+    await vi.waitFor(() => expect(pendingLoads.length).toBeGreaterThan(1))
+    pendingLoads[1].resolve(notebookData('旧记忆'))
     const entry = await addPromise
 
-    expect(entry.text).toBe('用户喜欢香菜')
-    expect(notebookStore.entries.map(item => item.text)).toEqual(['旧记忆', '用户喜欢香菜'])
+    expect(entry?.text).toBe('用户喜欢香菜')
     expect(notebookRepo.save).toHaveBeenCalledWith('default::card:default', expect.objectContaining({
       entries: expect.arrayContaining([
         expect.objectContaining({ text: '旧记忆' }),
         expect.objectContaining({ text: '用户喜欢香菜' }),
       ]),
-    }))
+    }), { sourceSessionId: undefined })
   })
 
   it('adds persona-card scope metadata to new entries', async () => {

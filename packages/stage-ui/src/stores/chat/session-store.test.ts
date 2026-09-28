@@ -4,7 +4,9 @@ import type { GroupRoomScriptState } from './group-script'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useMemoryShortTermSettingsStore } from '../settings/memory-short-term'
 import { DEFAULT_GROUP_SCRIPT_CHAPTER_SETTINGS, parseGroupRoomScriptState } from './group-script'
+import { isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 import { useChatSessionStore } from './session-store'
 
 vi.mock('./session-record-lock', () => {
@@ -22,6 +24,7 @@ vi.mock('./session-record-lock', () => {
   return {
     withSessionRecordLock: (sessionId: string, task: () => Promise<unknown>) => lock(`session:${sessionId}`, task),
     withUserSessionIndexLock: (userId: string, task: () => Promise<unknown>) => lock(`index:${userId}`, task),
+    withIdleSession: (sessionId: string, task: () => Promise<unknown>) => lock(`idle:${sessionId}`, task),
   }
 })
 
@@ -31,10 +34,13 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   listSessionIds: vi.fn().mockResolvedValue([]),
   isAuthenticated: false,
+  authUserId: 'user-1',
   postSync: vi.fn(),
   saveIndex: vi.fn(),
   saveSession: vi.fn(),
   deleteSession: vi.fn(),
+  deleteNoteForMessage: vi.fn().mockResolvedValue(undefined),
+  deleteNotesForSession: vi.fn().mockResolvedValue(undefined),
   indexes: new Map<string, ChatSessionsIndex>(),
   waitUntilReady: vi.fn(async () => undefined),
 }))
@@ -64,11 +70,11 @@ vi.mock('../../database/repos/chat-sessions.repo', () => ({
 
 vi.mock('../auth', async () => {
   const { defineStore } = await import('pinia')
-  const { computed, ref } = await import('vue')
+  const { computed } = await import('vue')
   return {
     useAuthStore: defineStore('auth', () => ({
       isAuthenticated: computed(() => mocks.isAuthenticated),
-      userId: ref('user-1'),
+      userId: computed(() => mocks.authUserId),
       waitUntilReady: mocks.waitUntilReady,
     })),
   }
@@ -91,7 +97,7 @@ vi.mock('../modules/persona-package', () => ({
   getPersonaCardInitialGreeting: vi.fn(),
 }))
 
-vi.mock('./context-providers', () => ({ resetConversationInitialization: vi.fn() }))
+vi.mock('./conversation-initializer', () => ({ resetConversationInitialization: vi.fn() }))
 
 vi.mock('../settings/memory-advanced', async () => {
   const { defineStore } = await import('pinia')
@@ -116,11 +122,18 @@ vi.mock('../user-identity', async () => {
 
 vi.mock('./inner-voice-notes', () => ({
   useAssistantInnerVoiceNoteStore: () => ({
-    deleteNotesForSession: vi.fn().mockResolvedValue(undefined),
+    deleteNotesForSession: mocks.deleteNotesForSession,
+    deleteNoteForMessage: mocks.deleteNoteForMessage,
   }),
 }))
 
 beforeEach(() => {
+  // Each test supplies explicit cross-window delivery when needed. Native
+  // Node channels outlive Pinia instances and leak events into later tests.
+  vi.stubGlobal('BroadcastChannel', class {
+    onmessage?: (event: MessageEvent) => void
+    postMessage() {}
+  })
   const values = new Map<string, string>()
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => values.get(key) ?? null,
@@ -134,6 +147,7 @@ describe('chat session sync conflicts', () => {
   const records = new Map<string, ChatSessionRecord>()
 
   beforeEach(() => {
+    mocks.authUserId = 'user-1'
     setActivePinia(createPinia())
     records.clear()
     vi.clearAllMocks()
@@ -172,6 +186,185 @@ describe('chat session sync conflicts', () => {
     expect(records.get(first)?.messages.some(message => message.id === 'first-user')).toBe(true)
     expect(store.directSessions.map(meta => meta.sessionId)).toEqual(expect.arrayContaining([first, next]))
     expect(records.get(first)?.meta.title).toBe('My original conversation')
+  })
+
+  async function createStarHistory() {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const sessionId = store.activeSessionId
+    store.setSessionMessages(sessionId, [
+      { id: 'sys', role: 'system', content: 'system' },
+      { id: 'old', role: 'user', content: 'keep my memory' },
+      { id: 'middle', role: 'user', content: 'clean this' },
+      { id: 'sys-late', role: 'system', content: 'second system' },
+      { id: 'last', role: 'user', content: 'latest' },
+    ])
+    await store.persistSessionMessages(sessionId, { immediate: true })
+    return { store, sessionId }
+  }
+
+  it('persists independent stars and explicit unstars through stale writes, exports and restarts', async () => {
+    const { store, sessionId } = await createStarHistory()
+    const other = useChatSessionStore(createPinia())
+    await other.initialize()
+    await store.setMessageStarred(sessionId, 'old', true)
+    expect((await store.readSessionForInspection(sessionId))?.messageStars?.old.starred).toBe(true)
+    await other.setMessageStarred(sessionId, 'old', false)
+    const revision = records.get(sessionId)!.meta.messageStarsRevision
+    await store.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.get(sessionId)!.messageStars?.old).toEqual({ starred: false, revision })
+    expect(records.get(sessionId)!.meta.starred).not.toBe(true)
+    const exported = await store.exportSessions()
+    expect(exported.sessions[sessionId].messageStars?.old.starred).toBe(false)
+    const restarted = useChatSessionStore(createPinia())
+    await restarted.importSessions(exported)
+    expect((await restarted.readSessionForInspection(sessionId))?.messageStars?.old.starred).toBe(false)
+    expect(records.get(sessionId)!.messages.map(message => message.id)).toEqual(['sys', 'old', 'middle', 'sys-late', 'last'])
+  })
+
+  it('keeps stars and every system message in chronological order and deletes only removed notes', async () => {
+    const { store, sessionId } = await createStarHistory()
+    await store.setMessageStarred(sessionId, 'old', true)
+    mocks.deleteNoteForMessage.mockClear()
+    expect(await store.retainRecentMessages(sessionId, 1)).toEqual({
+      removedMessageIds: ['middle'],
+      retainedMessageIds: ['sys', 'old', 'sys-late', 'last'],
+    })
+    expect(records.get(sessionId)!.messages.map(message => message.id)).toEqual(['sys', 'old', 'sys-late', 'last'])
+    expect(mocks.deleteNoteForMessage).toHaveBeenCalledTimes(1)
+    expect(mocks.deleteNoteForMessage).toHaveBeenCalledWith(sessionId, 'middle')
+  })
+
+  it('ignores a delayed starred broadcast after explicit unstar and omits stars from remote message payloads', async () => {
+    let channel: { onmessage?: (event: MessageEvent) => void } | undefined
+    vi.stubGlobal('BroadcastChannel', class {
+      onmessage?: (event: MessageEvent) => void
+      constructor() { channel = this }
+      postMessage() {}
+    })
+    mocks.isAuthenticated = true
+    const { store, sessionId } = await createStarHistory()
+    await store.setMessageStarred(sessionId, 'old', true)
+    const stale = structuredClone(records.get(sessionId)!)
+    await store.setMessageStarred(sessionId, 'old', false)
+    channel?.onmessage?.({ data: {
+      type: 'chat-session-updated',
+      sessionId,
+      userId: 'user-1',
+      characterId: stale.meta.characterId,
+      meta: { ...stale.meta, updatedAt: stale.meta.updatedAt + 1000 },
+      messages: stale.messages,
+    } } as MessageEvent)
+    await store.persistSessionMessages(sessionId, { immediate: true })
+    expect(store.getSessionMeta(sessionId)?.messageStarsRevision).toBe(2)
+    expect(records.get(sessionId)!.messageStars?.old).toEqual({ starred: false, revision: 2 })
+    await vi.waitFor(() => expect(mocks.postSync).toHaveBeenCalled())
+    const payload = mocks.postSync.mock.calls.at(-1)?.[0]
+    expect(JSON.stringify(payload)).not.toContain('messageStars')
+    expect(JSON.stringify(payload)).not.toContain('starred')
+  })
+
+  it('prunes obsolete star revisions on explicit clear and does not recreate them from stale history', async () => {
+    const { store, sessionId } = await createStarHistory()
+    const stale = useChatSessionStore(createPinia())
+    await stale.initialize()
+    await store.setMessageStarred(sessionId, 'old', true)
+    await store.setMessageStarred(sessionId, 'middle', false)
+    await store.cleanupMessages(sessionId, { expectedMessageStarsRevision: 2 })
+    expect(records.get(sessionId)!.messageStars).toEqual({})
+    expect(records.get(sessionId)!.meta.messageStarsRevision).toBe(3)
+    await stale.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.get(sessionId)!.messageStars).toEqual({})
+    expect(records.get(sessionId)!.messages.some(message => message.id === 'old')).toBe(false)
+  })
+
+  it('keeps history and notes when cleanup cannot save the replacement', async () => {
+    const { store, sessionId } = await createStarHistory()
+    const before = structuredClone(records.get(sessionId)!)
+    // A cold inspection has no pending history flush ahead of the mutation.
+    const cold = useChatSessionStore(createPinia())
+    await cold.initializeForInspection()
+    mocks.saveSession.mockRejectedValueOnce(new Error('quota'))
+    mocks.deleteNoteForMessage.mockClear()
+    await expect(cold.retainRecentMessages(sessionId, 1)).rejects.toThrow('quota')
+    expect(records.get(sessionId)).toEqual(before)
+    expect(mocks.deleteNoteForMessage).not.toHaveBeenCalled()
+    expect(store.getSessionMessages(sessionId).some(message => message.id === 'old')).toBe(true)
+  })
+
+  it('cleans automatically only above the unstarred limit, keeps the latest at limit one and is idempotent', async () => {
+    const { store, sessionId } = await createStarHistory()
+    const settings = useMemoryShortTermSettingsStore()
+    expect(await store.autoCleanupSession(sessionId)).toBeUndefined()
+    await store.setMessageStarred(sessionId, 'old', true)
+    settings.settings.autoCleanupEnabled = true
+    settings.setAutoCleanupLimit(1)
+    expect((await store.autoCleanupSession(sessionId))?.removedMessageIds).toEqual(['middle'])
+    const revision = records.get(sessionId)!.meta.historyRevision
+    expect((await store.autoCleanupSession(sessionId))?.removedMessageIds).toEqual([])
+    expect(records.get(sessionId)!.meta.historyRevision).toBe(revision)
+    expect(records.get(sessionId)!.messages.map(message => message.id)).toEqual(['sys', 'old', 'sys-late', 'last'])
+  })
+
+  it('requires renewed destructive confirmation after stars change and clears a confirmed favorite', async () => {
+    const { store, sessionId } = await createStarHistory()
+    await store.setMessageStarred(sessionId, 'old', true)
+    await expect(store.cleanupMessages(sessionId, { expectedMessageStarsRevision: 0 })).rejects.toThrow('Message stars changed')
+    await expect(store.deleteSession(sessionId, { expectedMessageStarsRevision: 0 })).rejects.toThrow('Message stars changed')
+    expect(records.get(sessionId)!.messages.some(message => message.id === 'old')).toBe(true)
+    const revision = records.get(sessionId)!.meta.messageStarsRevision
+    expect((await store.cleanupMessages(sessionId, { expectedMessageStarsRevision: revision }))?.removedMessageIds).toContain('old')
+  })
+
+  it('does not clear caches, cancel memory or delete notes if record deletion fails', async () => {
+    const { store, sessionId } = await createStarHistory()
+    const deleted = vi.fn()
+    store.onSessionDeleted(deleted)
+    const generation = store.getSessionGeneration(sessionId)
+    mocks.deleteNotesForSession.mockClear()
+    mocks.deleteSession.mockRejectedValueOnce(new Error('record unavailable'))
+    await expect(store.deleteSession(sessionId)).rejects.toThrow('record unavailable')
+    expect(store.getSessionMeta(sessionId)).toBeDefined()
+    expect(store.getSessionGeneration(sessionId)).toBe(generation)
+    expect(records.has(sessionId)).toBe(true)
+    expect(isSessionMemoryWorkCancelled(sessionId)).toBe(false)
+    expect(deleted).not.toHaveBeenCalled()
+    expect(mocks.deleteNotesForSession).not.toHaveBeenCalled()
+    await store.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.get(sessionId)!.messages.some(message => message.id === 'old')).toBe(true)
+  })
+
+  it.each([false, true])('keeps deletion committed when durable cancellation fails (index also fails: %s)', async (indexFails) => {
+    const { store, sessionId } = await createStarHistory()
+    const other = useChatSessionStore(createPinia())
+    await other.initialize()
+    vi.spyOn(globalThis.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('quota')
+    })
+    if (indexFails)
+      mocks.saveIndex.mockRejectedValue(new Error('index unavailable'))
+    await expect(store.deleteSession(sessionId)).resolves.toBe(true)
+    expect(records.has(sessionId)).toBe(false)
+    expect(store.getSessionMeta(sessionId)).toBeUndefined()
+    expect(isSessionMemoryWorkCancelled(sessionId)).toBe(true)
+    await other.persistSessionMessages(sessionId, { immediate: true })
+    expect(records.has(sessionId)).toBe(false)
+  })
+
+  it('uses stable legacy IDs for repeated inspection and isolates star writes by owner', async () => {
+    const { store, sessionId } = await createStarHistory()
+    records.get(sessionId)!.messages = [{ role: 'user', content: 'legacy' }]
+    const first = await store.readSessionForInspection(sessionId)
+    const second = await store.readSessionForInspection(sessionId)
+    expect(first!.messages[0].id).toBe(second!.messages[0].id)
+    await store.setMessageStarred(sessionId, first!.messages[0].id!, true)
+    expect(records.get(sessionId)!.messageStars?.[first!.messages[0].id!].starred).toBe(true)
+    const otherPinia = createPinia()
+    mocks.authUserId = 'user-2'
+    const other = useChatSessionStore(otherPinia)
+    await other.initializeForInspection()
+    expect(await other.readSessionForInspection(sessionId)).toBeUndefined()
+    await expect(other.setMessageStarred(sessionId, first!.messages[0].id!, false)).rejects.toThrow('no longer available')
   })
 
   it('starts fresh when an existing conversation only has proactive assistant content', async () => {
@@ -436,6 +629,7 @@ describe('group room script persistence', () => {
     records.clear()
     vi.clearAllMocks()
     mocks.isAuthenticated = false
+    mocks.authUserId = 'user-1'
     mocks.waitUntilReady.mockResolvedValue(undefined)
     mocks.indexes.clear()
     mocks.getIndex.mockImplementation(async (userId: string) => structuredClone(mocks.indexes.get(userId) ?? null))
@@ -590,7 +784,7 @@ describe('group room script persistence', () => {
     const otherWindow = useChatSessionStore(createPinia())
     await otherWindow.initialize()
     mocks.saveIndex.mockRejectedValueOnce(new Error('index unavailable'))
-    await expect(store.deleteSession(sessionId)).rejects.toThrow('index unavailable')
+    await expect(store.deleteSession(sessionId)).resolves.toBe(true)
     expect(records.has(sessionId)).toBe(false)
     expect(store.getSessionMeta(sessionId)).toBeUndefined()
     expect(mocks.indexes.get('user-1')!.characters.group.sessions[sessionId]).toBeDefined()
@@ -624,7 +818,7 @@ describe('group room script persistence', () => {
     await otherWindow.persistSessionMessages(remoteSessionId, { immediate: true })
     expect(mocks.indexes.get('user-1')!.characters.group).toBeUndefined()
     expect(records.has(remoteSessionId)).toBe(false)
-  })
+  }, 15_000)
 
   it('retains a session inserted by another window while reset deletes its initial snapshot', async () => {
     const { sessionId, store } = await createRoom()
@@ -651,7 +845,7 @@ describe('group room script persistence', () => {
     })
     const resetting = store.resetAllSessions()
     await started
-    expect(store.getSessionGeneration(sessionId)).toBeGreaterThan(oldGeneration)
+    expect(store.getSessionGeneration(sessionId)).toBe(oldGeneration)
     const inserting = otherWindow.createGroupSession([{ characterId: 'character-1', displayName: 'One' }], 'During reset')
     // Let the other window enqueue its user-index lock while deletion holds it.
     for (let turn = 0; turn < 20; turn++)

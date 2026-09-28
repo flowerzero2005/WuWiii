@@ -319,11 +319,7 @@ const { cleanupMessages, cleanupMessagesAndShortTermMemory } = useChatMaintenanc
 const { ingest, interruptActiveTurn, onAfterMessageComposed } = chatOrchestrator
 const { activeSessionId, groupSessions, messages, personaContactSessions } = storeToRefs(chatSession)
 const chapterJobs = useGroupScriptJobs(activeSessionId)
-let chapterEvaluationTimer: ReturnType<typeof setTimeout> | undefined
-let chapterEvaluationGeneration = 0
 function cancelChapterEvaluation() {
-  chapterEvaluationGeneration += 1
-  clearTimeout(chapterEvaluationTimer)
   chapterJobs.cancel()
 }
 watch(activeSessionId, cancelChapterEvaluation, { flush: 'sync' })
@@ -3588,7 +3584,15 @@ async function handleGroupSend(textToSend: string, attachmentCount: number, trac
     // the recommendation call cannot consume the official cloud turn slot
     // needed by the next character.
     if (groupRunCompleted && !runAbortController.signal.aborted) {
-      scheduleChapterEvaluation({ sessionId: roomSessionId, sourceUserMessageId, groupTurnId })
+      const chapterOwner = authStore.userId
+      const chapterGeneration = chatSession.getSessionGeneration(roomSessionId)
+      void scheduleChapterEvaluation({ sessionId: roomSessionId, sourceUserMessageId, groupTurnId }).then(async () => {
+        if (authStore.userId !== chapterOwner || activeSessionId.value !== roomSessionId
+          || chatSession.getSessionGeneration(roomSessionId) !== chapterGeneration
+          || activeGroupRun.value?.phase === 'running' || settledGroupRun.value?.runId !== groupTurnId)
+          return
+        await chatSession.autoCleanupSession(roomSessionId)
+      }).catch(error => console.warn('[Chat] Automatic group history cleanup did not run:', error))
       const latestRecommendation = [...groupRecommendationInputs].reverse().find((input) => {
         const message = findLatestAssistantMessage(
           input.sessionId,
@@ -4468,38 +4472,17 @@ function hasPendingGroupTurnDisplay(input: {
 }
 
 function scheduleChapterEvaluation(input: { sessionId: string, sourceUserMessageId: string, groupTurnId: string }) {
-  if (!activeGroupRoomScript.value?.chapterSettings?.automaticEvaluationEnabled || activeGroupRoomScript.value.progress?.isComplete)
-    return
-  const generation = ++chapterEvaluationGeneration
-  const revision = chatSession.getSessionMeta(input.sessionId)?.roomScriptRevision
-  const deadline = Date.now() + 120_000
-  const attempt = async () => {
-    if (generation !== chapterEvaluationGeneration || input.sessionId !== activeSessionId.value
-      || revision !== chatSession.getSessionMeta(input.sessionId)?.roomScriptRevision || Date.now() > deadline) {
-      return
-    }
-    if (hasPendingGroupTurnDisplay(input)) {
-      chapterEvaluationTimer = setTimeout(() => void attempt(), 250)
-      return
-    }
-    const visible = chatSession.getSessionMessages(input.sessionId).some(message => message.role === 'assistant'
+  return chapterJobs.scheduleEvaluation({ sessionId: input.sessionId, turnId: input.sourceUserMessageId, groupTurnId: input.groupTurnId, language: locale.value }, {
+    isPending: () => hasPendingGroupTurnDisplay(input),
+    shouldEvaluate: () => !!activeGroupRoomScript.value?.chapterSettings?.automaticEvaluationEnabled && !activeGroupRoomScript.value.progress?.isComplete,
+    hasVisibleResponse: () => chatSession.getSessionMessages(input.sessionId).some(message => message.role === 'assistant'
       && message.metadata?.speaker?.groupTurnId === input.groupTurnId
       && message.metadata?.messageKind !== 'status' && message.metadata?.messageKind !== 'narration'
-      && getRecommendedReplyAssistantText(message))
-    if (!visible)
-      return
-    try {
-      await chatSession.persistSessionMessages(input.sessionId, { immediate: true })
-      if (generation !== chapterEvaluationGeneration || input.sessionId !== activeSessionId.value)
-        return
-      await chapterJobs.run('evaluation', { sessionId: input.sessionId, turnId: input.sourceUserMessageId, groupTurnId: input.groupTurnId, language: locale.value })
-    }
-    catch (error) {
-      if (!(error instanceof DOMException) || error.name !== 'AbortError')
-        console.warn('[Chat] Chapter evaluation did not advance the story:', error)
-    }
-  }
-  void attempt()
+      && getRecommendedReplyAssistantText(message)),
+  }).catch((error) => {
+    if (!(error instanceof DOMException) || error.name !== 'AbortError')
+      console.warn('[Chat] Chapter evaluation did not advance the story:', error)
+  })
 }
 
 const visibleRecommendedReplies = computed(() => {

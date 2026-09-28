@@ -4,10 +4,12 @@ const cancelledSessions = new Set<string>()
 
 /** Fence background work without deleting the character's accumulated memory. */
 export function cancelSessionMemoryWork(sessionId: string) {
+  // Called only after the session record deletion has committed. Even if the
+  // durable marker fails, fence late work in this renderer immediately.
+  cancelledSessions.add(sessionId)
   if (!globalThis.localStorage)
     throw new Error('Session deletion storage is unavailable')
   globalThis.localStorage.setItem(`${CANCELLED_SESSION_PREFIX}${sessionId}`, '1')
-  cancelledSessions.add(sessionId)
   // The durable session tombstone already prevents replay, so neither pending
   // transcript payloads nor per-message receipts need to survive this deletion.
   try {

@@ -2191,23 +2191,77 @@ pages:
     memory-short-term:
       description: Browse saved conversation records and manage short-term memory.
       title: Short-Term Memory
+      status:
+        loading: Loading…
+        failed: Could not load saved messages.
+      stats:
+        user: User messages
+        assistant: Assistant messages
+      time:
+        just-now: Just now
+        minutes-ago: '{count} minutes ago'
+        hours-ago: '{count} hours ago'
+      history:
+        title: 'Message history ({count})'
+        empty: No messages
+        user: User
+        assistant: Assistant
+        system: System
+      favorites:
+        star: Star message
+        unstar: Unstar message
+        unavailable: This message has no saved identifier and cannot be starred yet.
+        count: '{count} starred messages · shown first'
+        empty: No starred messages. Use the star beside a message’s time to save it.
+        description: Starred messages stay in local saved records during regular cleanup. Stars only change the order on this page; model context still has a size limit, and stars do not add long-term memories. Unstarring does not immediately delete a message.
+        saved: Message starred.
+        removed: Star removed. The message is still saved.
+        failed: Could not save the star change. Please try again.
+      manual-cleanup:
+        title: Manual cleanup
+        keep-count: 'Recent messages to keep: {count}'
+        description: After confirmation, keep the most recent messages plus all starred and system messages. Linked inner voice notes are deleted only for removed messages.
+        keep: Keep latest {count}
+        confirm-keep: Confirm keeping latest {count}
+        clear-all: Clear all messages
+        confirm-clear: Clear all messages in “{title}”, including {count} starred messages and linked inner voice notes? This cannot be undone.
+        confirm-clear-action: Confirm clearing all
+        cleared: Messages cleared.
+        notes-failed: Message cleanup was saved, but some inner voice notes could not be deleted. Refresh and retry clearing inner voice notes.
+        clear-failed: Could not complete clearing. Refresh and confirm again; starred messages may have changed in another window.
+        retained: Removed {removed} old messages. Kept the latest {count}, plus starred and system messages.
+        nothing-to-remove: No unstarred old messages to remove.
+        retain-failed: Could not complete cleanup. Refresh this conversation and try again.
+      inner-voice:
+        title: Inner voice notes
+        clear: Clear inner voice notes
+        confirm-clear: Confirm clearing all inner voice notes
+        cleared: Cleared {count} inner voice notes.
+        none: No inner voice notes to delete.
+        delete: Delete only this inner voice note
+        deleted: Inner voice note deleted. It may be generated again as the chat continues.
+        delete-failed: Could not complete deletion of inner voice notes. Please try again.
+        generating: An inner voice note is being generated and has not been saved yet.
+        generation-failed: 'Inner voice note was not saved: {error}'
+        unattached: 'Inner voice notes without a message row ({count})'
+        message: Message {id}
       delete-conversation:
         title: Delete conversation
         description: Remove the selected conversation from this character's conversation list.
         scope: Messages and linked inner voice notes will be deleted. The character's long-term memories will remain. This cannot be undone.
-        confirm-description: Delete “{title}”?
+        confirm-description: Delete “{title}”, including {count} starred messages?
         action: Delete selected conversation
         confirm: Confirm deletion
         cancel: Cancel
         pending: Deleting…
         success: Deleted “{title}”.
-        failed: Could not complete deletion. Refresh the conversation list and try again.
+        failed: Could not complete deletion. Refresh and confirm again; starred messages may have changed in another window.
       auto-cleanup:
         title: Auto Cleanup
         enabled-label: Auto-clean short-term memory
-        enabled-description: When enabled, messages are cleared automatically once they reach the cleanup limit (same as manual clear).
+        enabled-description: Off by default. When unstarred, non-system messages exceed the limit, keep the latest messages plus all starred and system messages.
         limit-label: Cleanup limit
-        limit-description: 'Auto-clean triggers when the message count reaches or exceeds this value. Range: 1-400.'
+        limit-description: 'Only unstarred, non-system messages count toward the trigger. Cleanup keeps the latest N non-system messages and all starred messages. Range: 1–400.'
         unit: messages
       session-selector:
         label: Conversation

@@ -70,6 +70,7 @@ import { createReadableFinalText, createReadableSpeechText } from './chat/readab
 import { useReplyFeedbackStore } from './chat/reply-feedback'
 import { useReplyFeedbackReflectionStore } from './chat/reply-feedback-reflection'
 import { isSessionMemoryWorkCancelled } from './chat/session-memory-lifecycle'
+import { withSessionActivity } from './chat/session-record-lock'
 import { useChatSessionStore } from './chat/session-store'
 import { resolveSegmentDisplayFallbackMs, resolveSpeechDisplayFallbackMs, resolveSpeechDisplayStartTimeoutMs, shouldCompleteSpeechDisplay } from './chat/speech-display-policy'
 import { useChatStreamStore } from './chat/stream-store'
@@ -424,6 +425,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const sending = ref(false)
   const pendingQueuedSends = ref<QueuedSend[]>([])
   const runningSendCounts = new Map<string, number>()
+  const pendingActivityControllers = new Map<string, Set<AbortController>>()
   // An input source ID identifies one user action across retrying surfaces.
   // Claim it before queuing so another local entry point cannot append the
   // same user message while the first request is still pending.
@@ -4671,6 +4673,46 @@ ${contextTexts}
     targetSessionId?: string,
   ) {
     const sessionId = targetSessionId || activeSessionId.value
+    const ownerId = chatSession.sessionUserId
+    const controller = new AbortController()
+    const controllers = pendingActivityControllers.get(sessionId) ?? new Set<AbortController>()
+    controllers.add(controller)
+    pendingActivityControllers.set(sessionId, controllers)
+    const abortWaiting = () => controller.abort(options.abortSignal?.reason)
+    options.abortSignal?.addEventListener('abort', abortWaiting, { once: true })
+    if (options.abortSignal?.aborted)
+      abortWaiting()
+    try {
+      // Include input preparation and queued sends in the activity lease. A
+      // cleanup must not reset history after a new user's message was staged
+      // but before its provider turn acquired ownership.
+      return await withSessionActivity(sessionId, async () => {
+        if (controller.signal.aborted || chatSession.sessionUserId !== ownerId
+          || !chatSession.getSessionMeta(sessionId)) {
+          throw new DOMException('Chat account changed before send could start', 'AbortError')
+        }
+        return ingestWithinActivity(sendingMessage, options, sessionId)
+      }, controller.signal)
+    }
+    finally {
+      controllers.delete(controller)
+      if (!controllers.size)
+        pendingActivityControllers.delete(sessionId)
+      options.abortSignal?.removeEventListener('abort', abortWaiting)
+      if (!options.personaRuntime && chatSession.sessionUserId === ownerId
+        && !pendingMerges.has(sessionId) && !runningSendCounts.has(sessionId)
+        && !pendingQueuedSends.value.some(item => item.sessionId === sessionId)) {
+        await chatSession.autoCleanupSession(sessionId).catch(error => console.warn('[Chat] Automatic history cleanup deferred:', error))
+      }
+    }
+  }
+
+  async function ingestWithinActivity(
+    sendingMessage: string,
+    options: SendOptions,
+    targetSessionId?: string,
+  ) {
+    const sessionId = targetSessionId || activeSessionId.value
     if (!options.hiddenUserMessage && !options.personaRuntime && options.sourceUserMessageId) {
       const sessionMessages = chatSession.getSessionMessages(sessionId)
       const accepted = acceptedUserMessageSourceIds.get(sessionId) ?? new Set<string>()
@@ -4816,6 +4858,10 @@ ${contextTexts}
   }
 
   function cancelPendingSends(sessionId?: string) {
+    for (const [ownerSessionId, controllers] of pendingActivityControllers) {
+      if (!sessionId || ownerSessionId === sessionId)
+        controllers.forEach(controller => controller.abort('user-interrupt'))
+    }
     for (const queued of pendingQueuedSends.value) {
       if (sessionId && queued.sessionId !== sessionId)
         continue

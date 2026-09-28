@@ -2,13 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 export interface MemoryShortTermSettings {
-  // 是否开启"短期记忆消息数量达到上限自动清理"
+  // 是否在回合结束后自动保留最近消息，默认关闭。
   autoCleanupEnabled: boolean
-  // 触发自动清理的消息数量上限（含系统提示与问候消息），范围 1..400
+  // 未收藏且非系统消息超过此数量才清理；保留最近 N 条及全部收藏/系统消息，范围 1..400。
   autoCleanupLimit: number
 }
 
-// 上限范围与默认值。默认 200：既能覆盖常见的较长会话，又不会轻易触发清空。
+// 上限范围与默认值。默认 200，不清空对话。
 export const AUTO_CLEANUP_LIMIT_MIN = 1
 export const AUTO_CLEANUP_LIMIT_MAX = 400
 export const AUTO_CLEANUP_LIMIT_DEFAULT = 200

@@ -26,6 +26,8 @@ export interface ChatSessionMeta {
   /** User renames win over stale windows persisting message updates. */
   titleUpdatedAt?: number
   historyRevision?: number
+  /** Independent of message/history writes, including explicit unstars. */
+  messageStarsRevision?: number
   roomScriptRevision?: number
   createdAt: number
   updatedAt: number
@@ -34,8 +36,20 @@ export interface ChatSessionMeta {
 export interface ChatSessionRecord {
   meta: ChatSessionMeta
   messages: ChatHistoryItem[]
+  /** Local metadata only: never part of provider messages. False entries are retained. */
+  messageStars?: Record<string, { starred: boolean, revision: number }>
   roomScript?: GroupRoomScriptState
   personaRuntime?: AiriPersonaRuntimeSnapshot
+}
+
+export interface ChatHistoryCleanupResult {
+  removedMessageIds: string[]
+  retainedMessageIds: string[]
+  innerVoiceCleanupFailed?: boolean
+}
+
+export interface ChatHistoryDestructiveOptions {
+  expectedMessageStarsRevision?: number
 }
 
 export interface ChatCharacterSessionsIndex {

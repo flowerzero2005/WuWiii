@@ -25,7 +25,7 @@ function mt(key: string, params: Record<string, string | number> = {}) {
   return t(`settings.pages.modules.memory-short-term.${key}`, params)
 }
 
-const status = ref('正在加载...')
+const status = ref<'loading' | 'ready' | 'failed'>('loading')
 const errorMsg = ref('')
 const feedbackMessage = ref('')
 const feedbackTone = ref<'neutral' | 'success' | 'error'>('neutral')
@@ -69,12 +69,36 @@ const viewSessionId = ref('')
 const viewRoleId = ref('')
 const cleanupPending = ref(false)
 const deletePending = ref(false)
-const actionPending = computed(() => cleanupPending.value || deletePending.value)
-const deleteTarget = ref<{ sessionId: string, userId: string, roleId: string, title: string }>()
+const starPendingMessageId = ref('')
+const actionPending = computed(() => cleanupPending.value || deletePending.value || Boolean(starPendingMessageId.value))
+interface ConfirmationTarget {
+  sessionId: string
+  userId: string
+  roleId: string
+  title: string
+  starCount: number
+  starsRevision: number
+}
+const deleteTarget = ref<ConfirmationTarget>()
+const clearTarget = ref<ConfirmationTarget>()
 // Keep a removed character's inspection row available after its last chat is deleted.
 const retainedRoleOption = ref<{ id: string, label: string, userId: string }>()
 const inspectionMessages = ref<ChatHistoryItem[]>([])
+const inspectionStars = ref<Record<string, { starred: boolean, revision: number }>>({})
+const inspectionStarsRevision = ref(0)
 const inspectionLoading = ref(false)
+let scopeRevision = 0
+let inspectionRevision = 0
+let disposed = false
+
+function captureScope() {
+  return { revision: scopeRevision, sessionId: viewSessionId.value, roleId: viewRoleId.value, userId: chatSession.sessionUserId }
+}
+
+function isCurrentScope(scope: ReturnType<typeof captureScope>) {
+  return !disposed && scope.revision === scopeRevision && scope.sessionId === viewSessionId.value
+    && scope.roleId === viewRoleId.value && scope.userId === chatSession.sessionUserId
+}
 const allSessions = computed(() => [...chatSession.directSessions, ...chatSession.groupSessions])
 const roleOptions = computed(() => {
   const directIds = new Set([
@@ -117,10 +141,24 @@ const deletionDisabled = computed(() => !chatSession.catalogReady || inspectionL
   || navigationPending.value || actionPending.value || !selectedDirectSession.value)
 
 watch([viewRoleId, viewSessionId, () => chatSession.sessionUserId], () => {
+  scopeRevision++
+  inspectionRevision++
+  inspectionMessages.value = []
+  inspectionStars.value = {}
+  inspectionStarsRevision.value = 0
+  inspectionLoading.value = Boolean(viewSessionId.value)
+  cleanupPending.value = false
+  deletePending.value = false
+  starPendingMessageId.value = ''
+  navigationPending.value = false
+  feedbackMessage.value = ''
+  errorMsg.value = ''
   deleteTarget.value = undefined
+  clearTarget.value = undefined
   if (retainedRoleOption.value?.id !== viewRoleId.value
-    || retainedRoleOption.value?.userId !== chatSession.sessionUserId)
+    || retainedRoleOption.value?.userId !== chatSession.sessionUserId) {
     retainedRoleOption.value = undefined
+  }
 }, { flush: 'sync' })
 
 function inspectSession(sessionId: string) {
@@ -133,37 +171,45 @@ function inspectSession(sessionId: string) {
 async function inspectCurrentConversation() {
   if (actionPending.value || navigationPending.value)
     return
+  const scope = captureScope()
   navigationPending.value = true
   try {
     const id = conversationNavigation
       ? await conversationNavigation.getCurrentConversation()
       : chatSession.activeSessionId
+    if (!isCurrentScope(scope))
+      return
     if (id && allSessions.value.some(meta => meta.sessionId === id))
       inspectSession(id)
     else
       setFeedback(mt('session-selector.current-unavailable'), 'neutral')
   }
   catch {
-    setFeedback(mt('session-selector.navigation-failed'), 'error')
+    if (isCurrentScope(scope))
+      setFeedback(mt('session-selector.navigation-failed'), 'error')
   }
   finally {
-    navigationPending.value = false
+    if (isCurrentScope(scope))
+      navigationPending.value = false
   }
 }
 async function openInspectedConversation() {
   const id = viewSessionId.value
   if (!conversationNavigation || !id || navigationPending.value || actionPending.value)
     return
+  const scope = captureScope()
   navigationPending.value = true
   try {
-    if (!await conversationNavigation.openConversation(id))
+    if (!await conversationNavigation.openConversation(id) && isCurrentScope(scope))
       setFeedback(mt('session-selector.navigation-failed'), 'error')
   }
   catch {
-    setFeedback(mt('session-selector.navigation-failed'), 'error')
+    if (isCurrentScope(scope))
+      setFeedback(mt('session-selector.navigation-failed'), 'error')
   }
   finally {
-    navigationPending.value = false
+    if (isCurrentScope(scope))
+      navigationPending.value = false
   }
 }
 watch(roleOptions, (options) => {
@@ -178,32 +224,40 @@ watch(sessionOptions, (options) => {
     viewSessionId.value = options[0]?.id ?? ''
 }, { immediate: true })
 
-let inspectionRevision = 0
 async function refreshInspection() {
+  const scope = captureScope()
   const sessionId = viewSessionId.value
   const revision = ++inspectionRevision
   inspectionMessages.value = []
+  inspectionStars.value = {}
   inspectionLoading.value = Boolean(sessionId)
   errorMsg.value = ''
   if (!sessionId)
     return
   try {
     const record = await chatSession.readSessionForInspection(sessionId)
-    if (revision === inspectionRevision)
+    if (revision === inspectionRevision && isCurrentScope(scope)) {
       inspectionMessages.value = record?.messages ?? []
+      inspectionStars.value = record?.messageStars ?? {}
+      inspectionStarsRevision.value = record?.meta.messageStarsRevision ?? 0
+      return true
+    }
   }
   catch {
-    if (revision === inspectionRevision)
+    if (revision === inspectionRevision && isCurrentScope(scope))
       errorMsg.value = mt('session-selector.load-failed')
   }
   finally {
-    if (revision === inspectionRevision)
+    if (revision === inspectionRevision && isCurrentScope(scope))
       inspectionLoading.value = false
   }
 }
 watch([
   viewSessionId,
+  viewRoleId,
+  () => chatSession.sessionUserId,
   () => allSessions.value.find(meta => meta.sessionId === viewSessionId.value)?.updatedAt,
+  () => allSessions.value.find(meta => meta.sessionId === viewSessionId.value)?.messageStarsRevision,
 ], () => void refreshInspection(), { immediate: true })
 const messages = computed(() => inspectionMessages.value)
 const conversationMessages = computed(() => messages.value.filter(message => message.role !== 'system'))
@@ -218,6 +272,7 @@ const messageRows = computed(() => messages.value.map((message, index) => {
   return {
     index,
     message,
+    starred: Boolean(message.id && inspectionStars.value[message.id]?.starred),
     innerVoiceError: canResolveInnerVoice
       ? innerVoiceNotes.getGenerationErrorForMessage(viewSessionIdSnapshot.value, message.id)
       : undefined,
@@ -228,7 +283,11 @@ const messageRows = computed(() => messages.value.map((message, index) => {
       ? innerVoiceNotes.getNoteForMessage(viewSessionIdSnapshot.value, message.id)
       : undefined,
   }
-}))
+}).sort((left, right) => Number(right.starred) - Number(left.starred) || left.index - right.index))
+const starredCount = computed(() => messageRows.value.filter(row => row.starred).length)
+const retainableCount = computed(() => conversationMessages.value.slice(0, -keepCount.value)
+  .filter(message => !message.id || !inspectionStars.value[message.id]?.starred)
+  .length)
 const activeSessionInnerVoiceNotes = computed(() => {
   if (!viewSessionIdSnapshot.value)
     return []
@@ -250,9 +309,9 @@ const statusSummary = computed(() => {
     }
   }
 
-  if (status.value !== '加载成功') {
+  if (status.value !== 'ready') {
     return {
-      message: status.value,
+      message: mt(`status.${status.value}`),
       tone: 'neutral' as const,
     }
   }
@@ -270,27 +329,6 @@ const statusSummary = computed(() => {
 function setFeedback(message: string, tone: 'neutral' | 'success' | 'error' = 'success') {
   feedbackMessage.value = message
   feedbackTone.value = tone
-}
-
-function getAssistantMessageIdsFromMessages(sourceMessages: ChatHistoryItem[]) {
-  return Array.from(new Set(sourceMessages
-    .filter(message => message.role === 'assistant' && message.id)
-    .map(message => String(message.id))))
-}
-
-async function deleteInnerVoiceNotesForMessages(sessionId: string, sourceMessages: ChatHistoryItem[]) {
-  if (!sessionId)
-    return 0
-
-  const messageIds = getAssistantMessageIdsFromMessages(sourceMessages)
-  const deletedNotes = await Promise.all(
-    messageIds.map(messageId => innerVoiceNotes.deleteNoteForMessage(sessionId, messageId)),
-  )
-  return deletedNotes.filter(note => Boolean(note)).length
-}
-
-function formatInnerVoiceDeleteSuffix(deletedCount: number) {
-  return deletedCount > 0 ? `，同步删除 ${deletedCount} 条心声札记` : ''
 }
 
 async function hydrateInnerVoiceNotesForActiveSession() {
@@ -318,11 +356,14 @@ function refreshInnerVoiceNotesWhenVisible() {
 
 // 从 localStorage 加载配置
 onMounted(async () => {
+  const userId = chatSession.sessionUserId
   window.addEventListener('focus', refreshInnerVoiceNotesForActiveSession)
   document.addEventListener('visibilitychange', refreshInnerVoiceNotesWhenVisible)
 
   try {
     await chatSession.initializeForInspection()
+    if (disposed || userId !== chatSession.sessionUserId)
+      return
 
     const requestedSessionId = typeof route.query.sessionId === 'string' ? route.query.sessionId : undefined
     const requestedCharacterId = typeof route.query.characterId === 'string' ? route.query.characterId : undefined
@@ -333,7 +374,9 @@ onMounted(async () => {
     else
       await inspectCurrentConversation()
 
-    status.value = '加载成功'
+    if (disposed || userId !== chatSession.sessionUserId)
+      return
+    status.value = 'ready'
 
     const savedConfig = localStorage.getItem('short-term-memory-config')
     if (savedConfig) {
@@ -342,13 +385,18 @@ onMounted(async () => {
     }
   }
   catch (error) {
-    errorMsg.value = error instanceof Error ? error.message : String(error)
-    status.value = '加载失败'
+    if (disposed || userId !== chatSession.sessionUserId)
+      return
+    errorMsg.value = mt('session-selector.load-failed')
+    status.value = 'failed'
     console.error('[Short-term Memory] Error:', error)
   }
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  scopeRevision++
+  inspectionRevision++
   window.removeEventListener('focus', refreshInnerVoiceNotesForActiveSession)
   document.removeEventListener('visibilitychange', refreshInnerVoiceNotesWhenVisible)
 })
@@ -366,12 +414,11 @@ watch([viewSessionIdSnapshot, assistantMessageIdsKey], () => {
 
 // 统计信息
 const stats = computed(() => {
-    const msgs = conversationMessages.value
+  const msgs = conversationMessages.value
   return {
     total: msgs.length,
     user: msgs.filter(m => m.role === 'user').length,
     assistant: msgs.filter(m => m.role === 'assistant').length,
-    system: msgs.filter(m => m.role === 'system').length,
     innerVoice: innerVoiceNoteCount.value,
   }
 })
@@ -386,13 +433,13 @@ function formatTime(timestamp?: number) {
   const diffMins = Math.floor(diffMs / (1000 * 60))
 
   if (diffMins < 1)
-    return '刚刚'
+    return mt('time.just-now')
   if (diffMins < 60)
-    return `${diffMins} 分钟前`
+    return mt('time.minutes-ago', { count: diffMins })
   const diffHours = Math.floor(diffMins / 60)
   if (diffHours < 24)
-    return `${diffHours} 小时前`
-  return date.toLocaleString('zh-CN')
+    return mt('time.hours-ago', { count: diffHours })
+  return date.toLocaleString(locale.value)
 }
 
 // 获取消息预览
@@ -403,104 +450,165 @@ function getPreview(message: ChatHistoryItem) {
   })
 }
 
-// 清空所有消息（作用于当前选中的记忆会话）。
-async function clearAll() {
-  if (!chatSession.catalogReady || inspectionLoading.value || !viewSessionId.value || actionPending.value || navigationPending.value)
-    return
+const mutationDisabled = computed(() => !chatSession.catalogReady || inspectionLoading.value
+  || !viewSessionId.value || actionPending.value || navigationPending.value)
 
-  cleanupPending.value = true
-  deleteTarget.value = undefined
-  try {
-    const sessionId = viewSessionIdSnapshot.value
-    const deletedInnerVoiceCount = sessionId
-      ? (await innerVoiceNotes.deleteNotesForSession(sessionId)).length
-      : 0
-
-    await chatSession.cleanupMessages(sessionId || undefined)
-    await refreshInspection()
-    setFeedback(`消息已清空${formatInnerVoiceDeleteSuffix(deletedInnerVoiceCount)}`)
-    await nextTick()
+function confirmationTarget(): ConfirmationTarget {
+  return {
+    sessionId: viewSessionId.value,
+    userId: chatSession.sessionUserId,
+    roleId: viewRoleId.value,
+    title: allSessions.value.find(meta => meta.sessionId === viewSessionId.value)?.title?.trim()
+      || t('stage.chat.conversations.untitled'),
+    starCount: starredCount.value,
+    starsRevision: inspectionStarsRevision.value,
   }
-  catch (error) {
-    setFeedback(`清空失败: ${error}`, 'error')
+}
+
+function matchesConfirmation(target: ConfirmationTarget) {
+  return target.sessionId === viewSessionId.value && target.roleId === viewRoleId.value
+    && target.userId === chatSession.sessionUserId
+}
+
+function resetConfirmations() {
+  clearTarget.value = undefined
+  deleteTarget.value = undefined
+}
+
+async function toggleMessageStar(messageId?: string) {
+  if (mutationDisabled.value || !messageId)
+    return
+  const scope = captureScope()
+  const desired = !inspectionStars.value[messageId]?.starred
+  starPendingMessageId.value = messageId
+  resetConfirmations()
+  feedbackMessage.value = ''
+  try {
+    await chatSession.setMessageStarred(scope.sessionId, messageId, desired)
+    if (isCurrentScope(scope) && await refreshInspection() && isCurrentScope(scope))
+      setFeedback(mt(desired ? 'favorites.saved' : 'favorites.removed'))
+  }
+  catch {
+    if (isCurrentScope(scope))
+      setFeedback(mt('favorites.failed'), 'error')
   }
   finally {
-    cleanupPending.value = false
+    if (isCurrentScope(scope))
+      starPendingMessageId.value = ''
+  }
+}
+
+function requestClearAll() {
+  if (mutationDisabled.value)
+    return
+  deleteTarget.value = undefined
+  clearTarget.value = confirmationTarget()
+}
+
+async function clearAll() {
+  const target = clearTarget.value
+  if (mutationDisabled.value || !target || !matchesConfirmation(target))
+    return
+  const scope = captureScope()
+  cleanupPending.value = true
+  resetConfirmations()
+  feedbackMessage.value = ''
+  try {
+    const result = await chatSession.cleanupMessages(target.sessionId, { expectedMessageStarsRevision: target.starsRevision })
+    if (!result)
+      throw new Error('Cleanup was not completed')
+    if (isCurrentScope(scope) && await refreshInspection() && isCurrentScope(scope))
+      setFeedback(mt(result.innerVoiceCleanupFailed ? 'manual-cleanup.notes-failed' : 'manual-cleanup.cleared'), result.innerVoiceCleanupFailed ? 'error' : 'success')
+  }
+  catch {
+    if (isCurrentScope(scope)) {
+      await refreshInspection()
+      if (isCurrentScope(scope))
+        setFeedback(mt('manual-cleanup.clear-failed'), 'error')
+    }
+  }
+  finally {
+    if (isCurrentScope(scope))
+      cleanupPending.value = false
   }
 }
 
 async function clearInnerVoiceNotes() {
-  if (!chatSession.catalogReady || inspectionLoading.value || !viewSessionIdSnapshot.value || actionPending.value || navigationPending.value)
+  if (mutationDisabled.value)
     return
-
+  const scope = captureScope()
   cleanupPending.value = true
-  deleteTarget.value = undefined
+  resetConfirmations()
   try {
-    const deletedNotes = await innerVoiceNotes.deleteNotesForSession(viewSessionIdSnapshot.value)
+    const deletedNotes = await innerVoiceNotes.deleteNotesForSession(scope.sessionId)
+    if (!isCurrentScope(scope))
+      return
     setFeedback(
       deletedNotes.length > 0
-        ? `已清理 ${deletedNotes.length} 条心声札记`
-        : '没有可清理的心声札记',
+        ? mt('inner-voice.cleared', { count: deletedNotes.length })
+        : mt('inner-voice.none'),
       deletedNotes.length > 0 ? 'success' : 'neutral',
     )
     await nextTick()
   }
-  catch (error) {
-    setFeedback(`清理心声札记失败: ${error}`, 'error')
+  catch {
+    if (isCurrentScope(scope))
+      setFeedback(mt('inner-voice.delete-failed'), 'error')
   }
   finally {
-    cleanupPending.value = false
+    if (isCurrentScope(scope))
+      cleanupPending.value = false
   }
 }
 
 // 保留最近N条（作用于当前选中的记忆会话）。
 async function keepRecent() {
-  if (!chatSession.catalogReady || inspectionLoading.value || !viewSessionId.value || actionPending.value || navigationPending.value)
+  if (mutationDisabled.value)
     return
-
-  const sessionId = viewSessionIdSnapshot.value
-  const msgs = messages.value
-  if (msgs.length <= keepCount.value) {
-    setFeedback('消息数量未超过保留数量', 'neutral')
-    return
-  }
-
-  const toRemove = msgs.length - keepCount.value
+  const scope = captureScope()
+  const count = keepCount.value
   cleanupPending.value = true
-  deleteTarget.value = undefined
+  resetConfirmations()
   try {
-    const removedMessages = msgs.slice(0, toRemove)
-    const deletedInnerVoiceCount = await deleteInnerVoiceNotesForMessages(sessionId, removedMessages)
-    await chatSession.retainRecentMessages(sessionId, keepCount.value)
-    if (viewSessionId.value === sessionId)
-      await refreshInspection()
-    setFeedback(`已删除 ${toRemove} 条旧消息，保留最近 ${keepCount.value} 条消息${formatInnerVoiceDeleteSuffix(deletedInnerVoiceCount)}`)
-    await nextTick()
+    const result = await chatSession.retainRecentMessages(scope.sessionId, count)
+    if (isCurrentScope(scope) && await refreshInspection() && isCurrentScope(scope)) {
+      const removed = result.removedMessageIds.length
+      if (result.innerVoiceCleanupFailed)
+        setFeedback(mt('manual-cleanup.notes-failed'), 'error')
+      else
+        setFeedback(removed > 0 ? mt('manual-cleanup.retained', { removed, count }) : mt('manual-cleanup.nothing-to-remove'), removed > 0 ? 'success' : 'neutral')
+    }
   }
-  catch (error) {
-    setFeedback(`删除旧消息失败: ${error}`, 'error')
+  catch {
+    if (isCurrentScope(scope))
+      setFeedback(mt('manual-cleanup.retain-failed'), 'error')
   }
   finally {
-    cleanupPending.value = false
+    if (isCurrentScope(scope))
+      cleanupPending.value = false
   }
 }
 
 async function deleteInnerVoiceNoteForMessage(messageId?: string, sessionId = viewSessionIdSnapshot.value) {
-  if (!sessionId || !messageId || actionPending.value || navigationPending.value)
+  if (mutationDisabled.value || sessionId !== viewSessionId.value || !messageId)
     return
-
+  const scope = captureScope()
   cleanupPending.value = true
-  deleteTarget.value = undefined
+  resetConfirmations()
   try {
     const deletedNote = await innerVoiceNotes.deleteNoteForMessage(sessionId, String(messageId))
-    setFeedback(deletedNote ? '心声札记已删除，可在聊天继续时重新生成' : '没有找到可删除的心声札记', deletedNote ? 'success' : 'neutral')
+    if (!isCurrentScope(scope))
+      return
+    setFeedback(mt(deletedNote ? 'inner-voice.deleted' : 'inner-voice.none'), deletedNote ? 'success' : 'neutral')
     await nextTick()
   }
-  catch (error) {
-    setFeedback(`删除心声札记失败: ${error}`, 'error')
+  catch {
+    if (isCurrentScope(scope))
+      setFeedback(mt('inner-voice.delete-failed'), 'error')
   }
   finally {
-    cleanupPending.value = false
+    if (isCurrentScope(scope))
+      cleanupPending.value = false
   }
 }
 
@@ -508,22 +616,15 @@ function requestConversationDeletion() {
   const session = selectedDirectSession.value
   if (deletionDisabled.value || !session)
     return
-  // Freeze the confirmation target so a changed selection cannot delete another chat.
-  deleteTarget.value = {
-    sessionId: session.sessionId,
-    userId: chatSession.sessionUserId,
-    roleId: viewRoleId.value,
-    title: session.title?.trim() || t('stage.chat.conversations.untitled'),
-  }
+  clearTarget.value = undefined
+  deleteTarget.value = confirmationTarget()
 }
 
 async function deleteInspectedConversation() {
   const target = deleteTarget.value
-  if (deletionDisabled.value || !target
-    || target.sessionId !== viewSessionId.value || target.roleId !== viewRoleId.value
-    || target.userId !== chatSession.sessionUserId)
+  if (deletionDisabled.value || !target || !matchesConfirmation(target))
     return
-
+  const scope = captureScope()
   deletePending.value = true
   errorMsg.value = ''
   feedbackMessage.value = ''
@@ -531,28 +632,34 @@ async function deleteInspectedConversation() {
   if (role)
     retainedRoleOption.value = { ...role, userId: target.userId }
   try {
-    const deleted = await chatSession.deleteSession(target.sessionId)
-    if (target.userId !== chatSession.sessionUserId)
+    const deleted = await chatSession.deleteSession(target.sessionId, { expectedMessageStarsRevision: target.starsRevision })
+    if (!isCurrentScope(scope))
       return
     if (!deleted) {
       setFeedback(mt('delete-conversation.failed'), 'error')
       return
     }
     await chatSession.refreshFromPersistence()
-    if (target.userId !== chatSession.sessionUserId)
+    if (!isCurrentScope(scope))
       return
     await nextTick()
     await refreshInspection()
-    if (target.userId === chatSession.sessionUserId)
+    if (isCurrentScope(scope))
       setFeedback(mt('delete-conversation.success', { title: target.title }))
   }
   catch {
-    if (target.userId === chatSession.sessionUserId)
+    if (isCurrentScope(scope)) {
+      await refreshInspection()
+      if (!isCurrentScope(scope))
+        return
       setFeedback(mt('delete-conversation.failed'), 'error')
+    }
   }
   finally {
-    deleteTarget.value = undefined
-    deletePending.value = false
+    if (isCurrentScope(scope)) {
+      deleteTarget.value = undefined
+      deletePending.value = false
+    }
   }
 }
 </script>
@@ -595,7 +702,9 @@ async function deleteInspectedConversation() {
       <p class="mt-3 text-xs text-[var(--airi-text-muted)]">
         {{ mt('session-selector.description') }}
       </p>
-      <p :class="['mt-2 text-xs text-[var(--airi-text-muted)] leading-5']">{{ mt('session-selector.context-description') }}</p>
+      <p :class="['mt-2 text-xs text-[var(--airi-text-muted)] leading-5']">
+        {{ mt('session-selector.context-description') }}
+      </p>
       <div :class="['mt-3 flex flex-wrap gap-2']">
         <button type="button" :disabled="navigationPending || actionPending" :class="['rounded-md px-3 py-2 text-xs airi-overlay-control-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click="inspectCurrentConversation">
           {{ mt('session-selector.current') }}
@@ -604,7 +713,9 @@ async function deleteInspectedConversation() {
           {{ mt('session-selector.open') }}
         </button>
       </div>
-      <p v-if="inspectionLoading" role="status" :class="['mt-2 text-sm text-[var(--airi-text-muted)]']">{{ mt('session-selector.loading') }}</p>
+      <p v-if="inspectionLoading" role="status" :class="['mt-2 text-sm text-[var(--airi-text-muted)]']">
+        {{ mt('session-selector.loading') }}
+      </p>
     </div>
 
     <!-- 统计卡片 -->
@@ -619,7 +730,7 @@ async function deleteInspectedConversation() {
       </div>
       <div :class="statCardClass">
         <div :class="statLabelClass">
-          用户消息
+          {{ mt('stats.user') }}
         </div>
         <div class="text-2xl text-[var(--airi-accent-strong)] font-bold">
           {{ stats.user }}
@@ -627,7 +738,7 @@ async function deleteInspectedConversation() {
       </div>
       <div :class="statCardClass">
         <div :class="statLabelClass">
-          助手消息
+          {{ mt('stats.assistant') }}
         </div>
         <div class="text-2xl text-[var(--airi-accent-text)] font-bold">
           {{ stats.assistant }}
@@ -635,7 +746,7 @@ async function deleteInspectedConversation() {
       </div>
       <div :class="statCardClass">
         <div :class="statLabelClass">
-          心声札记
+          {{ mt('inner-voice.title') }}
         </div>
         <div :class="innerVoiceCountClass">
           {{ stats.innerVoice }}
@@ -669,12 +780,12 @@ async function deleteInspectedConversation() {
     <!-- 手动清理操作 -->
     <div :class="panelClass">
       <h3 :class="['mb-4 text-lg font-semibold']">
-        手动清理
+        {{ mt('manual-cleanup.title') }}
       </h3>
 
       <div :class="['mb-4 max-w-sm']">
         <label :class="['mb-2 block text-sm font-medium']">
-          保留消息数：{{ keepCount }} 条
+          {{ mt('manual-cleanup.keep-count', { count: keepCount }) }}
         </label>
         <input
           v-model.number="keepCount"
@@ -686,7 +797,7 @@ async function deleteInspectedConversation() {
           :class="['w-full disabled:opacity-50']"
         >
         <p :class="['mt-1 text-xs text-[var(--airi-text-muted)]']">
-          只有在下方二次确认后才会删除旧消息。
+          {{ mt('manual-cleanup.description') }}
         </p>
       </div>
 
@@ -694,15 +805,15 @@ async function deleteInspectedConversation() {
         <DoubleCheckButton
           variant="caution"
           size="sm"
-          :disabled="!chatSession.catalogReady || inspectionLoading || actionPending || navigationPending || conversationMessages.length <= keepCount"
+          :disabled="mutationDisabled || retainableCount === 0"
           @confirm="keepRecent"
         >
-          保留最近 {{ keepCount }} 条
+          {{ mt('manual-cleanup.keep', { count: keepCount }) }}
           <template #confirm>
-            确认保留最近 {{ keepCount }} 条
+            {{ mt('manual-cleanup.confirm-keep', { count: keepCount }) }}
           </template>
           <template #cancel>
-            取消
+            {{ mt('delete-conversation.cancel') }}
           </template>
         </DoubleCheckButton>
         <DoubleCheckButton
@@ -711,28 +822,36 @@ async function deleteInspectedConversation() {
           :disabled="!chatSession.catalogReady || inspectionLoading || actionPending || navigationPending || innerVoiceNoteCount === 0"
           @confirm="clearInnerVoiceNotes"
         >
-          一键清理心声
+          {{ mt('inner-voice.clear') }}
           <template #confirm>
-            确认清理全部心声
+            {{ mt('inner-voice.confirm-clear') }}
           </template>
           <template #cancel>
-            取消
+            {{ mt('delete-conversation.cancel') }}
           </template>
         </DoubleCheckButton>
-        <DoubleCheckButton
+        <Button
           variant="danger"
           size="sm"
-          :disabled="!chatSession.catalogReady || inspectionLoading || actionPending || navigationPending || messages.length === 0"
-          @confirm="clearAll"
+          :disabled="mutationDisabled || messages.length === 0"
+          @click="requestClearAll"
         >
-          清空所有消息
-          <template #confirm>
-            确认清空
-          </template>
-          <template #cancel>
-            取消
-          </template>
-        </DoubleCheckButton>
+          {{ mt('manual-cleanup.clear-all') }}
+        </Button>
+      </div>
+
+      <div v-if="clearTarget" role="alert" :class="['mt-3 rounded-lg border border-[var(--airi-border-subtle)] p-3 space-y-3']">
+        <p :class="['break-words text-sm text-[var(--airi-text)]']">
+          {{ mt('manual-cleanup.confirm-clear', { title: clearTarget.title, count: clearTarget.starCount }) }}
+        </p>
+        <div :class="['flex flex-wrap gap-2']">
+          <Button size="sm" variant="danger" :disabled="mutationDisabled" @click="clearAll">
+            {{ mt('manual-cleanup.confirm-clear-action') }}
+          </Button>
+          <Button size="sm" variant="secondary" :disabled="actionPending" @click="clearTarget = undefined">
+            {{ mt('delete-conversation.cancel') }}
+          </Button>
+        </div>
       </div>
 
       <div
@@ -746,7 +865,7 @@ async function deleteInspectedConversation() {
             {{ mt('delete-conversation.title') }}
           </h4>
           <p v-if="deleteTarget" role="status" :class="['break-words text-sm font-medium text-[var(--airi-text)]']">
-            {{ mt('delete-conversation.confirm-description', { title: deleteTarget.title }) }}
+            {{ mt('delete-conversation.confirm-description', { title: deleteTarget.title, count: deleteTarget.starCount }) }}
           </p>
           <p v-else :class="['break-words text-xs text-[var(--airi-text-muted)] leading-5']">
             {{ mt('delete-conversation.description') }}
@@ -783,11 +902,17 @@ async function deleteInspectedConversation() {
     <!-- 消息列表 -->
     <div class="space-y-3">
       <h3 class="text-lg font-semibold">
-        消息历史 ({{ messages.length }})
+        {{ mt('history.title', { count: messages.length }) }}
       </h3>
+      <p role="status" :class="['text-sm text-[var(--airi-text-muted)]']">
+        {{ mt(starredCount ? 'favorites.count' : 'favorites.empty', { count: starredCount }) }}
+      </p>
+      <p :class="['text-xs text-[var(--airi-text-muted)] leading-5']">
+        {{ mt('favorites.description') }}
+      </p>
 
       <div v-if="messages.length === 0" :class="emptyStateClass">
-        暂无消息
+        {{ mt('history.empty') }}
       </div>
 
       <div
@@ -802,13 +927,25 @@ async function deleteInspectedConversation() {
           },
         ]"
       >
-        <div class="mb-2 flex items-start justify-between">
+        <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
           <span :class="roleTextClass">
-            {{ row.message.role === 'user' ? '👤 用户' : row.message.role === 'assistant' ? '🤖 助手' : '⚙️ 系统' }}
+            {{ mt(row.message.role === 'user' ? 'history.user' : row.message.role === 'assistant' ? 'history.assistant' : 'history.system') }}
           </span>
-          <span :class="timeTextClass">
-            {{ formatTime(row.message.createdAt) }}
-          </span>
+          <div class="ml-auto flex shrink-0 items-center gap-2">
+            <span :class="timeTextClass">{{ formatTime(row.message.createdAt) }}</span>
+            <button
+              type="button"
+              :aria-pressed="row.starred"
+              :aria-label="mt(row.starred ? 'favorites.unstar' : 'favorites.star')"
+              :title="mt(!row.message.id ? 'favorites.unavailable' : row.starred ? 'favorites.unstar' : 'favorites.star')"
+              :aria-busy="starPendingMessageId === row.message.id"
+              :disabled="mutationDisabled || !row.message.id"
+              :class="[innerVoiceDeleteButtonClass, 'size-8', row.starred ? 'text-[var(--airi-accent-strong)]' : '']"
+              @click="toggleMessageStar(row.message.id)"
+            >
+              <span aria-hidden="true" :class="['size-4', starPendingMessageId === row.message.id ? 'i-svg-spinners:ring-resize' : row.starred ? 'i-ph:star-fill' : 'i-ph:star']" />
+            </button>
+          </div>
         </div>
         <div :class="previewTextClass">
           {{ getPreview(row.message) }}
@@ -817,13 +954,13 @@ async function deleteInspectedConversation() {
           v-if="row.innerVoiceGenerating && !row.innerVoiceNote?.text"
           :class="innerVoicePendingClass"
         >
-          心声札记正在后台生成，还没有写入记忆页。
+          {{ mt('inner-voice.generating') }}
         </div>
         <div
           v-else-if="row.innerVoiceError && !row.innerVoiceNote?.text"
           :class="innerVoiceErrorClass"
         >
-          心声札记没有写入：{{ row.innerVoiceError }}
+          {{ mt('inner-voice.generation-failed', { error: row.innerVoiceError }) }}
         </div>
         <div
           v-if="row.innerVoiceNote?.text"
@@ -832,7 +969,7 @@ async function deleteInspectedConversation() {
           <div class="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium">
             <span class="min-w-0 flex items-center gap-1.5">
               <span class="i-ph:heart-straight-duotone size-3.5 shrink-0" />
-              <span>心声札记</span>
+              <span>{{ mt('inner-voice.title') }}</span>
             </span>
             <div class="flex shrink-0 items-center gap-1.5">
               <span :class="innerVoiceMetaTextClass">
@@ -842,8 +979,8 @@ async function deleteInspectedConversation() {
                 type="button"
                 :disabled="actionPending || navigationPending"
                 :class="innerVoiceDeleteButtonClass"
-                aria-label="只删除这条心声札记"
-                title="只删除这条心声札记"
+                :aria-label="mt('inner-voice.delete')"
+                :title="mt('inner-voice.delete')"
                 @click.stop="deleteInnerVoiceNoteForMessage(row.message.id)"
               >
                 <span class="i-solar:trash-bin-2-bold-duotone size-3.5" />
@@ -867,7 +1004,7 @@ async function deleteInspectedConversation() {
 
       <div v-if="unattachedInnerVoiceNotes.length" class="space-y-3">
         <h4 :class="unattachedTitleClass">
-          未关联到消息行的心声札记 ({{ unattachedInnerVoiceNotes.length }})
+          {{ mt('inner-voice.unattached', { count: unattachedInnerVoiceNotes.length }) }}
         </h4>
         <div
           v-for="note in unattachedInnerVoiceNotes"
@@ -877,7 +1014,7 @@ async function deleteInspectedConversation() {
           <div class="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium">
             <span class="min-w-0 flex items-center gap-1.5">
               <span class="i-ph:heart-straight-duotone size-3.5 shrink-0" />
-              <span>心声札记</span>
+              <span>{{ mt('inner-voice.title') }}</span>
             </span>
             <div class="flex shrink-0 items-center gap-1.5">
               <span :class="innerVoiceMetaTextClass">
@@ -887,8 +1024,8 @@ async function deleteInspectedConversation() {
                 type="button"
                 :disabled="actionPending || navigationPending"
                 :class="innerVoiceDeleteButtonClass"
-                aria-label="只删除这条心声札记"
-                title="只删除这条心声札记"
+                :aria-label="mt('inner-voice.delete')"
+                :title="mt('inner-voice.delete')"
                 @click.stop="deleteInnerVoiceNoteForMessage(note.messageId, note.sessionId)"
               >
                 <span class="i-solar:trash-bin-2-bold-duotone size-3.5" />
@@ -899,7 +1036,7 @@ async function deleteInspectedConversation() {
             {{ note.text }}
           </div>
           <div :class="['mt-1 text-[11px]', innerVoiceMetaTextClass]">
-            消息 {{ note.messageId }}
+            {{ mt('inner-voice.message', { id: note.messageId }) }}
           </div>
           <div v-if="note.moodTags?.length" class="mt-2 flex flex-wrap gap-1.5">
             <span

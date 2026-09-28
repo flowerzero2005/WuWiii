@@ -1,5 +1,6 @@
 import type { CompletedChatTurnForMemory } from './memory-manager'
 
+import { chatSessionsRepo } from '../../database/repos/chat-sessions.repo'
 import { COMPLETED_MEMORY_WORK_PREFIX, isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 
 const PREFIX = COMPLETED_MEMORY_WORK_PREFIX
@@ -114,4 +115,12 @@ export function readPendingMemoryWork(): CompletedChatTurnForMemory[] {
     }
   }
   return pending
+}
+
+/** Record absence remains authoritative when a deletion tombstone could not be saved. */
+export async function canRecoverMemoryWork(turn: CompletedChatTurnForMemory) {
+  if (!turn.sourceSessionId || isSessionMemoryWorkCancelled(turn.sourceSessionId))
+    return false
+  const record = await chatSessionsRepo.getSession(turn.sourceSessionId)
+  return !!record && (!turn.userId || record.meta.userId === turn.userId)
 }

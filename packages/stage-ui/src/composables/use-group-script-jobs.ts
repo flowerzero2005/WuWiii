@@ -6,11 +6,25 @@ import { computed, onScopeDispose, ref, toValue, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { createChatTraceRequest } from '../stores/chat/chat-diagnostics'
 import { generateGroupScriptResponse, parseGroupScriptEvaluation, parseGroupScriptSequelResponse } from '../stores/chat/group-script-runtime'
+import { withSessionActivity } from '../stores/chat/session-record-lock'
 import { useChatSessionStore } from '../stores/chat/session-store'
 import { useConsciousnessStore } from '../stores/modules/consciousness'
 import { useProvidersStore } from '../stores/providers'
 import { useOfficialCapabilityConsentStore } from '../stores/settings/official-capability-consent'
 import { summarizeChatHistoryMessage } from '../utils/chat-message-summary'
+
+interface ChapterJobInput { sessionId: string, turnId: string, groupTurnId?: string, language: string }
+
+/** A provider may ignore AbortSignal; release the caller without accepting its late result. */
+function withChapterAbort<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason ?? new DOMException('The chapter request was cancelled.', 'AbortError'))
+    signal.addEventListener('abort', abort, { once: true })
+    void task.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+    if (signal.aborted)
+      abort()
+  })
+}
 
 /** Runs one opted-in chapter child request with a durable attempt lease. */
 export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
@@ -21,6 +35,7 @@ export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
   const consent = useOfficialCapabilityConsentStore()
   const pending = ref(false)
   let active: { sessionId: string, expectedRevision: number, controller: AbortController } | undefined
+  let scheduled: AbortController | undefined
   const configuration = computed(() => JSON.stringify([
     consciousness.activeProvider,
     consciousness.activeModel,
@@ -32,6 +47,7 @@ export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
   ]))
 
   function cancel() {
+    scheduled?.abort()
     active?.controller.abort()
   }
 
@@ -43,7 +59,7 @@ export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
   }, { flush: 'sync' })
   onScopeDispose(cancel)
 
-  async function run(kind: 'evaluation' | 'sequel', input: { sessionId: string, turnId: string, groupTurnId?: string, language: string }) {
+  async function run(kind: 'evaluation' | 'sequel', input: ChapterJobInput) {
     if (pending.value || input.sessionId !== toValue(currentSessionId))
       return
     const snapshot = configuration.value
@@ -105,9 +121,9 @@ export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
       }).slice(-48)
       if (!messages.some(message => message.id === input.turnId))
         throw new Error('The source conversation turn is no longer available.')
-      const chatProvider = await providers.getProviderInstance<ChatProvider>(providerId)
+      const chatProvider = await withChapterAbort(providers.getProviderInstance<ChatProvider>(providerId), controller.signal)
       assertCurrent()
-      const raw = await generateGroupScriptResponse({ kind, state: leased, messages, chatConfig: chatProvider.chat(model), model, language: input.language, signal: controller.signal, trace, assertCurrent })
+      const raw = await withChapterAbort(generateGroupScriptResponse({ kind, state: leased, messages, chatConfig: chatProvider.chat(model), model, language: input.language, signal: controller.signal, trace, assertCurrent }), controller.signal)
       assertCurrent()
       const command = kind === 'evaluation'
         ? { type: 'evaluate' as const, requestId, evaluation: parseGroupScriptEvaluation(raw, leased, { operationId, evaluationTurnId: input.turnId, evaluatedAt: Date.now() }, messages.map(message => message.id)) }
@@ -134,5 +150,50 @@ export function useGroupScriptJobs(currentSessionId: MaybeRefOrGetter<string>) {
     }
   }
 
-  return { cancel, pending, run }
+  /** Called only after the group speaker requests have reached their final state. */
+  async function scheduleEvaluation(input: ChapterJobInput, display: { isPending: () => boolean, hasVisibleResponse: () => boolean, shouldEvaluate?: () => boolean }) {
+    cancel()
+    const controller = new AbortController()
+    scheduled = controller
+    const snapshot = configuration.value
+    const revision = session.getSessionMeta(input.sessionId)?.roomScriptRevision
+    const deadline = setTimeout(() => controller.abort(new DOMException('The chapter display wait timed out.', 'AbortError')), 120_000)
+    const assertCurrent = () => {
+      controller.signal.throwIfAborted()
+      if (scheduled !== controller || input.sessionId !== toValue(currentSessionId) || snapshot !== configuration.value
+        || revision !== session.getSessionMeta(input.sessionId)?.roomScriptRevision) {
+        throw new DOMException('The completed group turn changed.', 'AbortError')
+      }
+    }
+    try {
+      return await withSessionActivity(input.sessionId, async () => {
+        assertCurrent()
+        while (display.isPending()) {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          try {
+            await withChapterAbort(new Promise<void>(resolve => timer = setTimeout(resolve, 250)), controller.signal)
+          }
+          finally {
+            clearTimeout(timer)
+          }
+          assertCurrent()
+        }
+        if (!display.hasVisibleResponse())
+          return
+        await withChapterAbort(session.persistSessionMessages(input.sessionId, { immediate: true }), controller.signal)
+        assertCurrent()
+        if (display.shouldEvaluate?.() === false)
+          return
+        clearTimeout(deadline)
+        return await run('evaluation', input)
+      })
+    }
+    finally {
+      clearTimeout(deadline)
+      if (scheduled === controller)
+        scheduled = undefined
+    }
+  }
+
+  return { cancel, pending, run, scheduleEvaluation }
 }

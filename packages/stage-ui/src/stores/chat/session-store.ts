@@ -1,5 +1,5 @@
 import type { ChatHistoryItem } from '../../types/chat'
-import type { ChatRoomParticipantSnapshot, ChatSessionMeta, ChatSessionRecord, ChatSessionsExport, ChatSessionsIndex } from '../../types/chat-session'
+import type { ChatHistoryCleanupResult, ChatHistoryDestructiveOptions, ChatRoomParticipantSnapshot, ChatSessionMeta, ChatSessionRecord, ChatSessionsExport, ChatSessionsIndex } from '../../types/chat-session'
 import type { GroupRoomScriptState } from './group-script'
 import type { GroupScriptRuntimeCommand } from './group-script-runtime'
 import type { AiriPersonaRuntimeSnapshot } from './persona-runtime-store'
@@ -17,6 +17,7 @@ import { useAuthStore } from '../auth'
 import { useAiriCardStore } from '../modules/airi-card'
 import { getPersonaCardInitialGreeting } from '../modules/persona-package'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
+import { useMemoryShortTermSettingsStore } from '../settings/memory-short-term'
 import { useUserIdentityStore } from '../user-identity'
 import { collectChatSyncCharacterIds, normalizeChatSyncCharacterId } from './chat-sync-members'
 import { useChatContextStore } from './context-store'
@@ -24,9 +25,10 @@ import { GROUP_CHAT_MAX_PARTICIPANTS, GROUP_CHAT_MIN_PARTICIPANTS, normalizeGrou
 import { parseGroupRoomScriptState } from './group-script'
 import { reduceGroupScriptRuntimeCommand } from './group-script-runtime'
 import { useAssistantInnerVoiceNoteStore } from './inner-voice-notes'
+import { countCleanableMessages, selectRetainedMessages } from './message-retention'
 import { useChatPersonaRuntimeStore } from './persona-runtime-store'
 import { cancelSessionMemoryWork, isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
-import { withSessionRecordLock, withUserSessionIndexLock } from './session-record-lock'
+import { withIdleSession, withSessionRecordLock, withUserSessionIndexLock } from './session-record-lock'
 import { useChatStreamStore } from './stream-store'
 
 export { DIRECT_CONVERSATION_PREVIEW_VERSION }
@@ -127,6 +129,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
           const selectedAtDeletion = selectionRevision
           const characterId = payload.deletedSessionId ? getSessionMeta(payload.deletedSessionId)?.characterId : undefined
           if (payload.deletedSessionId) {
+            fenceCommittedSessionDeletion(payload.deletedSessionId)
             forgetMissingSession(payload.deletedSessionId)
             clearDeletedSessionRuntime(payload.deletedSessionId)
           }
@@ -148,6 +151,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         // wholesale is the point — otherwise a stale-but-recently-persisted window would
         // keep its old messages after another window cleaned the session.
         const currentMeta = sessionMetas.value[payload.sessionId]
+        // Stars have an independent revision and never arrive on messages.
+        // Refresh their indexed revision even if this history broadcast is stale.
+        if ((incomingMeta.messageStarsRevision ?? 0) > (currentMeta?.messageStarsRevision ?? 0))
+          setSessionMeta({ ...(currentMeta ?? incomingMeta), messageStarsRevision: incomingMeta.messageStarsRevision })
         if ((currentMeta?.historyRevision ?? 0) > (incomingMeta.historyRevision ?? 0))
           return
         isReset ||= (incomingMeta.historyRevision ?? 0) > (currentMeta?.historyRevision ?? 0)
@@ -222,7 +229,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       crossWindowChannel.postMessage({
         type: 'chat-session-updated',
         sessionId,
-        userId: getCurrentUserId(),
+        userId: meta.userId,
         characterId: meta.characterId,
         meta: cloneSnapshot(meta),
         messages: cloneSnapshot(messages),
@@ -234,13 +241,18 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     }
   }
 
-  function broadcastSessionMembership(deletedSessionId?: string) {
+  function broadcastSessionMembership(deletedSessionId?: string, ownerId = getCurrentUserId()) {
     ensureCrossWindowSync()
-    crossWindowChannel?.postMessage({
-      type: 'chat-session-membership',
-      userId: getCurrentUserId(),
-      ...(deletedSessionId ? { deletedSessionId } : {}),
-    } satisfies ChatSessionMembershipEvent)
+    try {
+      crossWindowChannel?.postMessage({
+        type: 'chat-session-membership',
+        userId: ownerId,
+        ...(deletedSessionId ? { deletedSessionId } : {}),
+      } satisfies ChatSessionMembershipEvent)
+    }
+    catch (error) {
+      console.warn('[ChatSession] Membership saved; cross-window notification failed:', error)
+    }
   }
 
   function broadcastSessionReset(sessionId: string, meta: ChatSessionMeta, messages: ChatHistoryItem[]) {
@@ -252,7 +264,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       crossWindowChannel.postMessage({
         type: 'chat-session-reset',
         sessionId,
-        userId: getCurrentUserId(),
+        userId: meta.userId,
         characterId: meta.characterId,
         meta: cloneSnapshot(meta),
         messages: cloneSnapshot(messages),
@@ -472,7 +484,13 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     const personaRuntime = boundedRuntimeSnapshot(record.personaRuntime, meta.sessionId)
     return {
       meta,
-      messages: record.messages,
+      messages: record.messages.map((message, index) => message.id
+        ? message
+        : {
+            ...message,
+            id: `legacy:${meta.sessionId}:${meta.historyRevision ?? 0}:${index}`,
+          }),
+      ...(record.messageStars ? { messageStars: cloneSnapshot(record.messageStars) } : {}),
       ...(roomScript ? { roomScript } : {}),
       ...(personaRuntime ? { personaRuntime } : {}),
     }
@@ -542,6 +560,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   function setSessionMeta(meta: ChatSessionMeta) {
     const knownMeta = mergeDirectSessionMeta(sessionMetas.value[meta.sessionId], getIndexedSessionMeta(meta.sessionId) ?? meta)
     const normalizedMeta = mergeDirectSessionMeta(knownMeta, normalizeSessionMeta(meta))
+    normalizedMeta.messageStarsRevision = Math.max(knownMeta?.messageStarsRevision ?? 0, meta.messageStarsRevision ?? 0)
     sessionMetas.value[normalizedMeta.sessionId] = normalizedMeta
     const characterIndex = index.value?.characters?.[normalizedMeta.characterId]
     if (characterIndex)
@@ -684,7 +703,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
           cachedRecord = await chatSessionsRepo.getSession(sessionId)
           if (!cachedRecord)
             return
-          const normalizedMessages = cachedRecord.messages.map(message => message.id ? message : { ...message, id: nanoid() })
+          const normalizedMessages = normalizeSessionRecord(cachedRecord).messages
           if (normalizedMessages.some((message, index) => cachedRecord?.messages[index]?.id !== message.id)) {
             cachedRecord = { ...cachedRecord, messages: normalizedMessages }
             await chatSessionsRepo.saveSession(sessionId, cachedRecord)
@@ -1028,10 +1047,16 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   }
 
   /** Called inside the session -> user-index locks. Only insert creates membership. */
-  async function saveSessionWithIndex(record: ChatSessionRecord, options?: { insert?: boolean, setActive?: boolean }) {
-    const meta = record.meta
+  async function saveSessionWithIndex(record: ChatSessionRecord, options?: { insert?: boolean, setActive?: boolean, allowIndexRepair?: boolean }) {
+    let meta = record.meta
     const runtime = boundedRuntimeSnapshot(useChatPersonaRuntimeStore().getLatestRuntimeSnapshot(meta.sessionId), meta.sessionId)
     const previous = !options?.insert ? await chatSessionsRepo.getSession(meta.sessionId) : undefined
+    // Only the explicit star mutation may advance its revision. Message saves,
+    // script commands and stale windows must retain the latest durable map.
+    if (previous && (previous.meta.messageStarsRevision ?? 0) >= (meta.messageStarsRevision ?? 0)) {
+      meta = { ...meta, messageStarsRevision: previous.meta.messageStarsRevision }
+      record = { ...record, meta, messageStars: previous.messageStars }
+    }
     record = {
       ...record,
       ...(runtime || record.personaRuntime || previous?.personaRuntime
@@ -1058,7 +1083,9 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       // The record is durable already. Reload it before another script action;
       // a retry must repair metadata without repeating the durable command.
       staleRoomScriptSessionIds.add(meta.sessionId)
-      throw error
+      if (!options?.allowIndexRepair)
+        throw error
+      console.warn('[ChatSession] Change saved; index repair is pending:', error)
     }
     adoptPersistedIndex(latest)
     return true
@@ -1094,15 +1121,25 @@ export const useChatSessionStore = defineStore('chat-session', () => {
         delete latest.characters[characterId]
     }
     await chatSessionsRepo.deleteSession(sessionId)
+    // Record removal is the commit point. Missing records can never be
+    // recreated by ordinary persistence; later failures are repairable.
+    fenceCommittedSessionDeletion(sessionId)
     try {
       await chatSessionsRepo.saveIndex(latest)
     }
     catch (error) {
-      adoptPersistedIndex(latest)
-      forgetMissingSession(sessionId)
-      throw error
+      console.warn('[ChatSession] Session deleted; index repair is pending:', error)
     }
     adoptPersistedIndex(latest)
+  }
+
+  function fenceCommittedSessionDeletion(sessionId: string) {
+    try {
+      cancelSessionMemoryWork(sessionId)
+    }
+    catch (error) {
+      console.warn('[ChatSession] Session deleted; durable memory cancellation could not be saved:', error)
+    }
   }
 
   /** Repair only existing membership, inside the session -> user-index locks. */
@@ -1687,6 +1724,28 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     broadcastSessionMembership()
   }
 
+  async function setMessageStarred(sessionId: string, messageId: string, starred: boolean): Promise<void> {
+    const ownerId = getCurrentUserId()
+    await enqueueSessionPersist(sessionId, async () => {
+      const raw = await chatSessionsRepo.getSession(sessionId)
+      if (!raw || raw.meta.userId !== ownerId || getCurrentUserId() !== ownerId)
+        throw new Error('Conversation is no longer available.')
+      const record = normalizeSessionRecord(raw)
+      if (!record.messages.some(message => message.id === messageId))
+        throw new Error('Message is no longer available.')
+      const revision = (record.meta.messageStarsRevision ?? 0) + 1
+      if (!Number.isSafeInteger(revision))
+        throw new Error('Message star revision limit reached.')
+      const meta = { ...record.meta, messageStarsRevision: revision }
+      const next = { ...record, meta, messageStars: { ...record.messageStars, [messageId]: { starred, revision } } }
+      if (!await saveSessionWithIndex(next, { allowIndexRepair: true }))
+        throw new Error('Conversation is no longer available.')
+      if (getCurrentUserId() === ownerId)
+        setSessionMeta(meta)
+    }, ownerId)
+    broadcastSessionMembership(undefined, ownerId)
+  }
+
   /** Reads a detached snapshot without selecting, loading, or repairing any session. */
   async function readSessionForInspection(sessionId: string): Promise<ChatSessionRecord | undefined> {
     const ownerId = getCurrentUserId()
@@ -1695,8 +1754,9 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     return withSessionRecordLock(sessionId, async () => {
       const stored = await chatSessionsRepo.getSession(sessionId)
       if (!stored || stored.meta.userId !== ownerId || getCurrentUserId() !== ownerId
-        || isSessionMemoryWorkCancelled(sessionId))
+        || isSessionMemoryWorkCancelled(sessionId)) {
         return undefined
+      }
       return cloneSnapshot(normalizeSessionRecord(stored))
     })
   }
@@ -2083,63 +2143,111 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     ensureSessionLoaded(sessionId)
   }
 
-  async function replaceSessionHistory(sessionId: string, select: (record: ChatSessionRecord) => ChatHistoryItem[]) {
+  function assertDestructiveRevision(record: ChatSessionRecord, options?: ChatHistoryDestructiveOptions) {
+    if (options?.expectedMessageStarsRevision !== undefined
+      && options.expectedMessageStarsRevision !== (record.meta.messageStarsRevision ?? 0)) {
+      throw new Error('Message stars changed. Refresh and confirm again.')
+    }
+  }
+
+  async function replaceSessionHistory(sessionId: string, select: (record: ChatSessionRecord) => ChatHistoryItem[], options?: ChatHistoryDestructiveOptions): Promise<ChatHistoryCleanupResult> {
     const ownerId = getCurrentUserId()
     if (isSessionMemoryWorkCancelled(sessionId))
       throw new Error('Conversation is no longer available.')
-    bumpSessionGeneration(sessionId)
     if (sessionMetas.value[sessionId] && sessionMessages.value[sessionId])
       await persistSessionMessages(sessionId, { immediate: true })
     let replacement: ChatSessionRecord | undefined
+    let result: ChatHistoryCleanupResult = { removedMessageIds: [], retainedMessageIds: [] }
     await enqueueSessionPersist(sessionId, async () => {
       const raw = await chatSessionsRepo.getSession(sessionId)
       if (!raw || raw.meta.userId !== ownerId || getCurrentUserId() !== ownerId)
         throw new Error('Conversation is no longer available.')
       const record = normalizeSessionRecord(raw)
+      assertDestructiveRevision(record, options)
       const messages = snapshotMessages(select(record))
+      const retainedIds = new Set(messages.map(message => message.id).filter((id): id is string => !!id))
+      result = {
+        removedMessageIds: record.messages.flatMap(message => message.id && !retainedIds.has(message.id) ? [message.id] : []),
+        retainedMessageIds: [...retainedIds],
+      }
+      if (!result.removedMessageIds.length && messages.length === record.messages.length)
+        return
+      const messageStars = Object.fromEntries(Object.entries(record.messageStars ?? {}).filter(([id]) => retainedIds.has(id)))
+      const starsPruned = Object.keys(messageStars).length !== Object.keys(record.messageStars ?? {}).length
       const meta: ChatSessionMeta = {
         ...record.meta,
         ...(record.meta.kind !== 'room' ? directMessageSummary(record.meta, record.meta, messages) : {}),
         historyRevision: (record.meta.historyRevision ?? 0) + 1,
+        messageStarsRevision: (record.meta.messageStarsRevision ?? 0) + (starsPruned ? 1 : 0),
         updatedAt: Math.max(Date.now(), record.meta.updatedAt + 1),
       }
-      replacement = { ...record, meta, messages }
-      if (!await saveSessionWithIndex(replacement))
+      replacement = { ...record, meta, messages, ...(record.messageStars ? { messageStars } : {}) }
+      if (!await saveSessionWithIndex(replacement, { allowIndexRepair: true }))
         throw new Error('Conversation is no longer available.')
       setSessionMeta(meta)
+      bumpSessionGeneration(sessionId)
       sessionMessages.value[sessionId] = messages
       loadedSessions.add(sessionId)
     }, ownerId)
     if (replacement)
       broadcastSessionReset(sessionId, replacement.meta, replacement.messages)
+    return result
   }
 
-  async function retainRecentMessages(sessionId: string, count: number): Promise<void> {
+  async function deleteRemovedInnerVoiceNotes(sessionId: string, result: ChatHistoryCleanupResult) {
+    const notes = useAssistantInnerVoiceNoteStore()
+    await Promise.all(result.removedMessageIds.map(id => notes.deleteNoteForMessage(sessionId, id).catch((error) => {
+      result.innerVoiceCleanupFailed = true
+      console.warn('[ChatSession] Failed to delete removed message inner voice note:', error)
+    })))
+  }
+
+  async function retainRecentMessages(sessionId: string, count: number): Promise<ChatHistoryCleanupResult> {
     if (!Number.isSafeInteger(count) || count < 0)
       throw new Error('Message count must be a non-negative integer.')
-    await replaceSessionHistory(sessionId, (record) => {
-      const initialSystem = record.messages[0]?.role === 'system' ? [record.messages[0]] : []
-      const visible = record.messages.filter(message => message.role !== 'system')
-      return [...initialSystem, ...(count ? visible.slice(-count) : [])]
+    const result = await replaceSessionHistory(sessionId, record => selectRetainedMessages(record, count))
+    await deleteRemovedInnerVoiceNotes(sessionId, result)
+    return result
+  }
+
+  async function autoCleanupSession(sessionId: string): Promise<ChatHistoryCleanupResult | undefined> {
+    const settings = useMemoryShortTermSettingsStore()
+    if (!settings.settings.autoCleanupEnabled || isSessionMemoryWorkCancelled(sessionId))
+      return
+    const ownerId = getCurrentUserId()
+    return withIdleSession(sessionId, async () => {
+      if (getCurrentUserId() !== ownerId || useChatStreamStore().streamingSessionId === sessionId)
+        return
+      const limit = settings.settings.autoCleanupLimit
+      // Recheck under the record lock. Concurrent windows cannot double-clean;
+      // no-op selections do not advance history revisions or cancel queues.
+      const result = await replaceSessionHistory(sessionId, record => settings.settings.autoCleanupEnabled
+        && countCleanableMessages(record) > limit
+        ? selectRetainedMessages(record, limit)
+        : record.messages)
+      await deleteRemovedInnerVoiceNotes(sessionId, result)
+      return result
     })
   }
 
-  async function cleanupMessages(sessionId = activeSessionId.value) {
+  async function cleanupMessages(sessionId = activeSessionId.value, options?: ChatHistoryDestructiveOptions): Promise<ChatHistoryCleanupResult | undefined> {
     if (!sessionId)
       return
 
-    await replaceSessionHistory(sessionId, record => record.meta.kind === 'room'
+    const result = await replaceSessionHistory(sessionId, record => record.meta.kind === 'room'
       ? [generateInitialMessageFromPrompt('Group chat room. The selected character prompt is injected for each reply.')]
-      : generateInitialMessages(record.meta.characterId))
+      : generateInitialMessages(record.meta.characterId), options)
     const innerVoiceNotes = useAssistantInnerVoiceNoteStore()
-    void innerVoiceNotes.deleteNotesForSession(sessionId).catch((error) => {
+    await innerVoiceNotes.deleteNotesForSession(sessionId).catch((error) => {
+      result.innerVoiceCleanupFailed = true
       console.warn('[ChatSession] Failed to delete inner voice notes for cleaned session:', error)
     })
-    void import('./context-providers')
+    void import('./conversation-initializer')
       .then(({ resetConversationInitialization }) => resetConversationInitialization(sessionId))
       .catch((error) => {
         console.warn('[ChatSession] Failed to reset conversation initialization state:', error)
       })
+    return result
   }
 
   function getAllSessions() {
@@ -2156,22 +2264,11 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       for (const sessionId of Object.keys(character.sessions))
         sessionIds.add(sessionId)
     }
-    // Invalidate streams before deletion starts, and retain their tombstones.
-    // Clearing generations to zero could make an old captured zero valid again.
     for (const sessionId of sessionIds) {
-      cancelSessionMemoryWork(sessionId)
+      await enqueueSessionPersist(sessionId, () => deleteSessionWithIndex(sessionId, currentUserId), currentUserId)
       forgetMissingSession(sessionId)
       clearDeletedSessionRuntime(sessionId)
-    }
-
-    for (const sessionId of sessionIds) {
-      try {
-        await enqueueSessionPersist(sessionId, () => deleteSessionWithIndex(sessionId, currentUserId), currentUserId)
-      }
-      finally {
-        forgetMissingSession(sessionId)
-        broadcastSessionMembership(sessionId)
-      }
+      broadcastSessionMembership(sessionId)
     }
 
     for (const [sessionId, scheduled] of scheduledSessionPersists) {
@@ -2194,7 +2291,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     index.value = await withUserSessionIndexLock(currentUserId, () => latestSessionIndex(currentUserId))
 
     // 重置对话初始化状态，确保下次对话会重新初始化
-    const { resetConversationInitialization } = await import('./context-providers')
+    const { resetConversationInitialization } = await import('./conversation-initializer')
     resetConversationInitialization()
 
     await createSession(characterId)
@@ -2219,7 +2316,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       // loaded sessions; bounded catalog repair handles crash recovery.
       for (const character of Object.values(storedIndex.characters)) {
         for (const sessionId of Object.keys(character.sessions)) {
-          if (!sessionsToRefresh.has(sessionId))
+          if (!sessionsToRefresh.has(sessionId) && !isSessionMemoryWorkCancelled(sessionId))
             continue
           await enqueueSessionPersist(sessionId, async () => {
             const raw = await chatSessionsRepo.getSession(sessionId)
@@ -2295,34 +2392,31 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     }
   }
 
-  async function deleteSession(sessionId: string) {
+  async function deleteSession(sessionId: string, options?: ChatHistoryDestructiveOptions) {
     const meta = getSessionMeta(sessionId)
     if (!meta || meta.userId !== getCurrentUserId())
       return false
 
-    cancelSessionMemoryWork(sessionId)
-    ensureGeneration(sessionId)
-    sessionGenerations.value[sessionId] += 1
-
-    const scheduled = scheduledSessionPersists.get(sessionId)
-    if (scheduled) {
-      clearTimeout(scheduled.timer)
-      scheduledSessionPersists.delete(sessionId)
-      scheduled.resolve()
-    }
-
     const wasActive = activeSessionId.value === sessionId
     const ownerId = meta.userId
-    try {
-      await enqueueSessionPersist(sessionId, () => deleteSessionWithIndex(sessionId, ownerId), ownerId)
+    await enqueueSessionPersist(sessionId, async () => {
+      const record = await chatSessionsRepo.getSession(sessionId)
+      if (!record || record.meta.userId !== ownerId || getCurrentUserId() !== ownerId)
+        throw new Error('Conversation is no longer available.')
+      assertDestructiveRevision(record, options)
+      await deleteSessionWithIndex(sessionId, ownerId)
+    }, ownerId)
+    forgetMissingSession(sessionId)
+    clearDeletedSessionRuntime(sessionId)
+    broadcastSessionMembership(sessionId, ownerId)
+    if (wasActive && getCurrentUserId() === ownerId && !activeSessionId.value) {
+      try {
+        await selectFallbackSession(meta.kind === 'room' ? getCurrentCharacterId() : meta.characterId)
+      }
+      catch (error) {
+        console.warn('[ChatSession] Session deleted; selecting a replacement conversation failed:', error)
+      }
     }
-    finally {
-      forgetMissingSession(sessionId)
-      clearDeletedSessionRuntime(sessionId)
-      broadcastSessionMembership(sessionId)
-    }
-    if (wasActive && !activeSessionId.value)
-      await selectFallbackSession(meta.kind === 'room' ? getCurrentCharacterId() : meta.characterId)
 
     return true
   }
@@ -2341,8 +2435,14 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   }
 
   function clearDeletedSessionRuntime(sessionId: string) {
-    for (const listener of deletionListeners)
-      listener(sessionId)
+    for (const listener of deletionListeners) {
+      try {
+        listener(sessionId)
+      }
+      catch (error) {
+        console.warn('[ChatSession] Could not notify a deleted-session listener:', error)
+      }
+    }
     useChatStreamStore().resetStream(sessionId)
     useChatContextStore().clearContextsForSession(sessionId)
     const runtime = useChatPersonaRuntimeStore()
@@ -2355,7 +2455,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     runtime.clearEmotionHistory(sessionId)
     void useAssistantInnerVoiceNoteStore().deleteNotesForSession(sessionId)
       .catch(error => console.warn('[ChatSession] Failed to clear deleted session inner voice notes:', error))
-    void import('./context-providers').then(({ resetConversationInitialization }) => resetConversationInitialization(sessionId))
+    void import('./conversation-initializer').then(({ resetConversationInitialization }) => resetConversationInitialization(sessionId))
       .catch(error => console.warn('[ChatSession] Failed to clear conversation initialization:', error))
   }
 
@@ -2396,6 +2496,8 @@ export const useChatSessionStore = defineStore('chat-session', () => {
   }
 
   function getSessionMeta(sessionId: string) {
+    if (deletedSessionIds.has(sessionId) || isSessionMemoryWorkCancelled(sessionId))
+      return undefined
     return sessionMetas.value[sessionId] ?? getIndexedSessionMeta(sessionId)
   }
 
@@ -2550,6 +2652,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     activateDirectSession,
     renameDirectSession,
     setDirectSessionStarred,
+    setMessageStarred,
     ensureDirectSessionPreviews,
     readSessionForInspection,
     createGroupSession,
@@ -2564,6 +2667,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     selectOrCreateSessionForCharacter,
     cleanupMessages,
     retainRecentMessages,
+    autoCleanupSession,
     getAllSessions,
     resetAllSessions,
 

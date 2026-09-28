@@ -11,7 +11,7 @@ import { useMemorySettingsStore } from '../settings/memory'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
 import { calculateSimilarity, findDuplicates, mergeDuplicates } from './memory-deduplication'
 import { validateMemoryExtractionCandidates } from './memory-extractor'
-import { completeMemoryWork, journalCompletedMemoryWork, readPendingMemoryWork } from './memory-work-journal'
+import { canRecoverMemoryWork, completeMemoryWork, journalCompletedMemoryWork, readPendingMemoryWork } from './memory-work-journal'
 import { isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 
 const RECENT_PROCESSED_TURN_TTL_MS = 60_000
@@ -414,6 +414,10 @@ export const useMemoryManager = defineStore('memory-manager', () => {
   void Promise.resolve().then(async () => {
     for (const turn of readPendingMemoryWork()) {
       try {
+        if (!await canRecoverMemoryWork(turn)) {
+          completeMemoryWork(turn)
+          continue
+        }
         await processCompletedChatTurnForMemory(turn)
       }
       catch (error) {
