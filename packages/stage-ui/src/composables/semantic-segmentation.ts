@@ -1,3 +1,4 @@
+import { removeActMarkers } from './act-markers'
 import { removeLeakedToolProtocol } from './llm-marker-parser'
 import { removeInternalResponseTags } from './response-categoriser'
 
@@ -38,7 +39,6 @@ const CONTINUATION_PUNCTUATION = new Set(['。', '！', '？', '!', '?', '…', 
 const MEMORY_CAPTURE_MARKER_RE = /<\|MEMORY_CAPTURE\b[\s\S]*?(?:\|>|$)/gi
 const INCOMPLETE_MARKER_RE = /<\|[\s\S]*$/g
 const SPECIAL_MARKER_RE = /<\|[\s\S]*?\|>/g
-const ACT_MARKER_RE = /<\|\s*ACT\b(?:(?!\|>)[\s\S])*?\}\s*\|{2,}>?/gi
 const DISPLAY_MARKER_RE = /<\|(?:DELAY|SEGMENT)\b(?:(?!\|>)[\s\S])*?\|{2,}>?/gi
 
 export interface SemanticSegmentationOptions {
@@ -78,8 +78,7 @@ export function removeSpecialMarkers(text: string, options?: RemoveSpecialMarker
     // MEMORY_CAPTURE is a private decision envelope. Consume an incomplete
     // envelope through EOF as well, otherwise parser.end() can expose model
     // protocol (and potentially a secret) in the final bubble/TTS.
-    result = result.replace(MEMORY_CAPTURE_MARKER_RE, '')
-      .replace(ACT_MARKER_RE, '')
+    result = removeActMarkers(result).replace(MEMORY_CAPTURE_MARKER_RE, '')
       .replace(DISPLAY_MARKER_RE, '')
       .replace(SPECIAL_MARKER_RE, '')
       // Truncated marker names (including '<|A') are private too. Strip

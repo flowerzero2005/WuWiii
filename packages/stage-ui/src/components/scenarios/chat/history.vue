@@ -304,7 +304,18 @@ function handleTypingComplete(payload: { messageId: string }) {
     && chatStream.streamingSessionId === sessionId
     && props.streamingMessage
     && isSameAssistantMessage(props.streamingMessage, { id: payload.messageId })) {
-    chatStream.resetStream(sessionId)
+    if (message?.role === 'assistant') {
+      chatStream.resetStream(sessionId)
+    }
+    else {
+      // Speech may finish typing before the audio turn commits to history.
+      // Keep the completed draft until that commit so history cannot replay it.
+      const draft = chatStream.streamingMessage
+      if (draft?.id === payload.messageId && draft.metadata) {
+        draft.metadata.typingCompleted = true
+        chatStream.streamingMessage = draft
+      }
+    }
   }
   emit('typingComplete', { ...payload, sessionId })
 }

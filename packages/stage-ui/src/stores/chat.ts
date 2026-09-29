@@ -21,6 +21,7 @@ import { defineStore, storeToRefs } from 'pinia'
 import { computed, onScopeDispose, ref, toRaw, watch } from 'vue'
 
 import { useAnalytics } from '../composables'
+import { extractActMarkers } from '../composables/act-markers'
 import { useLlmmarkerParser } from '../composables/llm-marker-parser'
 import { parseActPerformance } from '../composables/queues'
 import { categorizeResponse, createStreamingCategorizer } from '../composables/response-categoriser'
@@ -1970,7 +1971,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       let actionCardIds: Array<string> = []
       let actionBroadcastFired = false
       function fireActionBroadcast() {
-        if (actionBroadcastFired || performanceMarkers.length === 0)
+        if (actionBroadcastFired || actionCardIds.length === 0)
           return
         actionBroadcastFired = true
         live2dStore.broadcastLive2DActionRequest(stageModelSettings.stageModelSelected, actionCardIds)
@@ -2279,6 +2280,9 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           clearSynthesisWatchdogKeepalive()
           clearAllSegmentDisplayFallbackTimers()
           clearDelayTimers()
+          const foregroundDraftAtFinish = !groupRuntime && ownsStreamingDraft() ? streamingMessage.value : null
+          const foregroundAlreadyTyped = foregroundDraftAtFinish?.id === buildingMessage.id
+            && foregroundDraftAtFinish?.metadata?.typingCompleted === true
 
           // Keep the speed calculated from the actual audio duration when the
           // controller performs its final full-text refresh. Passing no timing
@@ -2295,6 +2299,17 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           }
           else if (displayedText.trim()) {
             displayText(displayedText, displayOptions)
+          }
+
+          // The final refresh above resets typingCompleted while copying the
+          // full text. Once every audio segment has actually played, the text
+          // must be final too. A text-first fallback keeps its typewriter.
+          const playbackCompleted = ttsSegmentIds.size > 0
+            && playbackEndedSegmentIds.size >= ttsSegmentIds.size
+          if (!groupRuntime && (playbackCompleted || foregroundAlreadyTyped) && buildingMessage.metadata) {
+            buildingMessage.metadata.typingCompleted = true
+            delete buildingMessage.metadata.typingSpeedMs
+            delete buildingMessage.metadata.typingStartedAt
           }
 
           disposeEventListener()
@@ -2795,19 +2810,18 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           }
 
           if (buildingMessage.metadata) {
-            // The renderer owns the final typewriter completion signal. The
-            // speech controller can finish when audio ends before the last
-            // frame of the bubble is painted; marking this true here makes
-            // ChatAssistantItem classify the message as history and render
-            // the whole reply immediately. Keep the direct turn pending until
-            // the component emits `typingComplete`.
-            // The speech controller only knows that the audio/display turn
-            // finished. The renderer still has to paint the final characters
-            // and emit `typing-complete`; marking a group message complete
-            // here makes ChatAssistantItem render the whole reply at once and
-            // lets recommendations appear before the bubble is finished.
-            buildingMessage.metadata.typingCompleted = false
-            buildingMessage.metadata.typingStartedAt ??= Date.now()
+            // The direct speech controller marks its final display turn
+            // complete. Also honor an earlier renderer completion if its
+            // typewriter finished before the audio callback.
+            const foregroundDraft = !groupRuntime && ownsStreamingDraft() ? streamingMessage.value : null
+            const draftAlreadyTyped = buildingMessage.metadata.typingCompleted === true
+              || (foregroundDraft?.id === buildingMessage.id
+                && foregroundDraft?.metadata?.typingCompleted === true)
+            buildingMessage.metadata.typingCompleted = draftAlreadyTyped
+            if (draftAlreadyTyped)
+              delete buildingMessage.metadata.typingStartedAt
+            else
+              buildingMessage.metadata.typingStartedAt ??= Date.now()
           }
 
           const committedMessage = toRaw(buildingMessage) as ChatHistoryItem
@@ -2835,7 +2849,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           // typed the final character. The persisted message is deliberately
           // hidden by ChatHistory during that hand-off; clearing this draft at
           // speech completion used to replace the typewriter mid-reply.
-          if (groupRuntime && ownsStreamingDraft())
+          if ((groupRuntime || buildingMessage.metadata?.typingCompleted === true) && ownsStreamingDraft())
             streamingMessage.value = null
 
           await chatSession.persistSessionMessages(sessionId, { immediate: true })
@@ -3170,17 +3184,18 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           // 触发前赋值，引用提前算好的数组即可）与首段揭示时刻的 fireActionBroadcast
           // （动作与打字机同步，本轮核心诉求）。
           performanceMarkers = performanceSafetyApproved
-            ? Array.from(performanceTextSource.matchAll(/<\|\s*ACT\s*(?:(?::|=)\s*)?\{[\s\S]*?\}\s*\|>/gi)).map(match => ({
-                offset: createReadableFinalText(performanceTextSource.slice(0, match.index), turnProviderId).length,
-                special: match[0],
+            ? extractActMarkers(performanceTextSource).map(marker => ({
+                offset: createReadableFinalText(performanceTextSource.slice(0, marker.index), turnProviderId).length,
+                special: marker.normalized,
               }))
             : []
           // NOTICE: 跨窗口动作通道——ACT 标记不依赖 TTS special 流动（whole 分段模式下
           // 该通道断链，主窗口模型收不到动作）。这里直接从 markers 反解析 actionCardId
           // 广播，由渲染模型的窗口按序播放；主窗口自己发消息时走本地播放路径。
+          const allowedActionCardIds = new Set(actionCards.filter(card => card.aiSelectable !== false).map(card => card.id))
           actionCardIds = performanceMarkers.flatMap((marker) => {
             const parsed = parseActPerformance(marker.special)
-            return parsed.ok && parsed.actionCardId ? [parsed.actionCardId] : []
+            return parsed.ok && parsed.actionCardId && allowedActionCardIds.has(parsed.actionCardId) ? [parsed.actionCardId] : []
           })
           // NOTICE: 动作表情链路诊断（AIRI_LIVE2D_DEBUG 开关控制）——模型"用了
           // 没有"就看这条。markers=0：模型没输出 ACT 标记（若 totalCards>0 则是
@@ -4269,9 +4284,10 @@ ${contextTexts}
       // 无此门控会退回"收尾即广播"的旧时机）；其余路径（segments<=1、整段直出、
       // 语音同步 whole）没有揭示循环，在原位置补发。群聊语义保持：主广播不做
       // groupRuntime 门控。shouldAbort 中断的回合上方已 return，不会到这里。
-      if (!handledSegmentedReply)
-        fireActionBroadcast()
-      if (performanceMarkers.length === 0 && turnLive2DExpressionIntent) {
+      fireActionBroadcast()
+      const fallbackEmotion = turnLive2DExpressionIntent?.primary.emotion
+        ?? performanceMarkers.map(marker => parseActPerformance(marker.special).emotion?.name).find(Boolean)
+      if (actionCardIds.length === 0 && fallbackEmotion) {
         // NOTICE: 动作兜底（问题 2 治本）——模型没给 ACT 标记时不等它自觉，
         // 客户端按本轮情绪选一个动作卡直接广播。危机回复/群聊/非 Live2D 渲染器
         // 不兜底（群聊发言人不等于舞台角色，动了舞台模型反而是错的）。
@@ -4282,20 +4298,20 @@ ${contextTexts}
         if (actionFallbackAllowed) {
           const fallback = selectFallbackLive2DActionCard({
             actionCards,
-            emotion: turnLive2DExpressionIntent.primary.emotion,
+            emotion: fallbackEmotion,
           })
           if (fallback) {
             logLive2DActionEvent('fallback broadcast (model did not emit markers)', {
               modelId: stageModelSettings.stageModelSelected,
               actionCardId: fallback.actionCardId,
               reason: fallback.reason,
-              emotion: turnLive2DExpressionIntent.primary.emotion,
+              emotion: fallbackEmotion,
             })
             live2dStore.broadcastLive2DActionRequest(stageModelSettings.stageModelSelected, [fallback.actionCardId])
           }
           else {
             warnLive2DActionEvent('fallback none (no motion/preset matched emotion)', {
-              emotion: turnLive2DExpressionIntent.primary.emotion,
+              emotion: fallbackEmotion,
               actionCardsCount: actionCards.length,
               motionCards: actionCards.filter(c => c.id.startsWith('motion:')).length,
               presetCards: actionCards.filter(c => !c.id.startsWith('motion:') && !c.id.startsWith('expression:')).length,

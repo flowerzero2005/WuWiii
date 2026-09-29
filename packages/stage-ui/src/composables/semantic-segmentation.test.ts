@@ -38,6 +38,11 @@ describe('semantic-segmentation', () => {
     expect(removeSpecialMarkers('好。<|ACT {"actionCardId":"small-wave"')).toBe('好。')
   })
 
+  it('hides escaped and malformed ACT envelopes while preserving adjacent speech', () => {
+    expect(removeSpecialMarkers('Hello &lt;|ACT {&quot;actionCardId&quot;:&quot;wave&quot;}|&gt; friend')).toBe('Hello  friend')
+    expect(removeSpecialMarkers('Hello \\<\\|ACT {"actionCardId":"wave"}\\|\\> friend')).toBe('Hello  friend')
+  })
+
   it('removes private bodies before interpreting their segment markers', () => {
     const result = segmentAssistantReply('Hello <think>private<|SEGMENT|>still private</think> there<|SEGMENT|>Goodbye')
     expect(result.segments).toEqual(['Hello  there', 'Goodbye'])

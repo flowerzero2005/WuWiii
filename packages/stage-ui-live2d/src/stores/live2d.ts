@@ -935,7 +935,7 @@ export const useLive2d = defineStore('live2d', () => {
           customActionPresetId: preset.id,
           durationMs: preset.durationMs,
           interruptible: preset.interruptible,
-          parameterClaims: preset.parameterClaims,
+          parameterClaims: [...(preset.parameterClaims ?? [])],
           priority: 'force',
         },
       }
@@ -1083,9 +1083,17 @@ export const useLive2d = defineStore('live2d', () => {
         presetId: request.binding.customActionPresetId,
       })),
     })
-    post({ type: 'action-request', modelId: normalizedModelId, requests })
+    // A preset can come from reactive storage. BroadcastChannel cannot clone
+    // nested Vue proxies, including an array inside a plain request object.
+    const wireRequests = JSON.parse(JSON.stringify(requests)) as CrossWindowLive2DActionRequest[]
+    try {
+      post({ type: 'action-request', modelId: normalizedModelId, requests: wireRequests })
+    }
+    catch (error) {
+      warnLive2DActionEvent('broadcast failed: action request was not delivered', { modelId: normalizedModelId, error: String(error) })
+    }
     // BroadcastChannel 不回环发送者：发射窗口（主窗口自己发消息的场景）本地直接播放
-    playCrossWindowActionRequests(requests)
+    playCrossWindowActionRequests(wireRequests)
   }
 
   function requestEmotionTransition(emotion: string, options: { scopeId: string, turnId: string, intensity?: number, transitionMs?: number, expression?: Live2DExpressionRef }) {

@@ -14,6 +14,7 @@ import AssistantMessageFeedbackActions from './assistant-message-feedback-action
 import ChatMessageAvatar from './message-avatar.vue'
 import ChatResponsePart from './response-part.vue'
 
+import { removeSpecialMarkers } from '../../../composables/semantic-segmentation'
 import { useAuthStore } from '../../../stores/auth'
 import { useChatOrchestratorStore } from '../../../stores/chat'
 import { useAssistantInnerVoiceNoteStore } from '../../../stores/chat/inner-voice-notes'
@@ -170,10 +171,10 @@ const isHistoricalMessage = computed(() => {
 })
 
 const resolvedText = computed(() => {
-  return resolvedSlices.value
+  return removeSpecialMarkers(resolvedSlices.value
     .filter((slice): slice is ChatSlicesText => slice.type === 'text')
     .map(slice => slice.text)
-    .join('')
+    .join(''), { trim: false })
 })
 const typingText = computed(() => normalizeAssistantTypingText(resolvedText.value))
 

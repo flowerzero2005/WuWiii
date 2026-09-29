@@ -18,6 +18,7 @@ import {
   MCP_PROACTIVE_TOPIC_TOOL_BUNDLE_ID,
   MEMORY_TOOL_BUNDLE_ID,
   VOICE_CALL_TOOL_BUNDLE_ID,
+  VISION_SCREEN_TOOL_BUNDLE_ID,
   WEB_SEARCH_TOOL_BUNDLE_ID,
   WIDGETS_TOOL_BUNDLE_ID,
   WORKSPACE_EDIT_APPLY_TOOL_BUNDLE_ID,
@@ -50,6 +51,7 @@ export {
   MCP_PROACTIVE_TOPIC_TOOL_BUNDLE_ID,
   MEMORY_TOOL_BUNDLE_ID,
   VOICE_CALL_TOOL_BUNDLE_ID,
+  VISION_SCREEN_TOOL_BUNDLE_ID,
   WEB_SEARCH_TOOL_BUNDLE_ID,
   WIDGETS_TOOL_BUNDLE_ID,
   WORKSPACE_EDIT_APPLY_TOOL_BUNDLE_ID,
@@ -57,7 +59,7 @@ export {
   WORKSPACE_READONLY_TOOL_BUNDLE_ID,
 }
 
-export async function buildChatToolBundles(input: Pick<BuildStageChatToolBundlesInput, 'allowButlerTasks' | 'hasPendingWorkspaceEditProposal' | 'messageText' | 'memoryEnabled' | 'memoryTool' | 'memoryTools' | 'previousMessageText' | 'webSearchEnabled' | 'workspaceAccess' | 'voiceCallActive'> & { voiceCallTools?: () => Promise<import('@xsai/shared-chat').Tool[]> }): Promise<ChatToolBundleBuildResult> {
+export async function buildChatToolBundles(input: Pick<BuildStageChatToolBundlesInput, 'allowButlerTasks' | 'hasPendingWorkspaceEditProposal' | 'messageText' | 'memoryEnabled' | 'memoryTool' | 'memoryTools' | 'previousMessageText' | 'webSearchEnabled' | 'workspaceAccess' | 'voiceCallActive' | 'visionScreenEnabled'> & { voiceCallTools?: () => Promise<import('@xsai/shared-chat').Tool[]>, visionScreenTools?: () => Promise<import('@xsai/shared-chat').Tool[]> }): Promise<ChatToolBundleBuildResult> {
   const intent = detectStageChatToolIntent(input.messageText, {
     hasPendingWorkspaceEditProposal: input.hasPendingWorkspaceEditProposal,
     previousMessageText: input.previousMessageText,

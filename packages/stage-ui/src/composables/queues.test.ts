@@ -35,4 +35,12 @@ describe('parseActEmotion', () => {
       ok: true,
     })
   })
+
+  it('parses escaped ACT envelopes and top-level intensity', () => {
+    expect(parseActPerformance('&lt;|ACT {&quot;actionCardId&quot;:&quot;small-wave&quot;,&quot;emotion&quot;:&quot;happy&quot;,&quot;intensity&quot;:0.25}|&gt;')).toEqual({
+      actionCardId: 'small-wave',
+      emotion: { name: 'happy', intensity: 0.25 },
+      ok: true,
+    })
+  })
 })

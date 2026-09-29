@@ -645,9 +645,19 @@ export function createDetachedComposerService(
       if (!isIpcEventFromWindow(window, options))
         return
       requireConversation(window)
-      await commit(() => state.viewRecovery(input.userScope, input.sessionId, input.surface))
-      await openEditor()
-      publish()
+      const binding = bindings.get(id)
+      if (!binding || binding.userScope !== input.userScope || binding.sessionId !== input.sessionId || binding.surface !== input.surface)
+        throw new Error('The chat window does not own this recovery scope.')
+      const recovery = await commit(() => state.viewRecovery(input.userScope, input.sessionId, input.surface, id, binding.sourceGeneration))
+      try {
+        await openEditor()
+        publish()
+      }
+      catch (error) {
+        await commit(() => state.release({ leaseId: recovery.scope.leaseId, version: recovery.version }))
+        publish()
+        throw error
+      }
     })
     defineInvokeHandler(context, composerEdit, async (input, options) => {
       if (!isIpcEventFromWindow(window, options))

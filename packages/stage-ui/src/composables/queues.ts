@@ -6,6 +6,7 @@ import { sleep } from '@moeru/std'
 import { createQueue } from '@proj-airi/stream-kit'
 
 import { EMOTION_VALUES } from '../constants/emotions'
+import { extractActMarkers } from './act-markers'
 
 function normalizeEmotionName(value: string): Emotion | null {
   const normalized = value.trim().toLowerCase()
@@ -21,13 +22,14 @@ function normalizeIntensity(value: unknown): number {
 }
 
 export function parseActPerformance(content: string) {
-  const match = /<\|\s*ACT\s*(?:(?::|=)\s*)?(\{[\s\S]*?\})\s*\|>/i.exec(content)
+  const marker = extractActMarkers(content)[0]?.normalized
+  const match = marker && /<\|\s*ACT\s*(?:(?::|=)\s*)?(\{[\s\S]*?\})\s*\|+>/i.exec(marker)
   if (!match)
     return { ok: false, actionCardId: null as string | null, emotion: null as EmotionPayload | null }
 
   const payloadText = match[1]
   try {
-    const payload = JSON.parse(payloadText) as { actionCardId?: unknown, emotion?: unknown }
+    const payload = JSON.parse(payloadText) as { actionCardId?: unknown, emotion?: unknown, intensity?: unknown }
     const actionCardId = typeof payload.actionCardId === 'string' && payload.actionCardId.trim()
       ? payload.actionCardId.trim().slice(0, 160)
       : null
@@ -35,7 +37,7 @@ export function parseActPerformance(content: string) {
     if (typeof emotion === 'string') {
       const normalized = normalizeEmotionName(emotion)
       if (normalized)
-        return { ok: true, actionCardId, emotion: { name: normalized, intensity: 1 } }
+        return { ok: true, actionCardId, emotion: { name: normalized, intensity: normalizeIntensity(payload.intensity) } }
     }
     else if (emotion && typeof emotion === 'object' && !Array.isArray(emotion)) {
       if ('name' in emotion && typeof (emotion as { name?: unknown }).name === 'string') {

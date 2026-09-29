@@ -100,6 +100,7 @@ export function useLive2DMotionManagerUpdate(options: UseLive2DMotionManagerUpda
 
   const prePlugins: MotionManagerPlugin[] = []
   const postPlugins: MotionManagerPlugin[] = []
+  const finalPlugins: MotionManagerPlugin[] = []
   let idleMotionNow: number | undefined
   let previousHookNow: number | undefined
 
@@ -128,11 +129,13 @@ export function useLive2DMotionManagerUpdate(options: UseLive2DMotionManagerUpda
     return idleMotionNow
   }
 
-  function register(plugin: MotionManagerPlugin, stage: 'pre' | 'post' = 'pre') {
+  function register(plugin: MotionManagerPlugin, stage: 'pre' | 'post' | 'final' = 'pre') {
     if (stage === 'pre')
       prePlugins.push(plugin)
-    else
+    else if (stage === 'post')
       postPlugins.push(plugin)
+    else
+      finalPlugins.push(plugin)
   }
 
   function runPlugins(plugins: MotionManagerPlugin[], ctx: MotionManagerPluginContext) {
@@ -188,6 +191,10 @@ export function useLive2DMotionManagerUpdate(options: UseLive2DMotionManagerUpda
     }
 
     runPlugins(postPlugins, ctx)
+    // Eye blinking still needs a frame when a motion or an idle override has
+    // handled the update. Other post plugins keep their existing gate.
+    for (const plugin of finalPlugins)
+      plugin(ctx)
 
     lastUpdateTime.value = now
     return ctx.handled
@@ -485,7 +492,7 @@ export function useMotionUpdatePluginAutoEyeBlink(): MotionManagerPlugin {
   return (ctx) => {
     // Possibility 1: Only update eye focus when the model is idle
     // Possibility 2: For models having no motion groups, currentGroup will be undefined while groups can be { idle: ... }
-    if (!ctx.isIdleMotion || ctx.handled)
+    if (!ctx.isIdleMotion)
       return
 
     const baseLeft = clamp01(ctx.modelParameters.value.leftEyeOpen)

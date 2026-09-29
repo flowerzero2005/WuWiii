@@ -100,6 +100,11 @@ chat:
     changed-description: 这项官方能力的价格已上涨或计费方式发生变化，请确认当前价格后再启用。
     description: 这是一项官方付费能力。确认后会持续启用；只有价格上涨或计费方式变化时才会再次确认。
     login-required: 请先登录，再启用官方付费能力。
+    model-screenshot-title: 允许角色查看屏幕？
+    model-screenshot-description: 角色准备截取所选屏幕或窗口并使用官方视觉理解。本次请求会按下方价格扣点；取消则不会截图。
+    model-screenshot-changed-description: 角色准备查看屏幕，但官方视觉价格已上涨或计费方式已变更。请先确认下方新价格；取消则不会截图。
+    model-screenshot-remember: 下次角色主动截图无需逐次确认
+    model-screenshot-action: 确认截图
     price-unavailable: 暂时无法获取当前价格，请等待服务恢复后重试。
     prices:
       embedding: 每次语义检索 {points} 点
@@ -227,6 +232,7 @@ voice-call:
   starting: 正在接通
   listening: 正在听你说
   responding: '{name} 正在回复'
+  inspecting-screen: 正在查看屏幕
   source-chat: 对话
   source-hearing: 听觉
   source-speech: 语音

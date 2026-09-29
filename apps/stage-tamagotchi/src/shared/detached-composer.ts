@@ -251,7 +251,9 @@ export function createComposerState() {
       const value = recoveries.get(key({ userScope, sessionId, surface }))
       return value ? structuredClone(value) : undefined
     },
-    viewRecovery(userScope: string, sessionId: string, surface: ComposerScope['surface']) {
+    viewRecovery(userScope: string, sessionId: string, surface: ComposerScope['surface'], sourceWebContentsId: number, sourceGeneration: string) {
+      if (!Number.isSafeInteger(sourceWebContentsId) || sourceWebContentsId <= 0 || !sourceGeneration || sourceGeneration.length > 256)
+        throw new Error('Invalid recovery source.')
       if (state && state.status !== 'returned')
         throw new Error('Another source already owns the detached composer.')
       const value = recoveries.get(key({ userScope, sessionId, surface }))
@@ -259,6 +261,10 @@ export function createComposerState() {
         throw new Error('No recoverable draft exists for this conversation.')
       state = structuredClone(value)
       state.status = 'orphaned'
+      // A persisted recovery has no living source after restart. Bind only
+      // the current conversation window so it can receive a safe return.
+      state.scope.sourceWebContentsId = sourceWebContentsId
+      state.scope.sourceGeneration = sourceGeneration
       return read()!
     },
     detach(sourceWebContentsId: number, input: ComposerDetach): ComposerSnapshot {
@@ -286,13 +292,15 @@ export function createComposerState() {
       validateComposerScope(input)
       if (typeof input.sourceGeneration !== 'string' || !input.sourceGeneration || input.sourceGeneration.length > 256)
         throw new Error('Invalid composer source generation.')
-      if (!state || !['detached', 'orphaned'].includes(state.status) || state.busy || state.uncertain
+      if (!state || !['detached', 'orphaned'].includes(state.status) || state.busy
         || key(state.scope) !== key(input) || state.scope.group !== input.group) {
         return read()
       }
       state.scope.sourceWebContentsId = sourceWebContentsId
       state.scope.sourceGeneration = input.sourceGeneration
-      state.status = 'detached'
+      // A quarantined submit may follow the same conversation into a newly
+      // mounted source, but it never becomes an editable detached draft.
+      state.status = state.uncertain ? 'orphaned' : 'detached'
       return read()!
     },
     edit(input: ComposerVersion & { draft: ComposerDraft }) {

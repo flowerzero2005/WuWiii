@@ -93,7 +93,9 @@ function DesktopRegressionBuildMetadata(): Plugin {
 }
 
 function resolveDesktopAppEdition(): DesktopAppEdition {
-  // Explicit consumer packaging must win over local development env files.
+  // The release packager must win over local Vite env files, including a
+  // developer's .env.development.local. Never emit developer windows in a
+  // consumer installer because a local file selected the dev edition.
   if (process.env.AIRI_CONSUMER_PACKAGE === '1')
     return 'consumer'
 

@@ -111,6 +111,7 @@ import { startVoiceCallRingtone, stopVoiceCallRingtone } from '../modules/voice-
 import { createVoiceCallTranscriptQueue } from '../modules/voice-call-transcripts'
 import { useAgentSessionControllerStore } from '../stores/agent-session-controller'
 import { useCommandExecutionStore } from '../stores/command-execution'
+import { createVisionScreenTools } from '../stores/tools/builtin/vision-screen'
 import { createVoiceCallTools } from '../stores/tools/builtin/voice-call'
 
 const props = withDefaults(defineProps<{
@@ -545,6 +546,7 @@ const {
 })
 const chatCleanupDialogOpen = ref(false)
 const voiceCallTurnId = ref<string>()
+let voiceCallTurnAbort: AbortController | undefined
 const voiceCallUserText = ref('')
 const voiceCallAssistantSegments = ref<Array<{
   id: string
@@ -559,6 +561,7 @@ const voiceCallHangupState = createVoiceCallHangupState()
 let voiceCallHangupFallbackTimer: ReturnType<typeof setTimeout> | undefined
 const voiceCallError = ref('')
 const voiceCallWaiting = ref(false)
+const visionToolInspectingTurnId = ref<string>()
 const incomingVoiceCall = ref<{ reason?: string }>()
 const voiceCallLastEvent = ref<'accepted' | 'cancelled' | 'declined' | 'ended' | 'missed' | 'unavailable'>()
 let incomingVoiceCallTimer: ReturnType<typeof setTimeout> | undefined
@@ -602,9 +605,11 @@ function getVoiceCallStartupFailureStage(error: unknown): VoiceCallStartupFailur
 const additionalCapabilitiesOpen = ref(false)
 const capabilityConsentRequest = ref<{
   capability: OfficialPaidCapability
+  modelScreenshot?: boolean
   quote: OfficialCapabilityConsentQuote
   resolve: (accepted: boolean) => void
 }>()
+const skipFutureModelScreenshotConfirm = ref(false)
 const groupCreateOpen = ref(false)
 const groupCreateCharacterIds = ref<string[]>([])
 const groupCreateTitle = ref('')
@@ -855,6 +860,10 @@ async function sendVoiceCallTranscript(rawText: string, turnId: string) {
 
   traceVoiceCall('transcript-turn-created', { turnId })
 
+  voiceCallTurnAbort?.abort(new DOMException('New voice call turn', 'AbortError'))
+  const turnAbort = new AbortController()
+  voiceCallTurnAbort = turnAbort
+  visionToolInspectingTurnId.value = undefined
   activeVoiceCallTurnIds.clear()
   activeVoiceCallTurnIds.add(turnId)
   postVoiceCallPresentEvent({ type: 'quick-chat-turn-start', turnId })
@@ -871,6 +880,7 @@ async function sendVoiceCallTranscript(rawText: string, turnId: string) {
       return
 
     await sendConfiguredChatMessage(text, {
+      abortSignal: turnAbort.signal,
       disableMessageMerging: true,
       sourceSurface: 'voice-call',
       sourceUserMessageId: turnId,
@@ -878,6 +888,8 @@ async function sendVoiceCallTranscript(rawText: string, turnId: string) {
     })
   }
   catch (error) {
+    if (turnAbort.signal.aborted)
+      return
     if (!activeVoiceCallTurnIds.delete(turnId))
       return
 
@@ -886,6 +898,10 @@ async function sendVoiceCallTranscript(rawText: string, turnId: string) {
       turnId,
       text: getLocalizedChatErrorMessage(error),
     })
+  }
+  finally {
+    if (voiceCallTurnAbort === turnAbort)
+      voiceCallTurnAbort = undefined
   }
 }
 
@@ -1241,6 +1257,8 @@ watch(hearingPipelineError, (error) => {
 function interruptVoiceCallOutput(reason: string) {
   if (!voiceCallSessionActive.value)
     return
+  voiceCallTurnAbort?.abort(new DOMException(reason, 'AbortError'))
+  visionToolInspectingTurnId.value = undefined
 
   if (reason === 'voice-call-user-speaking')
     speechRuntimeStore.interrupt('voice-call-user-speaking')
@@ -1703,7 +1721,7 @@ const voiceCallStatus = computed(() => voiceCallWaiting.value || responding.valu
   ? 'responding'
   : 'listening')
 const voiceCallStatusLabel = computed(() => voiceCallStatus.value === 'responding'
-  ? t('stage.voice-call.responding', { name: assistantIdentityName.value })
+  ? visionToolInspectingTurnId.value ? t('stage.voice-call.inspecting-screen') : t('stage.voice-call.responding', { name: assistantIdentityName.value })
   : t('stage.voice-call.listening'))
 const voiceCallSources = computed(() => [
   {
@@ -1861,10 +1879,19 @@ const capabilityConsentName = computed(() => capabilityConsentRequest.value
 const capabilityConsentPrice = computed(() => capabilityConsentRequest.value
   ? capabilityPriceLabel(capabilityConsentRequest.value.quote)
   : '')
+const capabilityConsentTitle = computed(() => capabilityConsentRequest.value?.modelScreenshot
+  ? t('stage.chat.capability-consent.model-screenshot-title')
+  : t('stage.chat.capability-consent.title', { capability: capabilityConsentName.value }))
 const capabilityConsentDescription = computed(() => {
   const request = capabilityConsentRequest.value
   if (!request)
     return ''
+  if (request.modelScreenshot) {
+    const previousAcceptance = officialCapabilityConsentStore.getAcceptance(authUser.value?.id, request.capability)
+    return previousAcceptance && officialCapabilityConsentStore.needsConsent(authUser.value?.id, request.capability, request.quote)
+      ? t('stage.chat.capability-consent.model-screenshot-changed-description')
+      : t('stage.chat.capability-consent.model-screenshot-description')
+  }
   return officialCapabilityConsentStore.getAcceptance(authUser.value?.id, request.capability)
     ? t('stage.chat.capability-consent.changed-description')
     : t('stage.chat.capability-consent.description')
@@ -1875,6 +1902,7 @@ function closeCapabilityConsent(accepted: boolean) {
   if (!request)
     return
   capabilityConsentRequest.value = undefined
+  skipFutureModelScreenshotConfirm.value = false
   request.resolve(accepted)
 }
 
@@ -1889,10 +1917,12 @@ function acceptCapabilityConsent() {
     closeCapabilityConsent(false)
     return
   }
+  if (request.modelScreenshot && skipFutureModelScreenshotConfirm.value)
+    visionStore.skipModelScreenshotConfirmation = true
   closeCapabilityConsent(true)
 }
 
-async function ensureOfficialCapabilityConsent(capability: OfficialPaidCapability) {
+async function ensureOfficialCapabilityConsent(capability: OfficialPaidCapability, options?: { modelScreenshot?: boolean }) {
   if (!requiresOfficialCapabilityConsent(capability))
     return true
 
@@ -1912,7 +1942,8 @@ async function ensureOfficialCapabilityConsent(capability: OfficialPaidCapabilit
     toast.warning(t('stage.chat.capability-consent.price-unavailable'))
     return false
   }
-  if (!officialCapabilityConsentStore.needsConsent(scopeId, capability, quote))
+  if (!officialCapabilityConsentStore.needsConsent(scopeId, capability, quote)
+    && !(options?.modelScreenshot && !visionStore.skipModelScreenshotConfirmation))
     return true
   if (capabilityConsentRequest.value)
     return false
@@ -1925,7 +1956,8 @@ async function ensureOfficialCapabilityConsent(capability: OfficialPaidCapabilit
   }
 
   return await new Promise<boolean>((resolve) => {
-    capabilityConsentRequest.value = { capability, quote, resolve }
+    skipFutureModelScreenshotConfirm.value = options?.modelScreenshot === true && visionStore.skipModelScreenshotConfirmation
+    capabilityConsentRequest.value = { capability, modelScreenshot: options?.modelScreenshot, quote, resolve }
   })
 }
 
@@ -2836,6 +2868,8 @@ async function sendConfiguredChatMessage(
 
   const providerId = options.providerId ?? activeProvider.value
   const modelId = options.modelId ?? activeModel.value
+  const turnSessionId = options.targetSessionId ?? activeSessionId.value
+  const inspectionTurnKey = options.sourceUserMessageId ?? crypto.randomUUID()
   if (!providerId || !modelId)
     throw new Error('Chat provider or model is not configured.')
 
@@ -2844,11 +2878,11 @@ async function sendConfiguredChatMessage(
   if (!chatProvider)
     throw new Error('Chat provider or model is not configured.')
 
-  const previousMessageText = getPreviousUserMessageText(options.targetSessionId)
+  const previousMessageText = getPreviousUserMessageText(turnSessionId)
   // Automatic notebook recall still runs every turn; only the explicit memory
   // tool bundle is gated by intent below.
   const memoryResources = longTermMemoryEnabled.value
-    ? await createTurnMemoryResources(options.targetSessionId)
+    ? await createTurnMemoryResources(turnSessionId)
     : undefined
   const keepVoiceCallOpen = voiceCallSessionActive.value && voiceCallHangupState.isPending()
     ? keepActiveVoiceCallOpen
@@ -2864,6 +2898,29 @@ async function sendConfiguredChatMessage(
     workspaceAccess: 'full',
     voiceCallActive: voiceCallSessionActive.value,
     voiceCallTools: () => createVoiceCallTools(inviteVoiceCall, cancelIncomingVoiceCall, keepVoiceCallOpen),
+    visionScreenEnabled: visionStore.enabled && visionStore.modelScreenshotEnabled && visionStore.customProviderConfigured && !!screenCapture && chatSession.getSessionMeta(turnSessionId)?.kind !== 'room',
+    visionScreenTools: screenCapture
+      ? () => createVisionScreenTools({
+          capture: screenCapture,
+          vision: visionStore,
+          ensureOfficialConsent: () => ensureOfficialCapabilityConsent('vision', { modelScreenshot: true }),
+          isCurrent: () => !options.abortSignal?.aborted
+            && (options.sourceSurface === 'voice-call'
+              ? voiceCallSessionActive.value && activeVoiceCallTurnIds.has(options.sourceUserMessageId ?? '') && activeVoiceCallSessionId === turnSessionId
+              : activeSessionId.value === turnSessionId),
+          onInspecting: (active) => {
+            if (options.sourceSurface !== 'voice-call')
+              return
+            if (active)
+              visionToolInspectingTurnId.value = inspectionTurnKey
+            else if (visionToolInspectingTurnId.value === inspectionTurnKey)
+              visionToolInspectingTurnId.value = undefined
+          },
+          parentRequestId: options.sourceUserMessageId,
+          signal: options.abortSignal,
+          sourceSurface: options.sourceSurface,
+        })
+      : undefined,
   })
   const toolBundles = toolBundleBuildResult.intent.wantsWorkspaceEdit
     ? []
@@ -2905,7 +2962,7 @@ async function sendConfiguredChatMessage(
   syncChatAppCapabilityContext({
     availableToolBundleIds,
     blockedToolBundleIds: toolBundleBuildResult.blockedToolBundleIds,
-    sessionId: options.targetSessionId ?? activeSessionId.value,
+    sessionId: turnSessionId,
     workspaceWriteRequested: toolBundleBuildResult.intent.wantsWorkspaceEdit,
   })
 
@@ -2934,7 +2991,7 @@ async function sendConfiguredChatMessage(
       toolBundleRoutingMode: toolBundleBuildResult.intent.wantsButlerTasks ? 'eager' : 'auto',
       toolBundles,
       visionContext: options.visionContext,
-    }, options.targetSessionId)
+    }, turnSessionId)
     options.abortSignal?.throwIfAborted()
   }
   catch (error) {
@@ -2960,7 +3017,7 @@ async function sendConfiguredChatMessage(
   syncChatAppCapabilityContext({
     availableToolBundleIds,
     blockedToolBundleIds: toolBundleBuildResult.blockedToolBundleIds,
-    sessionId: options.targetSessionId ?? activeSessionId.value,
+    sessionId: turnSessionId,
   })
 }
 
@@ -4050,6 +4107,9 @@ function endVoiceCallSession() {
     clearTimeout(voiceCallHangupFallbackTimer)
   voiceCallHangupFallbackTimer = undefined
   voiceCallSessionActive.value = false
+  voiceCallTurnAbort?.abort(new DOMException('Voice call ended', 'AbortError'))
+  voiceCallTurnAbort = undefined
+  visionToolInspectingTurnId.value = undefined
   speechRuntimeStore.interrupt('voice-call-ended')
 
   // Full teardown keeps an in-flight turn from reviving the call UI after hangup.
@@ -5188,7 +5248,7 @@ const chatSurfaceStyle = computed(() => {
           ]"
         >
           <AlertDialogTitle :class="['text-base text-[var(--airi-text)] font-semibold']">
-            {{ t('stage.chat.capability-consent.title', { capability: capabilityConsentName }) }}
+            {{ capabilityConsentTitle }}
           </AlertDialogTitle>
           <AlertDialogDescription :class="['mt-2 text-sm text-[var(--airi-text-muted)] leading-6']">
             {{ capabilityConsentDescription }}
@@ -5197,6 +5257,10 @@ const chatSurfaceStyle = computed(() => {
             <span class="i-solar:wallet-money-outline size-4 shrink-0 text-[var(--airi-accent-text)]" />
             <span>{{ capabilityConsentPrice }}</span>
           </div>
+          <label v-if="capabilityConsentRequest?.modelScreenshot" :class="['mt-4 flex cursor-pointer items-center gap-2 text-sm text-[var(--airi-text)]']">
+            <input v-model="skipFutureModelScreenshotConfirm" type="checkbox" :class="['size-4 accent-[var(--airi-accent-text)]']">
+            {{ t('stage.chat.capability-consent.model-screenshot-remember') }}
+          </label>
           <div :class="['mt-5 flex justify-end gap-2']">
             <AlertDialogCancel
               :class="['h-9 rounded-md px-3 text-sm font-medium airi-overlay-control-muted']"
@@ -5208,7 +5272,7 @@ const chatSurfaceStyle = computed(() => {
               :class="['h-9 rounded-md px-3 text-sm font-medium airi-overlay-control-primary']"
               @click.capture="acceptCapabilityConsent"
             >
-              {{ t('stage.chat.capability-consent.action') }}
+              {{ t(capabilityConsentRequest?.modelScreenshot ? 'stage.chat.capability-consent.model-screenshot-action' : 'stage.chat.capability-consent.action') }}
             </AlertDialogAction>
           </div>
         </AlertDialogContent>

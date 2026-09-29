@@ -15,6 +15,7 @@ export const MCP_DISCOVERY_TOOL_BUNDLE_ID = 'mcp-discovery'
 export const MCP_EXPLICIT_ACTION_TOOL_BUNDLE_ID = 'mcp-explicit-action'
 export const MCP_PROACTIVE_TOPIC_TOOL_BUNDLE_ID = 'mcp-proactive-topic'
 export const VOICE_CALL_TOOL_BUNDLE_ID = 'voice-call'
+export const VISION_SCREEN_TOOL_BUNDLE_ID = 'vision-screen'
 
 export interface ChatToolIntent {
   wantsButlerTasks: boolean
@@ -65,6 +66,7 @@ export interface StageChatToolLoaders {
   mcpExplicitActionTools?: ToolLoader
   mcpProactiveTopicTools?: ToolLoader
   voiceCallTools?: ToolLoader
+  visionScreenTools?: ToolLoader
 }
 
 export interface BuildStageChatToolBundlesInput extends StageChatToolLoaders {
@@ -79,6 +81,7 @@ export interface BuildStageChatToolBundlesInput extends StageChatToolLoaders {
   intentGated?: boolean
   /** Keep voice-call tools available for an already active call session. */
   voiceCallActive?: boolean
+  visionScreenEnabled?: boolean
   webSearchEnabled?: boolean
   workspaceAccess?: 'readonly' | 'full'
 }
@@ -291,6 +294,16 @@ export async function buildStageChatToolBundles(input: BuildStageChatToolBundles
     appendToolBundle(result, {
       id: VOICE_CALL_TOOL_BUNDLE_ID,
       tools: createToolLoader(input.voiceCallTools),
+    })
+  }
+
+  // Once the user opts in, the model may decide whether the current chat or
+  // voice turn needs fresh visual context. The tools themselves enforce the
+  // current opt-in, source IDs, turn lifetime and one-inspection limit.
+  if (input.visionScreenEnabled && input.visionScreenTools) {
+    appendToolBundle(result, {
+      id: VISION_SCREEN_TOOL_BUNDLE_ID,
+      tools: createToolLoader(input.visionScreenTools),
     })
   }
 

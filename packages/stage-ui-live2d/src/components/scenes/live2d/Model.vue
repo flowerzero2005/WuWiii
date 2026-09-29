@@ -869,7 +869,7 @@ const live2dShadowEnabled = toRef(() => props.live2dShadowEnabled)
 
 const localCurrentMotion = ref<{ group: string, index: number }>({ group: 'Idle', index: 0 })
 const motionOwner = ref<Live2DMotionOwner>('stopped')
-const idleMotionActive = computed(() => motionOwner.value === 'idle')
+const idleMotionActive = computed(() => motionOwner.value === 'idle' || motionOwner.value === 'stopped')
 const beatSync = createBeatSyncController({
   baseAngles: () => ({
     x: modelParameters.value.angleX,
@@ -1578,7 +1578,7 @@ async function loadModel(
       motionManagerUpdate.register(useMotionUpdatePluginBeatSync(beatSync), 'pre')
     motionManagerUpdate.register(useMotionUpdatePluginIdleDisable(), 'pre')
     motionManagerUpdate.register(useMotionUpdatePluginIdleMotionStrength(), 'post')
-    motionManagerUpdate.register(useMotionUpdatePluginAutoEyeBlink(), 'post')
+    motionManagerUpdate.register(useMotionUpdatePluginAutoEyeBlink(), 'final')
     const hookedUpdate = motionManager.update as (model: PixiLive2DInternalModel['coreModel'], now: number) => boolean
     motionManager.update = function (model: PixiLive2DInternalModel['coreModel'], now: number) {
       const handled = motionManagerUpdate.hookUpdate(model, now, hookedUpdate)

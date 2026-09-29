@@ -100,6 +100,11 @@ chat:
     changed-description: The price for this official capability has increased or its billing method has changed. Review the current price before enabling it again.
     description: This is an official paid capability. Once confirmed, it stays enabled until the price increases or its billing method changes.
     login-required: Sign in before enabling official paid capabilities.
+    model-screenshot-title: Allow the character to inspect your screen?
+    model-screenshot-description: The character is about to capture selected screens or windows for official image understanding. This request uses points at the price below; cancelling prevents capture.
+    model-screenshot-changed-description: The character is about to inspect your screen, but the official vision price or billing terms changed. Review the new price below; cancelling prevents capture.
+    model-screenshot-remember: Do not ask again for character-initiated screenshots
+    model-screenshot-action: Confirm screenshot
     price-unavailable: Current pricing is unavailable. Try again after the service reconnects.
     prices:
       embedding: '{points} points per semantic lookup'
@@ -227,6 +232,7 @@ voice-call:
   starting: Connecting
   listening: Listening
   responding: '{name} is replying'
+  inspecting-screen: Inspecting the screen
   source-chat: Chat
   source-hearing: Hearing
   source-speech: Speech

@@ -37,6 +37,8 @@ const {
   geminiModel,
   isAnalyzing,
   lastError,
+  modelScreenshotEnabled,
+  skipModelScreenshotConfirmation,
   openAICompatibleApiKey,
   openAICompatibleBaseUrl,
   openAICompatibleModel,
@@ -328,6 +330,21 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
           {{ t('settings.pages.modules.vision.screenshot.intro') }}
         </p>
       </div>
+      <FieldCheckbox
+        v-model="modelScreenshotEnabled"
+        :disabled="!screenCapture || !enabled"
+        :label="t('settings.pages.modules.vision.screenshot.model-enabled.label')"
+        :description="t('settings.pages.modules.vision.screenshot.model-enabled.description')"
+      />
+      <p v-if="modelScreenshotEnabled && provider === 'official-cloud' && visionPoints !== undefined" :class="['text-xs airi-text-muted']">
+        {{ t('settings.pages.modules.vision.screenshot.model-price', { points: visionPoints }) }}
+      </p>
+      <FieldCheckbox
+        v-if="provider === 'official-cloud'"
+        v-model="skipModelScreenshotConfirmation"
+        :label="t('settings.pages.modules.vision.screenshot.skip-model-confirmation.label')"
+        :description="t('settings.pages.modules.vision.screenshot.skip-model-confirmation.description')"
+      />
       <FieldCheckbox
         v-model="automaticScreenshotEnabled"
         :disabled="!screenCapture || !enabled || !automaticScreenshotSourceId || (provider === 'official-cloud' && visionConsentNeeded)"

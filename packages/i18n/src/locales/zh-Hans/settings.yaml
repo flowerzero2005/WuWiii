@@ -2483,6 +2483,13 @@ pages:
       configuration-missing: 请补全当前视觉服务的地址、模型和所需密钥。
       last-error: '最近一次视觉请求失败：{error}'
       screenshot:
+        model-enabled:
+          label: 允许角色主动查看屏幕
+          description: 默认关闭。开启后，角色可在聊天和语音通话中按需列出当前屏幕与窗口，并选择最多 3 个来源截图理解。不会持续截图；可随时关闭。
+        model-price: '角色主动查看屏幕时，官方视觉每次理解请求扣除 {points} 点；最多 3 张截图合并为一次请求。'
+        skip-model-confirmation:
+          label: 角色主动截图时不再逐次确认
+          description: 仅跳过每次截图弹窗；首次使用或价格上涨时仍须确认当前价格。关闭后恢复逐次确认。
         desktop-only: 屏幕截图仅在桌面端可用。
         select-source: 查看可选屏幕与窗口
         refreshing: 正在读取屏幕来源…

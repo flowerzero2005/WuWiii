@@ -100,6 +100,7 @@ export function createProviderConfigurationMigration(storage: ConfigurationStora
 
 const moduleDefaults: Record<string, { defaultValue: string, valid: (value: string) => boolean }> = {
   'settings/vision/enabled': { defaultValue: String(VISION_DEFAULT_SETTINGS.enabled), valid: value => value === 'true' || value === 'false' },
+  'settings/vision/skip-model-screenshot-confirmation': { defaultValue: 'false', valid: value => value === 'true' || value === 'false' },
   'settings/vision/automatic-screenshot-enabled': { defaultValue: String(VISION_DEFAULT_SETTINGS.automaticScreenshotEnabled), valid: value => value === 'true' || value === 'false' },
   'settings/vision/automatic-screenshot-source-id': { defaultValue: VISION_DEFAULT_SETTINGS.automaticScreenshotSourceId, valid: value => value === '' || SCREEN_SOURCE_ID_RE.test(value) },
   'settings/vision/screenshot-interval-seconds': { defaultValue: String(VISION_DEFAULT_SETTINGS.screenshotIntervalSeconds), valid: value => Number.isInteger(Number(value)) && Number(value) >= VISION_SCREENSHOT_INTERVAL_MIN_SECONDS && Number(value) <= VISION_SCREENSHOT_INTERVAL_MAX_SECONDS },

@@ -319,7 +319,7 @@ export function useDetachedComposerSource(input: {
     const sourceGeneration = generation
     const sessionId = input.sessionId()
     const userScope = input.userScope()
-    if (disposed || hydrating.value || detaching.value || recoveryUncertain.value)
+    if (disposed || hydrating.value || detaching.value)
       return false
 
     if (detached.value) {
@@ -336,7 +336,7 @@ export function useDetachedComposerSource(input: {
           if (!isCurrentScope(sourceGeneration, sessionId, userScope))
             resolve(false)
           else if (value?.scope.leaseId === current.scope.leaseId && value.status === 'returned')
-            resolve(!value.uncertain)
+            resolve(true)
         }, { flush: 'sync' })
       })
       const timeout = setTimeout(() => finish(false), 12_000)
@@ -355,6 +355,10 @@ export function useDetachedComposerSource(input: {
     }
     if (!isCurrentScope(sourceGeneration, sessionId, userScope))
       return false
+    // The uncertain submit is already quarantined on disk. Browsing another
+    // conversation must not require resolving or replaying that submit.
+    if (recoveryUncertain.value)
+      return !draftDirty && !input.busy()
     // An inline command already owns its durable original draft. Browsing
     // another conversation after optimistic consumption must not replay it.
     if (inlineSending.value || executing)

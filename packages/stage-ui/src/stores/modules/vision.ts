@@ -164,6 +164,12 @@ export const useVisionStore = defineStore('vision-store', () => {
   const auth = useAuthStore()
   const consent = useOfficialCapabilityConsentStore()
   const enabled = useLocalStorageManualReset<boolean>('settings/vision/enabled', VISION_DEFAULT_SETTINGS.enabled)
+  // Separate opt-in from periodic capture: enabling vision alone never lets
+  // a chat model inspect the desktop.
+  const modelScreenshotEnabled = useLocalStorageManualReset<boolean>('settings/vision/model-screenshot-enabled', false)
+  // Per-capture confirmation is separate from acceptance of the current
+  // official price. A changed price still requires a new price confirmation.
+  const skipModelScreenshotConfirmation = useLocalStorageManualReset<boolean>('settings/vision/skip-model-screenshot-confirmation', false)
   // Capturing the desktop is opt-in. A disabled setting must never start an
   // interval or request desktop capture permissions.
   const automaticScreenshotEnabled = useLocalStorageManualReset<boolean>('settings/vision/automatic-screenshot-enabled', VISION_DEFAULT_SETTINGS.automaticScreenshotEnabled)
@@ -185,10 +191,12 @@ export const useVisionStore = defineStore('vision-store', () => {
   let requestRevision = 0
   const configurationRevision = ref(0)
 
-  // Bind requests to the selected service, account and accepted price. This
-  // covers manual uploads as well as the automatic screenshot scheduler.
+  // Bind requests to the selected service, screen-inspection permission,
+  // account and accepted price. This also cancels an in-flight inspection
+  // when the user switches off model-directed screenshots.
   watch(() => [
     enabled.value,
+    modelScreenshotEnabled.value,
     provider.value,
     provider.value === 'aliyun'
       ? [aliyunApiKey.value, aliyunBaseUrl.value, aliyunModel.value].join('\n')
@@ -361,6 +369,8 @@ export const useVisionStore = defineStore('vision-store', () => {
     geminiModel,
     isAnalyzing,
     lastError,
+    modelScreenshotEnabled,
+    skipModelScreenshotConfirmation,
     normalizedScreenshotIntervalSeconds,
     openAICompatibleApiKey,
     openAICompatibleBaseUrl,

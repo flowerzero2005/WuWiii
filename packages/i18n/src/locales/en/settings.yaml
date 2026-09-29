@@ -2495,6 +2495,13 @@ pages:
       configuration-missing: Complete the selected vision provider URL, model, and required API key.
       last-error: 'Most recent vision request failed: {error}'
       screenshot:
+        model-enabled:
+          label: Allow the character to inspect the screen
+          description: Off by default. During chat or voice calls, the character may list available screens and windows and inspect up to 3 sources when needed. This does not start periodic capture.
+        model-price: 'An official vision inspection costs {points} points per request; up to 3 screenshots share one request.'
+        skip-model-confirmation:
+          label: Skip confirmation for character-initiated screenshots
+          description: Skips the prompt for each screenshot. First use and price increases still require price confirmation. Turn off to confirm each screenshot again.
         desktop-only: Screen capture is available only in the desktop app.
         select-source: View available screens and windows
         refreshing: Reading screen sources…
