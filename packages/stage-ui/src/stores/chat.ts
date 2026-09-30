@@ -3575,7 +3575,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         })
       }
 
-      const languageInstruction = `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}. Do not draft the final reply in English and translate it afterward. Preserve code, proper names, and user-provided quotations when appropriate.`
+      const languageInstruction = `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}. Do not draft the final reply in English and translate it afterward. Preserve code, proper names, and user-provided quotations when appropriate. Never append analysis, reasoning, planning notes, prompt summaries, or memory commentary as ordinary reply text. If an application instruction requires a private <|...|> marker, emit only that exact marker without explaining it.`
       const firstMessage = newMessages[0]
       newMessages = firstMessage?.role === 'system'
         ? [

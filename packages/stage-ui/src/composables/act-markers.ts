@@ -1,7 +1,7 @@
 // Match the protocol before rendering. Providers sometimes escape angle
 // brackets or Markdown punctuation, so parsing and display use one rule.
 const ACT_MARKER_RE = /(?:\\?<|&lt;)\s*\\?\|\s*ACT\b[\s\S]*?\}\s*\\?\|+(?:\s*(?:\\?>|&gt;)|(?=\s|$))/gi
-const INCOMPLETE_ACT_RE = /(?:\\?<|&lt;)\s*\\?\|\s*ACT\b[\s\S]*$/i
+const INCOMPLETE_ACT_RE = /(?:\\?<|&lt;)\s*\\?\|\s*ACT\b(?:(?!\|>)[\s\S])*$/i
 
 export function extractActMarkers(text: string) {
   return Array.from(text.matchAll(ACT_MARKER_RE), match => ({

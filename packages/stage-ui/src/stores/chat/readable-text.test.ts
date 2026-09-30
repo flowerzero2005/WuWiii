@@ -3,6 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { createReadableFinalText, createReadableSpeechText } from './readable-text'
 
 describe('createReadableFinalText', () => {
+  it('removes an untagged internal tail from display and speech', () => {
+    const text = '我明白了。\nThe user asked for help. I should respond briefly.'
+    expect(createReadableFinalText(text)).toBe('我明白了。')
+    expect(createReadableSpeechText(text)).toBe('我明白了。')
+    expect(createReadableFinalText('我明白了。\nMemory capture: no facts to store.')).toBe('我明白了。')
+  })
+
+  it('keeps requested English prose and discussion of analysis', () => {
+    expect(createReadableFinalText('先看例句。\nAnalyze the result in English.')).toBe('先看例句。\nAnalyze the result in English.')
+    expect(createReadableFinalText('Analysis: 这个词在这里表示分析。')).toBe('Analysis: 这个词在这里表示分析。')
+    expect(createReadableFinalText('以下是报告。\nAnalysis: Revenue rose this quarter.')).toBe('以下是报告。\nAnalysis: Revenue rose this quarter.')
+  })
+
   it('removes reasoning and protocol markers while preserving readable order', () => {
     expect(createReadableFinalText('Hi <think>private</think> there <|ACT|>wave')).toBe('Hi there wave')
   })

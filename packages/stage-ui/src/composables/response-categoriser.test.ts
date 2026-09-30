@@ -3,6 +3,40 @@ import { describe, expect, it } from 'vitest'
 import { createStreamingCategorizer } from './response-categoriser'
 
 describe('createStreamingCategorizer', () => {
+  it('holds an untagged internal tail through every stream split', () => {
+    const text = '我明白了。\nAnalysis: The user wants a shorter answer.'
+    for (let split = 1; split < text.length; split++) {
+      const categorizer = createStreamingCategorizer()
+      let speech = ''
+      for (const chunk of [text.slice(0, split), text.slice(split)]) {
+        const position = categorizer.getCurrentPosition()
+        categorizer.consume(chunk)
+        speech += categorizer.filterToSpeech(chunk, position)
+      }
+      expect(speech).not.toContain('Analysis')
+      expect(speech).not.toContain('The user')
+      expect(categorizer.end().speech).toBe('我明白了。')
+    }
+
+    const characterStream = createStreamingCategorizer()
+    let visible = ''
+    for (const chunk of '我明白了。The user asked for help. I should respond briefly.') {
+      const position = characterStream.getCurrentPosition()
+      characterStream.consume(chunk)
+      visible += characterStream.filterToSpeech(chunk, position)
+    }
+    expect(visible).toBe('我明白了。')
+  })
+
+  it('releases an ordinary English paragraph after an ambiguous opening', () => {
+    const categorizer = createStreamingCategorizer()
+    categorizer.consume('我明白了。\nAna')
+    const first = categorizer.filterToSpeech('我明白了。\nAna', 0)
+    categorizer.consume('lyze the example in English.')
+    const second = categorizer.filterToSpeech('lyze the example in English.', '我明白了。\nAna'.length)
+    expect(first + second).toBe('我明白了。\nAnalyze the example in English.')
+  })
+
   it('never emits private text for any split of nested mixed-case tags', () => {
     const text = 'Hello <THINK>outer <reasoning>inner</reasoning>private tail</ThInK> world!'
     for (let split = 1; split < text.length; split++) {
