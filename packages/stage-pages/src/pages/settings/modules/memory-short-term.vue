@@ -20,6 +20,11 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const conversationNavigation = useConversationNavigation()
 const navigationPending = ref(false)
+const historyNewestFirst = computed(() => memoryShortTerm.settings.historyNewestFirst)
+
+function toggleHistoryOrder() {
+  memoryShortTerm.setHistoryNewestFirst(!historyNewestFirst.value)
+}
 
 function mt(key: string, params: Record<string, string | number> = {}) {
   return t(`settings.pages.modules.memory-short-term.${key}`, params)
@@ -283,7 +288,18 @@ const messageRows = computed(() => messages.value.map((message, index) => {
       ? innerVoiceNotes.getNoteForMessage(viewSessionIdSnapshot.value, message.id)
       : undefined,
   }
-}).sort((left, right) => Number(right.starred) - Number(left.starred) || left.index - right.index))
+}).sort((left, right) => {
+  const starredOrder = Number(right.starred) - Number(left.starred)
+  if (starredOrder)
+    return starredOrder
+
+  const leftTime = left.message.createdAt ?? Number.NaN
+  const rightTime = right.message.createdAt ?? Number.NaN
+  const chronologicalOrder = Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime
+    ? leftTime - rightTime
+    : left.index - right.index
+  return historyNewestFirst.value ? -chronologicalOrder : chronologicalOrder
+}))
 const starredCount = computed(() => messageRows.value.filter(row => row.starred).length)
 const retainableCount = computed(() => conversationMessages.value.slice(0, -keepCount.value)
   .filter(message => !message.id || !inspectionStars.value[message.id]?.starred)
@@ -901,9 +917,22 @@ async function deleteInspectedConversation() {
 
     <!-- 消息列表 -->
     <div class="space-y-3">
-      <h3 class="text-lg font-semibold">
-        {{ mt('history.title', { count: messages.length }) }}
-      </h3>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-lg font-semibold">
+          {{ mt('history.title', { count: messages.length }) }}
+        </h3>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          :aria-label="mt(historyNewestFirst ? 'history.switch-oldest-first' : 'history.switch-newest-first')"
+          :title="mt(historyNewestFirst ? 'history.switch-oldest-first' : 'history.switch-newest-first')"
+          @click="toggleHistoryOrder"
+        >
+          <span aria-hidden="true" :class="['mr-1 size-4', historyNewestFirst ? 'i-ph:sort-descending' : 'i-ph:sort-ascending']" />
+          {{ mt(historyNewestFirst ? 'history.newest-first' : 'history.oldest-first') }}
+        </Button>
+      </div>
       <p role="status" :class="['text-sm text-[var(--airi-text-muted)]']">
         {{ mt(starredCount ? 'favorites.count' : 'favorites.empty', { count: starredCount }) }}
       </p>

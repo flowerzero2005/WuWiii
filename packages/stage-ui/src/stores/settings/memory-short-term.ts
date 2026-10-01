@@ -6,6 +6,8 @@ export interface MemoryShortTermSettings {
   autoCleanupEnabled: boolean
   // 未收藏且非系统消息超过此数量才清理；保留最近 N 条及全部收藏/系统消息，范围 1..400。
   autoCleanupLimit: number
+  // 仅影响短期记忆查看顺序，不改动保存的对话顺序或模型上下文。
+  historyNewestFirst: boolean
 }
 
 // 上限范围与默认值。默认 200，不清空对话。
@@ -31,6 +33,7 @@ export const useMemoryShortTermSettingsStore = defineStore('memory-short-term-se
   const settings = ref<MemoryShortTermSettings>({
     autoCleanupEnabled: false,
     autoCleanupLimit: AUTO_CLEANUP_LIMIT_DEFAULT,
+    historyNewestFirst: true,
   })
 
   function loadFromStorage() {
@@ -48,6 +51,7 @@ export const useMemoryShortTermSettingsStore = defineStore('memory-short-term-se
         settings.value = {
           autoCleanupEnabled: data?.autoCleanupEnabled === true,
           autoCleanupLimit: clampAutoCleanupLimit(Number(data?.autoCleanupLimit)),
+          historyNewestFirst: data?.historyNewestFirst !== false,
         }
       }
     }
@@ -79,6 +83,10 @@ export const useMemoryShortTermSettingsStore = defineStore('memory-short-term-se
     settings.value.autoCleanupLimit = clampAutoCleanupLimit(value)
   }
 
+  function setHistoryNewestFirst(value: boolean) {
+    settings.value.historyNewestFirst = value
+  }
+
   watch(settings, () => {
     if (isLoaded.value)
       saveToStorage()
@@ -92,5 +100,6 @@ export const useMemoryShortTermSettingsStore = defineStore('memory-short-term-se
     loadFromStorage,
     saveToStorage,
     setAutoCleanupLimit,
+    setHistoryNewestFirst,
   }
 })

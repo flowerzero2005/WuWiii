@@ -23,6 +23,8 @@ interface PageState {
   viewRoleId: Ref<string>
   inspectionMessages: Ref<ChatHistoryItem[]>
   messageRows: Ref<{ message: ChatHistoryItem, starred: boolean }[]>
+  historyNewestFirst: Ref<boolean>
+  toggleHistoryOrder: () => void
   actionPending: Ref<boolean>
   feedbackMessage: Ref<string>
   feedbackTone: Ref<string>
@@ -89,6 +91,7 @@ async function createPage() {
     deleteNotesForSession: vi.fn(async () => []),
   }
   const beforeUnmount: (() => void)[] = []
+  const shortTermSettings = Vue.reactive({ autoCleanupEnabled: false, autoCleanupLimit: 100, historyNewestFirst: true })
   const modules: Record<string, unknown> = {
     'vue': { ...Vue, onMounted: () => {}, onBeforeUnmount: (fn: () => void) => beforeUnmount.push(fn) },
     'vue-i18n': { useI18n: () => ({ locale: Vue.ref('en'), t: (key: string, params: unknown) => `${key}:${JSON.stringify(params)}` }) },
@@ -97,7 +100,11 @@ async function createPage() {
     '@proj-airi/stage-ui/stores/chat/inner-voice-notes': { useAssistantInnerVoiceNoteStore: () => notes },
     '@proj-airi/stage-ui/stores/chat/session-store': { useChatSessionStore: () => session },
     '@proj-airi/stage-ui/stores/modules/airi-card': { useAiriCardStore: () => ({ cards: new Map([['alice', { name: 'Alice' }], ['bob', { name: 'Bob' }]]) }) },
-    '@proj-airi/stage-ui/stores/settings/memory-short-term': { useMemoryShortTermSettingsStore: () => ({ settings: { autoCleanupEnabled: false, autoCleanupLimit: 100 }, setAutoCleanupLimit: vi.fn() }) },
+    '@proj-airi/stage-ui/stores/settings/memory-short-term': { useMemoryShortTermSettingsStore: () => ({
+      settings: shortTermSettings,
+      setAutoCleanupLimit: vi.fn(),
+      setHistoryNewestFirst: (value: boolean) => { shortTermSettings.historyNewestFirst = value },
+    }) },
     '@proj-airi/stage-ui/utils': { summarizeChatHistoryMessage: vi.fn() },
     '@proj-airi/ui': {},
   }
@@ -129,11 +136,22 @@ async function createPage() {
 describe('short-term memory favorites', () => {
   it('shows favorites first without mutating history, timestamps, or selection', async () => {
     const { state, records } = await createPage()
-    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-star', 'one-old', 'one-new'])
+    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-star', 'one-new', 'one-old'])
     expect(records.get('one')!.messages.map(item => item.id)).toEqual(['one-old', 'one-star', 'one-new'])
     expect(state.messageRows.value[0].message.createdAt).toBe(20)
     expect(state.viewSessionId.value).toBe('one')
     expect(state.viewRoleId.value).toBe('direct:alice')
+  })
+
+  it('shows recent messages first and lets the reader reverse the order without changing saved history', async () => {
+    const { state, records } = await createPage()
+    expect(state.historyNewestFirst.value).toBe(true)
+    state.toggleHistoryOrder()
+    expect(state.historyNewestFirst.value).toBe(false)
+    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-star', 'one-old', 'one-new'])
+    state.toggleHistoryOrder()
+    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-star', 'one-new', 'one-old'])
+    expect(records.get('one')!.messages.map(item => item.id)).toEqual(['one-old', 'one-star', 'one-new'])
   })
 
   it('waits for persistence, blocks duplicate clicks, and keeps favorites on failure', async () => {
@@ -160,7 +178,7 @@ describe('short-term memory favorites', () => {
     })
     await state.toggleMessageStar('one-star')
     expect(session.setMessageStarred).toHaveBeenCalledWith('one', 'one-star', false)
-    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-old', 'one-star', 'one-new'])
+    expect(state.messageRows.value.map(row => row.message.id)).toEqual(['one-new', 'one-star', 'one-old'])
     expect(session.cleanupMessages).not.toHaveBeenCalled()
     expect(session.retainRecentMessages).not.toHaveBeenCalled()
   })

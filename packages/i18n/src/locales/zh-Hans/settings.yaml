@@ -2193,6 +2193,10 @@ pages:
       history:
         title: '消息历史（{count}）'
         empty: 暂无消息
+        newest-first: 最新在前
+        oldest-first: 最早在前
+        switch-newest-first: 切换为最新在前
+        switch-oldest-first: 切换为最早在前
         user: 用户
         assistant: 助手
         system: 系统

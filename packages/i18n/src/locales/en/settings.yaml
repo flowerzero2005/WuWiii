@@ -2204,6 +2204,10 @@ pages:
       history:
         title: 'Message history ({count})'
         empty: No messages
+        newest-first: Newest first
+        oldest-first: Oldest first
+        switch-newest-first: Sort newest first
+        switch-oldest-first: Sort oldest first
         user: User
         assistant: Assistant
         system: System
