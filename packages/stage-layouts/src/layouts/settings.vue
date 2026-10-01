@@ -67,6 +67,7 @@ const routeHeaderMetadata = computed(() => {
 const { updateThemeColor } = useThemeColor(themeColorFromValue({ light: 'rgb(255 255 255)', dark: 'rgb(18 18 18)' }))
 const settingsSurfaceStyle = computed(() => getSettingsSurfaceStyle(settingsSurfacePreset.value, dark.value))
 const scrollContainer = ref<HTMLElement>()
+const showMemoryScrollbar = computed(() => route.path === '/settings/memory' || route.path === '/settings/modules/memory-long-term')
 watch(dark, () => updateThemeColor(), { immediate: true })
 watch(route, () => updateThemeColor(), { immediate: true })
 watch(() => route.fullPath, async () => {
@@ -97,9 +98,27 @@ onMounted(() => updateThemeColor())
         :subtitle="routeHeaderMetadata?.subtitle"
         :disable-back-button="route.path === '/settings'"
       />
-      <div ref="scrollContainer" relative min-h-0 flex-1 overflow-y-auto scrollbar-none>
+      <div ref="scrollContainer" relative min-h-0 flex-1 overflow-y-auto :class="showMemoryScrollbar ? 'settings-memory-scrollbar' : 'scrollbar-none'">
         <RouterView />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.settings-memory-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--airi-text-muted) 65%, transparent) transparent;
+}
+
+.settings-memory-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.settings-memory-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--airi-text-muted) 65%, transparent);
+  background-clip: padding-box;
+}
+</style>

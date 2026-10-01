@@ -86,16 +86,13 @@ describe('interactive area recommended replies', () => {
     expect(source).toContain(`setRecommendedReplyStatus(input.sessionId, 'cancelled'`)
   })
 
-  it('starts direct preparation after provider parsing but before local playback settles', () => {
-    const parserEndIndex = chatSource.indexOf('await parser.end()')
-    const responseReadyIndex = chatSource.indexOf('options.onResponseReady?.()', parserEndIndex)
-    const displayWaitIndex = chatSource.indexOf('await segmentedReplyPlayback', responseReadyIndex)
-    expect(parserEndIndex).toBeGreaterThan(-1)
-    expect(responseReadyIndex).toBeGreaterThan(parserEndIndex)
-    expect(displayWaitIndex).toBeGreaterThan(responseReadyIndex)
-    expect(source).toContain('onResponseReady: scheduleDirectRecommendations')
+  it('starts direct recommendations after the primary reply settles', () => {
+    const sendIndex = source.indexOf('await sendConfiguredChatMessage(textToSend, {')
+    const recommendationIndex = source.indexOf('\n    scheduleDirectRecommendations()', sendIndex)
+    expect(sendIndex).toBeGreaterThan(-1)
+    expect(recommendationIndex).toBeGreaterThan(sendIndex)
+    expect(source).not.toContain('onResponseReady: scheduleDirectRecommendations')
     expect(source).toContain('if (recommendationsScheduled || !providerId || !modelId)')
-    expect(source).toContain('scheduleDirectRecommendations()')
   })
 
   it('binds group recommendations to the latest speaker that actually completed', () => {

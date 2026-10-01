@@ -10,6 +10,7 @@ import { useElectronEventaInvoke, useElectronWindowMove } from '@proj-airi/elect
 import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
 import { removeSpecialMarkers, segmentAssistantReply } from '@proj-airi/stage-ui/composables/semantic-segmentation'
 import { useChatOrchestratorStore } from '@proj-airi/stage-ui/stores/chat'
+import { resolveSpeechDisplayStartTimeoutMs } from '@proj-airi/stage-ui/stores/chat/speech-display-policy'
 import { resolveChatBubblePresentation, useChatAppearanceSettingsStore } from '@proj-airi/stage-ui/stores/settings/chat-appearance'
 import { useMemoryAdvancedSettingsStore } from '@proj-airi/stage-ui/stores/settings/memory-advanced'
 import { clampQuickChatBoundsToWorkArea, isQuickChatBoundsVisibleInWorkArea, resolveQuickChatWorkAreaForBounds, useSettingsQuickChat } from '@proj-airi/stage-ui/stores/settings/quick-chat'
@@ -1018,14 +1019,15 @@ function createCollapsedReplySpeechDisplayWaiter(
       }
 
       const event = await cursor.waitForNext(
-        settings.displaySyncLateSpeechPolicy === 'text-first-drop-late'
-          ? Math.max(1000, settings.displaySyncFallbackMs)
-          : undefined,
+        resolveSpeechDisplayStartTimeoutMs({
+          boundedFallbackMs: 30_000,
+          fallbackMs: settings.displaySyncFallbackMs,
+          lateSpeechPolicy: settings.displaySyncLateSpeechPolicy,
+        }),
       )
       if (!event) {
         timedOut = true
-        if (settings.displaySyncLateSpeechPolicy === 'text-first-drop-late')
-          speechRuntimeStore.cancelIntent(speechIntentId, 'quick-chat-speech-display-fallback', playback.speech?.streamId)
+        speechRuntimeStore.cancelIntent(speechIntentId, 'quick-chat-speech-display-fallback', playback.speech?.streamId)
 
         return undefined
       }

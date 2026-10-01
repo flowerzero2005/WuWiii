@@ -115,7 +115,7 @@ if (!notebookStore.isLoaded) {
 const filteredEntries = computed(() => {
   const entries = notebookStore.entries || []
   if (!searchQuery.value)
-    return entries
+    return [...entries].sort((a, b) => b.createdAt - a.createdAt)
 
   const query = searchQuery.value.trim().toLowerCase()
   return entries.filter((entry) => {
@@ -127,7 +127,7 @@ const filteredEntries = computed(() => {
       typeof entry.metadata?.timeExpression === 'string' ? entry.metadata.timeExpression : '',
     ].join('\n').toLowerCase()
     return searchableText.includes(query)
-  })
+  }).sort((a, b) => b.createdAt - a.createdAt)
 })
 
 // 统计

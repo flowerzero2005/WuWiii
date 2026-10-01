@@ -97,6 +97,16 @@ export function shouldRenderPendingDirectSpeechContext(message: ChatHistoryItem,
 
 /** Keeps generated group content hidden until its display turn is released. */
 export function shouldRenderQueuedGroupAssistant(message: ChatHistoryItem) {
+  // Direct replies also stage every semantic segment before revealing the
+  // first one. Keep unreleased siblings out of history so they cannot appear
+  // together or start several typewriters before their display turn.
+  if (message.role === 'assistant'
+    && message.metadata?.speechDisplayPending === true
+    && (message.metadata.assistantTurnSegmentCount ?? 0) > 1
+    && !message.id?.endsWith(':speech-context')) {
+    return false
+  }
+
   const groupTurnId = message.role === 'assistant'
     ? message.metadata?.speaker?.groupTurnId ?? message.metadata?.narration?.groupTurnId
     : undefined

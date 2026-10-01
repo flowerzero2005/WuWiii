@@ -134,6 +134,8 @@ const emit = defineEmits<{
 const messageInput = ref('')
 const chatSendLifecycle = createChatSendLifecycle()
 const manualSendPending = ref(false)
+const manualSendTurnObserved = ref(false)
+const manualSendSourceUserMessageId = ref<string>()
 
 function cancelManualSend() {
   if (manualSendPending.value)
@@ -325,7 +327,7 @@ function cancelChapterEvaluation() {
 }
 watch(activeSessionId, cancelChapterEvaluation, { flush: 'sync' })
 const { streamingMessage: streamingMessageState, streamingSessionId, interSegmentPlaceholder } = storeToRefs(chatStream)
-const { activeTurnSessionId, responding, sending } = storeToRefs(chatOrchestrator)
+const { activeTurnId, activeTurnSessionId, responding, sending } = storeToRefs(chatOrchestrator)
 const { activeCardId, cards } = storeToRefs(airiCardStore)
 const displayModelsStore = useDisplayModelsStore()
 const { displayModels } = storeToRefs(displayModelsStore)
@@ -1697,7 +1699,7 @@ const canSend = computed(() => isInitialized.value
 // 事件链，链路断掉只会让按钮提前消失，不会常驻。sending/responding 挂起由
 // chat store 的 turn 看门狗兜底强制释放。
 const canInterrupt = computed(() => (
-  manualSendPending.value
+  (manualSendPending.value && !manualSendTurnObserved.value)
   || (groupSendingForActiveSession.value
     && activeGroupRun.value?.phase === 'running'
     && activeGroupRun.value.speaker?.phase !== 'draining')
@@ -1705,6 +1707,12 @@ const canInterrupt = computed(() => (
     && responding.value
     && activeTurnSessionId.value === activeSessionId.value)
 ))
+watch([manualSendPending, activeTurnId, activeTurnSessionId], ([pending, turnId, sessionId]) => {
+  if (!pending)
+    manualSendTurnObserved.value = false
+  else if (turnId && turnId === manualSendSourceUserMessageId.value && sessionId === activeSessionId.value)
+    manualSendTurnObserved.value = true
+}, { flush: 'sync' })
 const speechConfigured = computed(() => !!speechStore.resolveActiveSpeechRequestConfig())
 const longTermMemoryEnabled = computed(() => Boolean(memorySettings.value?.enabled))
 const innerVoiceEnabled = computed(() => Boolean(memoryAdvancedSettings.value?.enableInnerVoiceNotePrewarm))
@@ -2852,7 +2860,6 @@ async function sendConfiguredChatMessage(
     disableMessageMerging?: boolean
     modelId?: string
     onIngestStart?: () => void
-    onResponseReady?: () => void
     providerId?: string
     reusePersistedUserMessage?: boolean
     sourceSurface: string
@@ -2984,7 +2991,6 @@ async function sendConfiguredChatMessage(
       // tool bundle remains available for explicit, model-directed searches.
       memoryContextMode: 'automatic',
       memoryScope: memoryResources?.scope,
-      onResponseReady: options.onResponseReady,
       sourceCreatedAt: Date.now(),
       sourceSurface: options.sourceSurface,
       sourceUserMessageId: options.sourceUserMessageId,
@@ -3740,6 +3746,8 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
   const run = chatSendLifecycle.start(targetSessionId)
   if (!run)
     return
+  manualSendSourceUserMessageId.value = sourceUserMessageId
+  manualSendTurnObserved.value = false
   manualSendPending.value = true
   let draftCleared = false
   let clearedComposerRevision: number | undefined
@@ -3886,11 +3894,12 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
         toast.warning(t('stage.chat.vision.failed-text-only'))
       }
     }
-    if (!chatSendLifecycle.isCurrent(run) || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope) {
+    const sendCancelled = run.controller.signal.aborted || !chatSendLifecycle.isCurrent(run)
+    if (sendCancelled || activeSessionId.value !== targetSessionId || composerUserScope.value !== targetUserScope) {
       await rollbackPreIngestImageMessage()
       if (canRollbackDraft())
         restoreSubmittedDraft()
-      else
+      else if (!sendCancelled)
         await recordPotentialTurnError(new Error('The chat request was cancelled before its result was confirmed.'))
       return
     }
@@ -3901,7 +3910,6 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       displayAttachments: attachmentsToSend,
       modelId: modelId ?? undefined,
       onIngestStart: () => chatIngestStarted = true,
-      onResponseReady: scheduleDirectRecommendations,
       providerId: providerId ?? undefined,
       sourceSurface: props.surface === 'widget' ? 'quick-chat' : 'chat',
       sourceUserMessageId,
@@ -3912,19 +3920,18 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       visionContext: [visualUnderstanding?.text, visionEnabled.value ? visionScreenContext.getContext() : undefined].filter(Boolean).join('\n\n') || undefined,
     })
 
-    // Tool-status turns may not expose ordinary provider text at the earlier
-    // response-ready boundary. Preserve their existing post-send fallback;
-    // the local guard guarantees exactly one recommendation request.
+    // Recommendations are auxiliary model work. Their polling gate waits for
+    // the primary reply's display and TTS to settle before starting a second
+    // model request, which avoids competing with local speech synthesis.
     scheduleDirectRecommendations()
   }
   catch (error) {
-    if (run.controller.signal.aborted || !chatSendLifecycle.isCurrent(run)
-      || (error instanceof Error && error.name === 'AbortError')) {
+    if (run.controller.signal.aborted || !chatSendLifecycle.isCurrent(run)) {
       await rollbackPreIngestImageMessage()
       if (canRollbackDraft())
         restoreSubmittedDraft()
-      else
-        await recordPotentialTurnError(error)
+      // A deliberate interruption already settled the visible turn. Keep
+      // accepted user/partial assistant messages without adding a failure row.
       return
     }
 
@@ -3959,6 +3966,8 @@ async function performComposerSend(trackSubmission?: (sessionId: string, message
       attachmentsToSend.forEach(att => URL.revokeObjectURL(att.url))
     if (chatSendLifecycle.finish(run))
       manualSendPending.value = false
+    if (manualSendSourceUserMessageId.value === sourceUserMessageId)
+      manualSendSourceUserMessageId.value = undefined
   }
 }
 
@@ -4698,6 +4707,7 @@ function scheduleRecommendedRepliesWhenAvailable(input: {
   const key = `${input.sessionId}:${input.sourceUserMessageId ?? input.afterCreatedAt ?? 'latest'}`
   const requestGeneration = recommendedReplyGenerationBySession.value[input.sessionId] ?? 0
   const requestUserScope = composerUserScope.value
+  const displayWaitDeadline = Date.now() + 120_000
   const existingTimer = recommendedReplyAttachTimers.get(key)
   if (existingTimer)
     clearTimeout(existingTimer)
@@ -4734,6 +4744,16 @@ function scheduleRecommendedRepliesWhenAvailable(input: {
     // Doing so bypasses both playback-start and the typewriter metadata.
     const message = storedMessage
     if (message && getRecommendedReplyAssistantText(message)) {
+      if (!input.groupTurnId && (message.metadata?.speechDisplayPending === true || message.metadata?.typingCompleted === false)) {
+        if (Date.now() >= displayWaitDeadline) {
+          recommendedReplyAttachTimers.delete(key)
+          setRecommendedReplyStatus(input.sessionId, 'cancelled', message.id, requestGeneration)
+          return
+        }
+        const timer = setTimeout(poll, RECOMMENDED_REPLY_ATTACH_POLL_MS)
+        recommendedReplyAttachTimers.set(key, timer)
+        return
+      }
       if (input.groupTurnId && hasPendingGroupTurnDisplay(input)) {
         // A long four-person turn may legitimately outlive the ordinary
         // attach poll window. Once the target exists, wait for the display

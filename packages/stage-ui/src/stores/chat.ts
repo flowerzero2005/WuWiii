@@ -133,8 +133,6 @@ export interface SendOptions {
   onRequestTrace?: (requestId: string) => void
   /** Reports meaningful provider/display phase progress to an outer idle watchdog. */
   onProgress?: () => void
-  /** Fires once provider parsing is complete, before local speech/typewriter playback settles. */
-  onResponseReady?: () => void
 }
 
 interface ForkOptions {
@@ -436,6 +434,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const activeTurn = ref<ActiveChatTurn | null>(null)
   const responding = computed(() => activeTurn.value !== null)
   const activeTurnSessionId = computed(() => activeTurn.value?.sessionId)
+  const activeTurnId = computed(() => activeTurn.value?.turnId)
   // NOTICE: 分段打字机活跃计数。供 completeActiveTurn 收敛时暴力复位使用，
   // 防止断链后计数泄漏（历史 bug：计数配对丢失导致按钮状态常驻）。
   const typingSegmentsActiveCount = ref(0)
@@ -450,12 +449,12 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     typingCompletionGate.notify(messageId, sessionId)
   }
 
-  function waitForAssistantTypingComplete(messageId: string, sessionId: string) {
+  function waitForAssistantTypingComplete(messageId: string, sessionId: string, timeoutMs?: number) {
     const message = chatSession.getSessionMessages(sessionId).find(item => item.id === messageId)
     if (message?.role === 'assistant' && message.metadata?.typingCompleted === true)
       return Promise.resolve()
 
-    return typingCompletionGate.wait(messageId, sessionId)
+    return typingCompletionGate.wait(messageId, sessionId, timeoutMs)
   }
 
   function enqueueGroupDisplay(sessionId: string, task: () => Promise<void>) {
@@ -3418,20 +3417,21 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
                     // duration estimate can drift when frames are delayed,
                     // allowing the next persisted segment to start typing at
                     // the same time as this one.
-                    const typingCompletion = waitForAssistantTypingComplete(segmentMessage.id!, sessionId)
+                    const segmentTypingDuration = getTypingDuration(
+                      conclusionSegments[segmentIndex],
+                      segmentSpeechTiming?.typingSpeedMs ?? typingSpeed,
+                    )
+                    const typingCompletion = waitForAssistantTypingComplete(
+                      segmentMessage.id!,
+                      sessionId,
+                      Math.min(30_000, Math.max(1_000, segmentTypingDuration + 2_000)),
+                    )
                     if (groupRuntime) {
                       // Group displays may run in a background/secondary
                       // window where no renderer emits `typingComplete`.
                       // Keep the room queue moving with a bounded estimate;
                       // the visible renderer still wins when it reports first.
-                      const segmentTypingDuration = getTypingDuration(
-                        conclusionSegments[segmentIndex],
-                        segmentSpeechTiming?.typingSpeedMs ?? typingSpeed,
-                      )
-                      await Promise.race([
-                        typingCompletion,
-                        sleep(Math.min(30_000, Math.max(1_000, segmentTypingDuration + 2_000))),
-                      ])
+                      await typingCompletion
                     }
                     else {
                       await typingCompletion
@@ -4029,19 +4029,6 @@ ${contextTexts}
       if (shouldAbort())
         return
 
-      // The provider stream and parser are complete at this point, while a
-      // segmented direct reply may still spend seconds in local typewriter or
-      // speech playback. Let auxiliary UI work start now without awaiting it;
-      // callers keep exact-turn deduplication and billing ownership.
-      if (!groupRuntime && createReadableFinalText(fullText, turnProviderId)) {
-        try {
-          options.onResponseReady?.()
-        }
-        catch (error) {
-          console.warn('[Chat] Response-ready callback failed:', error)
-        }
-      }
-
       // Group model requests remain ordered, while their speech/display work
       // continues in the background. The next speaker can prepare as soon as
       // this provider response is complete; the speech queue still controls
@@ -4049,14 +4036,11 @@ ${contextTexts}
 
       if (!isStaleGeneration()) {
         if (handledSegmentedReply) {
-          // Group speakers must hand off to the next provider turn without
-          // waiting for an earlier bubble's speech/typewriter queue. The
-          // display queue remains serialized by session and reports its
-          // own failures; ordinary chat preserves the awaited lifecycle.
-          if (groupRuntime)
-            void segmentedReplyPlayback
-          else
-            await segmentedReplyPlayback
+          // The speech intent opens in onAssistantResponseEnd below. Waiting
+          // here would deadlock a segmented reply against its own TTS start.
+          // Group display stays on its room queue; direct chat waits after
+          // that hook has opened speech.
+          void segmentedReplyPlayback
         }
         else if (hasSpeechDisplaySync() && speechDisplaySyncController) {
           const speechSyncedFinalText = createReadableFinalText(committedToolAcknowledgement
@@ -4498,6 +4482,9 @@ ${contextTexts}
       logTurnMilestone('emitAssistantResponseEndHooks:start')
       await hooks.emitAssistantResponseEndHooks(fullText, streamingMessageContext)
       logTurnMilestone('emitAssistantResponseEndHooks:done')
+
+      if (handledSegmentedReply && !groupRuntime)
+        await segmentedReplyPlayback
 
       logTurnMilestone('emitAfterSendHooks:start')
       await hooks.emitAfterSendHooks(sendingMessage, streamingMessageContext)
@@ -5050,6 +5037,7 @@ ${contextTexts}
     sending,
     responding,
     activeTurnSessionId,
+    activeTurnId,
     typingSegmentsActive,
 
     discoverToolsCompatibility: llmStore.discoverToolsCompatibility,

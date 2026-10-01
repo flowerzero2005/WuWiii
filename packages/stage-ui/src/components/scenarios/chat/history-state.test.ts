@@ -1,3 +1,5 @@
+import type { ChatHistoryItem } from '../../../types/chat'
+
 import { describe, expect, it } from 'vitest'
 
 import { getMessageRenderKey, hasActiveStreamingMessage, isSameAssistantMessage, isVisibleChatMessage, resolveAssistantMessageIdentity, shouldDeferCommittedDirectAssistantMessage, shouldRenderPendingDirectSpeechContext, shouldRenderQueuedGroupAssistant, shouldShowStreamingPlaceholder } from './history-state'
@@ -115,17 +117,24 @@ describe('history-state', () => {
     })).toBe(true)
   })
 
-  it('keeps a staged reply segment mounted until its display turn starts', () => {
-    expect(isVisibleChatMessage({
+  it('keeps unreleased direct reply segments hidden until their display turn starts', () => {
+    const segment: ChatHistoryItem = {
       role: 'assistant',
       content: 'second segment',
       slices: [],
       tool_results: [],
       id: 'assistant-1:1',
       metadata: {
+        assistantTurnSegmentCount: 2,
         speechDisplayPending: true,
         typingCompleted: false,
       },
+    }
+
+    expect(shouldRenderQueuedGroupAssistant(segment)).toBe(false)
+    expect(shouldRenderQueuedGroupAssistant({
+      ...segment,
+      metadata: { ...segment.metadata, speechDisplayPending: false },
     })).toBe(true)
   })
 

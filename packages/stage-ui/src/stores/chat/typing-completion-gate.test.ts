@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createAssistantTypingCompletionGate } from './typing-completion-gate'
 
@@ -37,5 +37,25 @@ describe('assistant typing completion gate', () => {
     gate.notify('reply:1', 'session-b')
     await second
     expect(secondResolved).toBe(true)
+  })
+
+  it('releases a segment whose renderer never reports typing completion', async () => {
+    vi.useFakeTimers()
+    try {
+      const gate = createAssistantTypingCompletionGate()
+      const pending = gate.wait('reply:missing', 'session-a', 1500)
+
+      await vi.advanceTimersByTimeAsync(1499)
+      let resolved = false
+      void pending.then(() => resolved = true)
+      await Promise.resolve()
+      expect(resolved).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(pending).resolves.toBeUndefined()
+    }
+    finally {
+      vi.useRealTimers()
+    }
   })
 })
