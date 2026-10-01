@@ -377,10 +377,6 @@ async function resolveOptionalContext<T>(task: Promise<T>, timeoutMs: number): P
   }
 }
 
-function shouldSegmentReplyForDisplay(text: string, semanticSegmentationEnabled: boolean) {
-  return semanticSegmentationEnabled || removeSpecialMarkers(text).length >= 80
-}
-
 export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const llmStore = useLLM()
   const airiCardStore = useAiriCardStore()
@@ -3216,10 +3212,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           // 标记解析失败或纯表情标记；modelId=undefined = 聊天窗口拿不到激活模型 id。
 
           // 如果开启了语义分段，在这里进行分段处理
-          const displaySegmentationEnabled = shouldSegmentReplyForDisplay(
-            fullText,
-            memoryAdvancedSettings?.settings?.enableSemanticSegmentation === true,
-          )
+          const displaySegmentationEnabled = memoryAdvancedSettings?.settings?.enableSemanticSegmentation === true
           const segmentedReply = displaySegmentationEnabled
             ? segmentAssistantReply(fullText, {
                 aggressive: true,
