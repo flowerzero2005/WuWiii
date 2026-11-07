@@ -10,6 +10,7 @@ import type { SpeechDisplaySyncEvent } from '../../stores/speech-display-sync'
 import type { AlibabaRealtimePcmAudio } from '../../utils/alibaba-realtime-tts'
 import type { CharacterPerformanceActionCard, CharacterPerformanceCapabilityProfile, StreamingCharacterPerformanceState } from '../../utils/character-performance-capabilities'
 import type { CharacterPerformanceBaseline, CharacterPerformanceBeat } from '../../utils/character-performance-timeline'
+import type { QqVisualEvent } from '../../utils/qq-visual-events'
 import type { SpeechToneSnapshot } from '../../utils/speech-tone'
 
 import { createLive2DLipSync } from '@proj-airi/model-driver-lipsync'
@@ -26,9 +27,10 @@ import PictureOcScene from './PictureOcScene.vue'
 
 import { parseActPerformance, useDelayMessageQueue } from '../../composables/queues'
 import { llmInferenceEndToken } from '../../constants'
-import { EMOTION_VALUES, EMOTION_VRMExpressionName_value } from '../../constants/emotions'
+import { EMOTION_EmotionMotionName_value, EMOTION_VALUES, EMOTION_VRMExpressionName_value } from '../../constants/emotions'
 import { acknowledgeOfficialCloudDelivery, transferOfficialCloudDelivery } from '../../libs/providers/providers/official-cloud/delivery-ack'
 import { useAudioContext, useSpeakingStore } from '../../stores/audio'
+import { useAuthStore } from '../../stores/auth'
 import { useChatOrchestratorStore } from '../../stores/chat'
 import { useChatPersonaRuntimeStore } from '../../stores/chat/persona-runtime-store'
 import { useChatSessionStore } from '../../stores/chat/session-store'
@@ -44,7 +46,9 @@ import { useSpeechRuntimeStore } from '../../stores/speech-runtime'
 import { generateAlibabaRealtimeSpeech, isAlibabaRealtimePcmAudio } from '../../utils/alibaba-realtime-tts'
 import { advanceStreamingCharacterPerformance, createCharacterPerformanceCapabilityProfile, createCharacterPerformanceExpressionBindings, createCharacterPerformanceResourceActionCard, createStreamingCharacterPerformanceState, shouldAcceptCharacterPerformanceAction, validateCharacterPerformancePlan } from '../../utils/character-performance-capabilities'
 import { alignCharacterPerformanceBeats, characterPerformancePlanOwnsEmotion, createCharacterPerformanceSchedule } from '../../utils/character-performance-timeline'
+import { displayModelErrorMessage } from '../../utils/display-model-error'
 import { resolvePictureOcSemanticActionId } from '../../utils/picture-oc-package'
+import { startQqVisualEventPolling } from '../../utils/qq-visual-events'
 import { playRealtimePcmStream } from '../../utils/realtime-pcm-playback'
 import { generateConfiguredSpeech, isAlibabaModelStudioCosyVoiceSpeechModel } from '../../utils/speech-generation'
 import { applySpeechToneToProviderConfig } from '../../utils/speech-tone'
@@ -56,6 +60,7 @@ const props = withDefaults(defineProps<{
   xOffset?: number | string
   yOffset?: number | string
   scale?: number
+  live2dResolution?: number
 }>(), { paused: false, scale: 1 })
 const { t } = useI18n()
 const { focusAt, paused, scale, xOffset, yOffset } = toRefs(props)
@@ -112,6 +117,25 @@ const {
   live2dRandomIdleMotionKeys,
   live2dModelMotionSettings,
 } = storeToRefs(settingsStore)
+
+let lastModelError = ''
+let lastModelErrorAt = 0
+
+function handleDisplayModelError(detail: { error: string, modelId?: string }) {
+  console.error('[Stage] Failed to load display model:', detail)
+  if (typeof window === 'undefined' || !(window as Window & { pocketBridge?: unknown }).pocketBridge)
+    return
+  const currentModel = stageModelSelectedDisplayModel.value
+  if (!detail.modelId || detail.modelId !== currentModel?.id || currentModel.type !== 'file')
+    return
+  const now = Date.now()
+  const key = `${detail.modelId}:${detail.error}`
+  if (key === lastModelError && now - lastModelErrorAt < 10_000)
+    return
+  lastModelError = key
+  lastModelErrorAt = now
+  toast.error('模型加载失败', { description: displayModelErrorMessage(detail.error) })
+}
 
 const speakingStore = useSpeakingStore()
 const { mouthOpenSize, textMouthForm, textMouthOpenSize, textSpeaking } = storeToRefs(speakingStore)
@@ -726,10 +750,53 @@ function resetAudioDrivenSpeakingState() {
   mouthFormSize.value = resolveTextDrivenMouthFormSize()
 }
 
-const { activeCard } = storeToRefs(useAiriCardStore())
+const { activeCard, activeCardId: activeCardKey } = storeToRefs(useAiriCardStore())
 const speechStore = useSpeechStore()
 const { ssmlEnabled, pitch } = storeToRefs(speechStore)
 const activeCardId = computed(() => activeCard.value?.name ?? 'default')
+const authStore = useAuthStore()
+let qqEmotionReleaseTimer: ReturnType<typeof setTimeout> | undefined
+let pendingQqVisualEvent: QqVisualEvent | undefined
+function applyQqVisualEvent(event: QqVisualEvent) {
+  if (event.characterId !== `local:${activeCardKey.value}`)
+    return
+  if (nowSpeaking.value || textSpeaking.value) {
+    pendingQqVisualEvent = event
+    return
+  }
+  if (qqEmotionReleaseTimer)
+    clearTimeout(qqEmotionReleaseTimer)
+  requestAutomaticLive2DEmotionAction(event.emotion!, { scopeId: `qq:${event.turnId}`, turnId: event.turnId, transitionMs: 450 })
+  if (stageModelRenderer.value === 'live2d') {
+    const motionName = EMOTION_EmotionMotionName_value[event.emotion!]
+    const metadata = live2dPerformanceResourceMetadataByModel.value[stageModelSelected.value]?.motions
+    const motion = live2dAvailableMotions.value.find(item => metadata?.[createLive2DPerformanceMotionResourceId(item.motionName, item.motionIndex)]?.emotionTags?.includes(event.emotion!))
+      ?? live2dAvailableMotions.value.find(item => item.motionName.toLowerCase() === motionName.toLowerCase())
+    if (motion)
+      live2dStore.requestLive2DAction('persona:semantic-resource', { motion: { group: motion.motionName, index: motion.motionIndex }, priority: 'normal', cleanupMode: 'auto', durationMs: 2400 })
+  }
+  qqEmotionReleaseTimer = setTimeout(() => {
+    releaseAutomaticEmotion({ scopeId: `qq:${event.turnId}`, turnId: event.turnId, transitionMs: 650 })
+    qqEmotionReleaseTimer = undefined
+  }, 2800)
+}
+watch([nowSpeaking, textSpeaking], ([audio, text]) => {
+  if (audio || text || !pendingQqVisualEvent)
+    return
+  const event = pendingQqVisualEvent
+  pendingQqVisualEvent = undefined
+  if (Date.now() - Date.parse(event.deliveredAt) < 10_000)
+    applyQqVisualEvent(event)
+})
+watch(() => authStore.isAuthenticated, (authenticated, _, onCleanup) => {
+  if (!authenticated)
+    return
+  const stop = startQqVisualEventPolling(applyQqVisualEvent)
+  onCleanup(() => {
+    stop()
+    pendingQqVisualEvent = undefined
+  })
+}, { immediate: true })
 const speechRuntimeStore = useSpeechRuntimeStore()
 const speechDisplaySyncStore = useSpeechDisplaySyncStore()
 const speechLatencyStore = useSpeechLatencyStore()
@@ -2236,6 +2303,8 @@ chatHookCleanups.push(onAssistantResponseEnd(async (_message, context) => {
 }))
 
 onUnmounted(() => {
+  if (qqEmotionReleaseTimer)
+    clearTimeout(qqEmotionReleaseTimer)
   lipSyncStarted.value = false
   clearSpeakingPlaybackEndTimer()
   clearAllSpeechPerformanceState()
@@ -2332,6 +2401,7 @@ defineExpose({
         :x-offset="xOffset"
         :y-offset="yOffset"
         :scale="scale"
+        :resolution="live2dResolution"
         :disable-focus-at="live2dDisableFocus"
         :theme-colors-hue="themeColorsHue"
         :theme-colors-hue-dynamic="themeColorsHueDynamic"
@@ -2345,6 +2415,7 @@ defineExpose({
         :live2d-max-fps="live2dMaxFps"
         :live2d-idle-motion-keys="currentIdleMotionKeys"
         :live2d-idle-motion-loop-enabled="currentIdleMotionLoopEnabled"
+        @model-error="handleDisplayModelError"
       />
       <PictureOcScene
         v-if="stageModelRenderer === 'picture-oc' && showStage"
@@ -2356,7 +2427,7 @@ defineExpose({
         :y-offset="yOffset"
         :scale="scale"
         min-w="50% <lg:full" min-h="100 sm:100" h-full w-full flex-1
-        @error="console.error"
+        @error="handleDisplayModelError({ error: getErrorMessage($event), modelId: stageModelSelectedDisplayModel?.id })"
       />
       <ThreeScene
         v-if="stageModelRenderer === 'vrm' && showStage"
@@ -2367,7 +2438,7 @@ defineExpose({
         :paused="paused"
         :show-axes="stageViewControlsEnabled"
         :current-audio-source="currentAudioSource"
-        @error="console.error"
+        @error="handleDisplayModelError({ error: getErrorMessage($event), modelId: stageModelSelectedDisplayModel?.id })"
       />
     </div>
   </div>

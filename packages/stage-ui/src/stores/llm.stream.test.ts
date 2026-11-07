@@ -112,7 +112,9 @@ describe('llm stream error bridging', () => {
           ],
         }
     await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], options)).resolves.toEqual({
-      type: 'empty-result', reason: 'no-visible-text', completedToolCallIds: [],
+      type: 'empty-result',
+      reason: 'no-visible-text',
+      completedToolCallIds: [],
     })
     expect(streamText).toHaveBeenCalledTimes(1)
   })
@@ -131,9 +133,13 @@ describe('llm stream error bridging', () => {
     vi.mocked(streamText).mockImplementationOnce(() => {
       const rejected = Promise.reject(failure)
       return {
-        fullStream: new ReadableStream(), messages: rejected, steps: rejected,
-        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        fullStream: new ReadableStream(),
+        messages: rejected,
+        steps: rejected,
+        reasoningTextStream: new ReadableStream(),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       }
     })
     const provider = {
@@ -149,9 +155,13 @@ describe('llm stream error bridging', () => {
     vi.mocked(streamText).mockImplementationOnce(() => {
       const rejected = Promise.reject(Object.assign(new Error('Too many requests'), { status: 429 }))
       return {
-        fullStream: new ReadableStream(), messages: rejected, steps: rejected,
-        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        fullStream: new ReadableStream(),
+        messages: rejected,
+        steps: rejected,
+        reasoningTextStream: new ReadableStream(),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       }
     })
     const provider = {
@@ -170,9 +180,13 @@ describe('llm stream error bridging', () => {
       const execute = vi.fn(() => 'done')
       const parent = new AbortController()
       vi.mocked(streamText).mockImplementationOnce(() => ({
-        fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
-        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        fullStream: new ReadableStream(),
+        messages: new Promise(() => {}),
+        steps: new Promise(() => {}),
+        reasoningTextStream: new ReadableStream(),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       }))
       const provider = {
         chat: (model: string) => ({ apiKey: 'official-cloud', baseURL: 'https://example.com/v1/', model }),
@@ -203,15 +217,20 @@ describe('llm stream error bridging', () => {
     vi.useFakeTimers()
     try {
       vi.mocked(streamText).mockImplementationOnce(() => ({
-        fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
-        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        fullStream: new ReadableStream(),
+        messages: new Promise(() => {}),
+        steps: new Promise(() => {}),
+        reasoningTextStream: new ReadableStream(),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       }))
       const provider = {
         chat: (model: string) => ({ apiKey: 'official-cloud', baseURL: 'https://example.com/v1/', model }),
       } as unknown as ChatProvider
       const result = useLLM().stream('official-model', provider, [{ role: 'user', content: 'hi' }], {
-        emptyOnFirstEventTimeout: true, firstEventTimeoutMs: 5_000,
+        emptyOnFirstEventTimeout: true,
+        firstEventTimeoutMs: 5_000,
       })
       await vi.advanceTimersByTimeAsync(90_000)
       await expect(result).resolves.toMatchObject({ type: 'empty-result' })
@@ -230,9 +249,13 @@ describe('llm stream error bridging', () => {
       vi.mocked(streamText).mockImplementationOnce((options: any) => {
         queueMicrotask(() => { void options.onEvent?.({ type: 'finish', finishReason: 'tool_calls' }) })
         return {
-          fullStream: new ReadableStream(), messages: new Promise(() => {}), steps: new Promise(() => {}),
-          reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-          totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+          fullStream: new ReadableStream(),
+          messages: new Promise(() => {}),
+          steps: new Promise(() => {}),
+          reasoningTextStream: new ReadableStream(),
+          textStream: new ReadableStream(),
+          totalUsage: Promise.resolve(undefined),
+          usage: Promise.resolve(undefined),
         }
       })
       const provider = {
@@ -263,16 +286,21 @@ describe('llm stream error bridging', () => {
       void options.onEvent?.({ type: 'finish', finishReason: 'stop' })
       parent.abort(new DOMException('Cancelled by user', 'AbortError'))
       return {
-        fullStream: new ReadableStream(), messages: Promise.resolve(options.messages), steps: Promise.resolve([]),
-        reasoningTextStream: new ReadableStream(), textStream: new ReadableStream(),
-        totalUsage: Promise.resolve(undefined), usage: Promise.resolve(undefined),
+        fullStream: new ReadableStream(),
+        messages: Promise.resolve(options.messages),
+        steps: Promise.resolve([]),
+        reasoningTextStream: new ReadableStream(),
+        textStream: new ReadableStream(),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       }
     })
     const provider = {
       chat: (model: string) => ({ apiKey: 'test-key', baseURL: 'https://example.com/v1/', model }),
     } as unknown as ChatProvider
     await expect(useLLM().stream('test-model', provider, [{ role: 'user', content: 'hi' }], {
-      abortSignal: parent.signal, onStreamEvent,
+      abortSignal: parent.signal,
+      onStreamEvent,
     })).rejects.toThrow('Cancelled by user')
     expect(onStreamEvent).not.toHaveBeenCalled()
     expect(vi.mocked(streamText).mock.calls[0]?.[0].abortSignal?.aborted).toBe(true)

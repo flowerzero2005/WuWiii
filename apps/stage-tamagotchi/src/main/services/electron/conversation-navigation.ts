@@ -106,8 +106,9 @@ export function createConversationNavigationService(openChatWindow: () => Promis
         throw new Error('Conversation navigation must start from settings.')
       const target = current(selection.userId) ?? await openChatWindow()
       if (!await waitUntilReady(target) || target.isDestroyed()
-        || !conversationRoutes.has(windowRoute(target)) || selections.get(target.id)?.selection.userId !== selection.userId)
+        || !conversationRoutes.has(windowRoute(target)) || selections.get(target.id)?.selection.userId !== selection.userId) {
         return false
+      }
       if ([...pending.values()].some(request => request.windowId === target.id))
         return false
       const targetContext = contexts.get(target.id)
@@ -121,7 +122,7 @@ export function createConversationNavigationService(openChatWindow: () => Promis
           pending.delete(requestId)
           resolve(accepted)
         }
-        const timer = setTimeout(() => finish(false), NAVIGATION_TIMEOUT_MS)
+        const timer = setTimeout(finish, NAVIGATION_TIMEOUT_MS, false)
         pending.set(requestId, { windowId: target.id, finish })
         targetContext.emit(conversationOpenRequested, { ...selection, requestId, expiresAt: Date.now() + NAVIGATION_TIMEOUT_MS })
       })

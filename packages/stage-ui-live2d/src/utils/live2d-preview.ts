@@ -12,13 +12,13 @@ import './pixi-csp'
 /**
  * Render a Live2D zip/file to an offscreen canvas and return a padded preview data URL.
  */
-export async function loadLive2DModelPreview(file: File) {
+export async function loadLive2DModelPreview(file: File, compact = false) {
   Live2DModel.registerTicker(Ticker)
   extensions.add(TickerPlugin)
 
-  const previewWidth = 1440
-  const previewHeight = 2560
-  const previewResolution = 2
+  const previewWidth = compact ? 512 : 1440
+  const previewHeight = compact ? 896 : 2560
+  const previewResolution = compact ? 1 : 2
 
   const offscreenCanvas = document.createElement('canvas')
   offscreenCanvas.width = previewWidth * previewResolution
@@ -50,26 +50,25 @@ export async function loadLive2DModelPreview(file: File) {
     console.error('[Live2D] Failed to initialize preview Pixi stage:', normalizeLive2DWebGLErrorMessage(error))
     if (offscreenCanvas.isConnected)
       document.body.removeChild(offscreenCanvas)
-    return
+    throw error
   }
 
   app.stage.scale.set(previewResolution)
   app.ticker.stop()
 
   const modelInstance = new Live2DModel()
-  const objUrl = URL.createObjectURL(file)
-  const res = await fetch(objUrl)
-  const blob = await res.blob()
-
   const cleanup = () => {
-    app.destroy()
+    // Preview textures must be released before the main stage creates another
+    // WebGL context. Keeping them alive can exhaust mobile GPU memory.
+    if (modelInstance.internalModel)
+      modelInstance.destroy({ texture: true, baseTexture: true })
+    app.destroy(true, { children: false, texture: false, baseTexture: false })
     if (offscreenCanvas.isConnected)
       document.body.removeChild(offscreenCanvas)
-    URL.revokeObjectURL(objUrl)
   }
 
   try {
-    await Live2DFactory.setupLive2DModel(modelInstance, [new File([blob], file.name)], { autoInteract: false })
+    await Live2DFactory.setupLive2DModel(modelInstance, [file], { autoInteract: false })
     app.stage.addChild(modelInstance)
 
     modelInstance.x = 275
@@ -100,5 +99,6 @@ export async function loadLive2DModelPreview(file: File) {
   catch (error) {
     console.error('[Live2D] Failed to render model preview:', error)
     cleanup()
+    throw error
   }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ChatHistoryItem } from '@proj-airi/stage-ui/types/chat'
 
+import { QqShortTermHistory } from '@proj-airi/stage-ui/components/qq-settings'
 import { useConversationNavigation } from '@proj-airi/stage-ui/composables/use-conversation-navigation'
 import { useAssistantInnerVoiceNoteStore } from '@proj-airi/stage-ui/stores/chat/inner-voice-notes'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
@@ -1079,6 +1080,7 @@ async function deleteInspectedConversation() {
         </div>
       </div>
     </div>
+    <QqShortTermHistory />
   </div>
 </template>
 

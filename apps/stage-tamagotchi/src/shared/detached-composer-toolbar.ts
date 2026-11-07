@@ -18,8 +18,8 @@ export interface ComposerToolbarState {
   webSearchAvailable: boolean
 }
 
-export type ComposerToolbarAction =
-  | 'capture-screen'
+export type ComposerToolbarAction
+  = | 'capture-screen'
     | 'interrupt'
     | 'open-image-picker'
     | 'open-settings'

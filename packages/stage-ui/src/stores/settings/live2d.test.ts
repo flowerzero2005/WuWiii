@@ -48,19 +48,20 @@ describe('live2d model motion settings', () => {
     })
   })
 
-  it('uses three Idle motions for idling and all remaining motions for activities by default', () => {
+  it('uses all Idle group variants for idling and keeps other motions for activities', () => {
     expect(createDefaultLive2DModelMotionSettings([
       { fileName: 'idle0.motion3.json', motionIndex: 0, motionName: 'Idle' },
       { fileName: 'idle1.motion3.json', motionIndex: 1, motionName: 'Idle' },
       { fileName: 'idle2.motion3.json', motionIndex: 2, motionName: 'Idle' },
       { fileName: 'idle3.motion3.json', motionIndex: 3, motionName: 'Idle' },
+      { fileName: 'idle-soft.motion3.json', motionIndex: 0, motionName: 'Idle_Soft' },
       { fileName: 'wave.motion3.json', motionIndex: 0, motionName: 'Wave' },
     ])).toEqual({
       authoredIdleMode: 'selected',
-      idleMotionKeys: ['["Idle",0]', '["Idle",1]', '["Idle",2]'],
+      idleMotionKeys: ['["Idle",0]', '["Idle",1]', '["Idle",2]', '["Idle",3]', '["Idle_Soft",0]'],
       seamlessIdleLoopEnabled: false,
       activityEnabled: true,
-      activityMotionKeys: ['["Idle",3]', '["Wave",0]'],
+      activityMotionKeys: ['["Wave",0]'],
     })
   })
 

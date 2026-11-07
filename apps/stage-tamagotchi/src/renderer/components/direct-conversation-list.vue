@@ -109,7 +109,9 @@ async function saveTitle() {
       :placeholder="t('stage.chat.conversations.search')"
       :class="['h-9 w-full rounded-md border border-[var(--airi-border-subtle)] bg-transparent px-2 text-xs', 'outline-none focus:border-[var(--airi-accent)]']"
     >
-    <p v-if="error" role="alert" :class="['airi-status-danger rounded-md p-2 text-xs']">{{ error }}</p>
+    <p v-if="error" role="alert" :class="['airi-status-danger rounded-md p-2 text-xs']">
+      {{ error }}
+    </p>
     <p v-if="!filteredConversations.length" :class="['px-2 py-6 text-center text-xs text-[var(--airi-text-muted)]']">
       {{ t(query ? 'stage.chat.conversations.no-results' : 'stage.chat.conversations.empty') }}
     </p>
@@ -117,8 +119,12 @@ async function saveTitle() {
       <form v-if="editingId === conversation.sessionId" :class="['flex flex-col gap-2 p-2']" @submit.prevent="saveTitle">
         <input v-model="editingTitle" autofocus maxlength="80" :aria-label="t('stage.chat.conversations.title-label')" :class="['h-8 min-w-0 rounded-md border border-[var(--airi-border-subtle)] bg-[var(--airi-surface-card-base)] px-2 text-xs outline-none focus:border-[var(--airi-accent)]']" @keydown.esc="editingId = ''">
         <div :class="['flex justify-end gap-2']">
-          <button type="button" :disabled="saving" :class="['rounded px-2 py-1 text-xs airi-overlay-control-muted']" @click="editingId = ''">{{ t('stage.chat.conversations.cancel') }}</button>
-          <button type="submit" :disabled="saving || !editingTitle.trim()" :class="['rounded px-2 py-1 text-xs airi-overlay-control-primary disabled:opacity-40']">{{ t('stage.chat.conversations.save') }}</button>
+          <button type="button" :disabled="saving" :class="['rounded px-2 py-1 text-xs airi-overlay-control-muted']" @click="editingId = ''">
+            {{ t('stage.chat.conversations.cancel') }}
+          </button>
+          <button type="submit" :disabled="saving || !editingTitle.trim()" :class="['rounded px-2 py-1 text-xs airi-overlay-control-primary disabled:opacity-40']">
+            {{ t('stage.chat.conversations.save') }}
+          </button>
         </div>
       </form>
       <template v-else>
@@ -139,15 +145,25 @@ async function saveTitle() {
         </button>
         <div :class="['flex items-center gap-1 px-2 pb-1']">
           <time :datetime="new Date(conversation.lastMessageAt ?? conversation.updatedAt).toISOString()" :class="['min-w-0 flex-1 text-[10px] text-[var(--airi-text-soft)]']">{{ formatTime(conversation.lastMessageAt ?? conversation.updatedAt) }}</time>
-          <button type="button" :disabled="busy" :aria-label="t('stage.chat.conversations.rename')" :title="t('stage.chat.conversations.rename')" :class="actionClass" @click="editingId = conversation.sessionId; editingTitle = conversation.title || ''; deletingId = ''"><span class="i-lucide:pencil size-3.5" aria-hidden="true" /></button>
-          <button type="button" :disabled="busy" :aria-label="t('stage.chat.conversations.delete')" :title="t('stage.chat.conversations.delete')" :class="actionClass" @click="deletingId = conversation.sessionId"><span class="i-lucide:trash-2 size-3.5" aria-hidden="true" /></button>
+          <button type="button" :disabled="busy" :aria-label="t('stage.chat.conversations.rename')" :title="t('stage.chat.conversations.rename')" :class="actionClass" @click="editingId = conversation.sessionId; editingTitle = conversation.title || ''; deletingId = ''">
+            <span class="i-lucide:pencil size-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" :disabled="busy" :aria-label="t('stage.chat.conversations.delete')" :title="t('stage.chat.conversations.delete')" :class="actionClass" @click="deletingId = conversation.sessionId">
+            <span class="i-lucide:trash-2 size-3.5" aria-hidden="true" />
+          </button>
         </div>
       </template>
       <div v-if="deletingId === conversation.sessionId" :class="['border-t border-[var(--airi-border-subtle)] p-2']" role="group" :aria-label="t('stage.chat.conversations.delete')">
-        <p :class="['text-xs text-[var(--airi-text)] leading-5']">{{ t('stage.chat.conversations.delete-confirm', { title: conversation.title || t('stage.chat.conversations.untitled') }) }}</p>
+        <p :class="['text-xs text-[var(--airi-text)] leading-5']">
+          {{ t('stage.chat.conversations.delete-confirm', { title: conversation.title || t('stage.chat.conversations.untitled') }) }}
+        </p>
         <div :class="['mt-2 flex justify-end gap-2']">
-          <button type="button" :disabled="busy" :class="['rounded px-2 py-1 text-xs airi-overlay-control-muted']" @click="deletingId = ''">{{ t('stage.chat.conversations.cancel') }}</button>
-          <button type="button" :disabled="busy" :class="['rounded px-2 py-1 text-xs airi-status-danger disabled:opacity-40']" @click="emit('delete', conversation.sessionId); deletingId = ''">{{ t('stage.chat.conversations.delete') }}</button>
+          <button type="button" :disabled="busy" :class="['rounded px-2 py-1 text-xs airi-overlay-control-muted']" @click="deletingId = ''">
+            {{ t('stage.chat.conversations.cancel') }}
+          </button>
+          <button type="button" :disabled="busy" :class="['rounded px-2 py-1 text-xs airi-status-danger disabled:opacity-40']" @click="emit('delete', conversation.sessionId); deletingId = ''">
+            {{ t('stage.chat.conversations.delete') }}
+          </button>
         </div>
       </div>
     </div>

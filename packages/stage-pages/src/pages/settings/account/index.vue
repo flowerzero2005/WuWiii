@@ -10,7 +10,7 @@ import { useCommerceStore } from '@proj-airi/stage-ui/stores/commerce'
 import { buildUsageHistoryDisplay } from '@proj-airi/stage-ui/stores/commerce-usage-history-display'
 import { useOfficialPricingStore } from '@proj-airi/stage-ui/stores/official-pricing'
 import { useProfileStore } from '@proj-airi/stage-ui/stores/profile'
-import { BasicTextarea, Button, Checkbox, Input, SelectTab } from '@proj-airi/ui'
+import { BasicTextarea, Button, Input, SelectTab } from '@proj-airi/ui'
 import { useEventListener, useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
@@ -29,7 +29,7 @@ const officialPricingStore = useOfficialPricingStore()
 const profileStore = useProfileStore()
 
 const { isAuthenticated, user } = storeToRefs(authStore)
-const { account, accountError, activeEntitlements, activePlan, autoCheckInEnabled, availablePoints, balance, checkInError, checkInRefreshSignal, checkInState, isClaimingCheckIn, isLoading, isLoadingCheckIn, isLoadingMoreLedger, isLoadingMoreRequestHistory, isLoadingRequestHistory, isRedeeming, ledgerCursor, recentLedger, requestHistory, requestHistoryAvailable, requestHistoryCursor, requestHistoryError, requestHistoryServerNow } = storeToRefs(commerceStore)
+const { account, accountError, activeEntitlements, activePlan, availablePoints, balance, checkInError, checkInRefreshSignal, checkInState, isClaimingCheckIn, isLoading, isLoadingCheckIn, isLoadingMoreLedger, isLoadingMoreRequestHistory, isLoadingRequestHistory, isRedeeming, ledgerCursor, recentLedger, requestHistory, requestHistoryAvailable, requestHistoryCursor, requestHistoryError, requestHistoryServerNow } = storeToRefs(commerceStore)
 const { isSaving: isProfileSaving, profile } = storeToRefs(profileStore)
 
 const activationCode = ref('')
@@ -68,7 +68,9 @@ const profileBio = ref('')
 const accountActivityTab = ref<'usage' | 'balance'>('usage')
 const pricingSection = ref<HTMLElement>()
 let accountViewGeneration = 0
-onBeforeUnmount(() => { accountViewGeneration += 1 })
+onBeforeUnmount(() => {
+  accountViewGeneration += 1
+})
 
 const AVATAR_OUTPUT_SIZE = 256
 const MAX_AVATAR_SOURCE_BYTES = 8 * 1024 * 1024
@@ -461,6 +463,31 @@ function formatLedgerUsageContext(entry: DisplayLedgerEntry) {
 }
 
 function formatLedgerRefund(entry: DisplayLedgerEntry) {
+  if (entry.note === 'qq-image-unusable') {
+    return t('settings.pages.account.sections.ledger.refunded-qq-image-unusable', {
+      points: entry.refundedPoints,
+    })
+  }
+  if (entry.note === 'qq-analysis-unusable') {
+    return t('settings.pages.account.sections.ledger.refunded-qq-analysis-unusable', {
+      points: entry.refundedPoints,
+    })
+  }
+  if (entry.note === 'qq-no-reply') {
+    return t('settings.pages.account.sections.ledger.refunded-qq-no-reply', {
+      points: entry.refundedPoints,
+    })
+  }
+  if (entry.note === 'qq-send-failed') {
+    return t('settings.pages.account.sections.ledger.refunded-qq-send-failed', {
+      points: entry.refundedPoints,
+    })
+  }
+  if (entry.note === 'qq-search-failed') {
+    return t('settings.pages.account.sections.ledger.refunded-qq-search-failed', {
+      points: entry.refundedPoints,
+    })
+  }
   if (entry.note === 'reply-display-failure-refund') {
     return t('settings.pages.account.sections.ledger.refunded-display-failure', {
       points: entry.refundedPoints,
@@ -910,7 +937,7 @@ watch(profile, () => {
 
 <template>
   <div data-airi-runtime-route="/settings/account" :class="['mx-auto flex min-w-0 w-full max-w-[76rem] flex-col gap-5 pb-8']">
-    <header :class="['flex flex-wrap items-center justify-between gap-x-5 gap-y-3']">
+    <header :class="['flex flex-wrap items-center justify-between gap-x-5 gap-y-3', !isAuthenticated ? 'account-intro-guest' : '']">
       <div :class="['min-w-0']">
         <h1 :class="['text-xl font-semibold tracking-tight airi-text']">
           {{ t('settings.pages.account.sections.overview.title') }}
@@ -1318,27 +1345,16 @@ watch(profile, () => {
           </span>
         </header>
 
-        <div :class="['mt-3 flex items-center justify-between gap-4 rounded-xl bg-[var(--airi-surface-control-muted)] px-3 py-3']">
-          <div :class="['min-w-0']">
-            <label for="account-auto-check-in" :class="['cursor-pointer text-sm font-medium airi-text']">
-              {{ t('settings.pages.account.sections.check-in.auto-label') }}
-            </label>
-            <p id="account-auto-check-in-description" :class="['mt-1 text-xs leading-5 airi-text-muted']">
-              {{ t(`settings.pages.account.sections.check-in.${autoCheckInEnabled ? 'auto-enabled-description' : 'auto-disabled-description'}`) }}
-            </p>
-          </div>
-          <Checkbox
-            id="account-auto-check-in"
-            v-model="autoCheckInEnabled"
-            :class="['shrink-0']"
-            aria-describedby="account-auto-check-in-description"
-          />
-        </div>
+        <p :class="['mt-3 text-xs leading-5 airi-text-muted']">
+          {{ t('settings.pages.account.sections.check-in.auto-server-description') }}
+        </p>
 
         <div :class="['mt-3 flex flex-wrap items-center justify-between gap-4']">
           <div :class="['min-w-0 flex-[1_1_24rem]']">
             <template v-if="checkInReady && checkInState">
-              <p :class="['text-xs leading-5 airi-text-muted']">{{ checkInDescription }}</p>
+              <p :class="['text-xs leading-5 airi-text-muted']">
+                {{ checkInDescription }}
+              </p>
               <dl :class="['mt-3 flex flex-wrap gap-x-8 gap-y-3']">
                 <div :class="['min-w-0']">
                   <dt :class="['text-xs airi-text-muted']">
@@ -1409,7 +1425,9 @@ watch(profile, () => {
             </span>
             <span>{{ t('settings.pages.account.sections.check-in.paid-separate') }}</span>
           </p>
-          <p :class="['mt-1']">{{ t('settings.pages.account.sections.check-in.schedule') }}</p>
+          <p :class="['mt-1']">
+            {{ t('settings.pages.account.sections.check-in.schedule') }}
+          </p>
           <p>{{ t('settings.pages.account.sections.check-in.capacity-rule') }}</p>
         </div>
       </section>
@@ -1826,8 +1844,12 @@ watch(profile, () => {
             <header :class="['mb-4 flex items-start gap-2']">
               <span :class="['i-solar:shield-user-bold-duotone mt-0.5 size-5 shrink-0 text-[var(--airi-accent-strong)]']" />
               <div :class="['min-w-0']">
-                <h2 :class="['text-base font-semibold airi-text']">{{ t('settings.pages.account.sections.security.title') }}</h2>
-                <p :class="['mt-1 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.security.description') }}</p>
+                <h2 :class="['text-base font-semibold airi-text']">
+                  {{ t('settings.pages.account.sections.security.title') }}
+                </h2>
+                <p :class="['mt-1 text-xs leading-5 airi-text-muted']">
+                  {{ t('settings.pages.account.sections.security.description') }}
+                </p>
               </div>
             </header>
             <div v-if="hasBoundEmail" :class="['flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--airi-border-subtle)] pb-3']">
@@ -1875,8 +1897,12 @@ watch(profile, () => {
               <Input v-model="newPassword" type="password" show-password-toggle autocomplete="new-password" :aria-label="t('settings.pages.account.sections.security.new-password')" :placeholder="t('settings.pages.account.sections.security.new-password')" variant="primary-dimmed" />
               <Input v-model="confirmNewPassword" type="password" show-password-toggle autocomplete="new-password" :aria-label="t('settings.pages.account.sections.security.confirm-password')" :placeholder="t('settings.pages.account.sections.security.confirm-password')" variant="primary-dimmed" />
               <div :class="['flex flex-wrap justify-end gap-2']">
-                <Button type="button" size="sm" variant="secondary" @click="showPasswordForm = false">{{ t('settings.pages.account.actions.cancel') }}</Button>
-                <Button type="submit" size="sm" :disabled="!canChangePassword" :loading="isChangingPassword">{{ t('settings.pages.account.sections.security.save-password') }}</Button>
+                <Button type="button" size="sm" variant="secondary" @click="showPasswordForm = false">
+                  {{ t('settings.pages.account.actions.cancel') }}
+                </Button>
+                <Button type="submit" size="sm" :disabled="!canChangePassword" :loading="isChangingPassword">
+                  {{ t('settings.pages.account.sections.security.save-password') }}
+                </Button>
               </div>
             </form>
           </section>
@@ -1890,43 +1916,70 @@ watch(profile, () => {
               <span aria-hidden="true" :class="['i-solar:tag-price-bold-duotone size-5 shrink-0 airi-text-muted']" />
               {{ t('settings.pages.account.sections.pricing.title') }}
             </h2>
-            <p :class="['mt-1 text-sm leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.description') }}</p>
+            <p :class="['mt-1 text-sm leading-5 airi-text-muted']">
+              {{ t('settings.pages.account.sections.pricing.description') }}
+            </p>
           </div>
           <span :class="['text-xs airi-text-muted']">{{ officialPriceSummary ? t('settings.pages.account.sections.pricing.live') : t('settings.pages.account.sections.pricing.loading') }}</span>
         </header>
         <div v-if="officialPriceSummary" :class="['account-pricing-grid mt-4 gap-4']">
           <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4']">
-            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.chat') }}</h3>
+            <h3 :class="['text-sm font-medium airi-text']">
+              {{ t('settings.pages.account.sections.pricing.chat') }}
+            </h3>
             <div v-for="model in officialPriceSummary.models" :key="model.id" :class="['mt-2 flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1 text-xs leading-5 airi-text-muted']">
               <span :class="['min-w-0 break-words']">{{ locale === 'zh-Hans' ? model.nameZh || model.name : model.name }}</span>
               <span :class="['break-words tabular-nums']">{{ modelDisplayPoints(model) }} {{ t('settings.pages.account.sections.pricing.points-per-unit', { tokens: model.tokenUnit }) }}</span>
             </div>
-            <p :class="['mt-3 border-t border-[var(--airi-border-subtle)] pt-3 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.chat-billing-explanation') }}</p>
+            <p :class="['mt-3 border-t border-[var(--airi-border-subtle)] pt-3 text-xs leading-5 airi-text-muted']">
+              {{ t('settings.pages.account.sections.pricing.chat-billing-explanation') }}
+            </p>
+            <p :class="['mt-2 text-xs leading-5 airi-text-muted']">
+              {{ t('settings.pages.account.sections.pricing.qq-billing-explanation') }}
+            </p>
           </div>
           <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4']">
-            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.speech') }}</h3>
+            <h3 :class="['text-sm font-medium airi-text']">
+              {{ t('settings.pages.account.sections.pricing.speech') }}
+            </h3>
             <div v-for="chain in officialPriceSummary.capabilities.speech.chains" :key="chain.channel" :class="['mt-2 flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1 text-xs leading-5 airi-text-muted']">
               <span>{{ t(`tamagotchi.settings.pages.official-voices.channels.${chain.channel}`) }}</span>
               <span :class="['break-words tabular-nums']">{{ chain.pointsPerMinute }} {{ t('settings.pages.account.sections.pricing.points-per-minute') }}</span>
             </div>
-            <p :class="['mt-2 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.voice-surcharge-note') }}</p>
+            <p :class="['mt-2 text-xs leading-5 airi-text-muted']">
+              {{ t('settings.pages.account.sections.pricing.voice-surcharge-note') }}
+            </p>
           </div>
           <div :class="['min-w-0 rounded-xl bg-[var(--airi-surface-control-muted)] p-4 text-xs leading-5 airi-text-muted']">
-            <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.other') }}</h3>
-            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.asr', { first: officialPriceSummary.capabilities.transcription.firstMinutePoints, additional: officialPriceSummary.capabilities.transcription.additionalMinutePoints }) }}</p>
-            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.embedding'), points: officialPriceSummary.capabilities.embedding.pointsPerRequest }) }}</p>
-            <p :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.web-search'), points: officialPriceSummary.capabilities.webSearch.pointsPerRequest }) }}</p>
-            <p v-if="officialPriceSummary.capabilities.vision" :class="['mt-2']">{{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.vision'), points: officialPriceSummary.capabilities.vision.pointsPerRequest }) }}</p>
+            <h3 :class="['text-sm font-medium airi-text']">
+              {{ t('settings.pages.account.sections.pricing.other') }}
+            </h3>
+            <p :class="['mt-2']">
+              {{ t('settings.pages.account.sections.pricing.asr', { first: officialPriceSummary.capabilities.transcription.firstMinutePoints, additional: officialPriceSummary.capabilities.transcription.additionalMinutePoints }) }}
+            </p>
+            <p :class="['mt-2']">
+              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.embedding'), points: officialPriceSummary.capabilities.embedding.pointsPerRequest }) }}
+            </p>
+            <p :class="['mt-2']">
+              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.web-search'), points: officialPriceSummary.capabilities.webSearch.pointsPerRequest }) }}
+            </p>
+            <p v-if="officialPriceSummary.capabilities.vision" :class="['mt-2']">
+              {{ t('settings.pages.account.sections.pricing.request', { name: t('settings.pages.account.sections.pricing.vision'), points: officialPriceSummary.capabilities.vision.pointsPerRequest }) }}
+            </p>
           </div>
         </div>
         <div v-if="officialPriceSummary" :class="['mt-4 border-t border-[var(--airi-border-subtle)] pt-4']">
-          <h3 :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.sections.pricing.feature-title') }}</h3>
+          <h3 :class="['text-sm font-medium airi-text']">
+            {{ t('settings.pages.account.sections.pricing.feature-title') }}
+          </h3>
           <div :class="['mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs leading-5 airi-text-muted']">
             <span v-for="feature in officialPriceSummary.features" :key="feature.feature">
               {{ featurePricingLabel(feature.feature) }} × {{ feature.multiplier }}<template v-if="featureMinimumPoints(feature.feature, feature.multiplier) !== undefined"> · {{ t('settings.pages.account.sections.pricing.minimum', { points: featureMinimumPoints(feature.feature, feature.multiplier) }) }}</template>
             </span>
           </div>
-          <p :class="['mt-3 text-xs leading-5 airi-text-muted']">{{ t('settings.pages.account.sections.pricing.no-official-charge') }}</p>
+          <p :class="['mt-3 text-xs leading-5 airi-text-muted']">
+            {{ t('settings.pages.account.sections.pricing.no-official-charge') }}
+          </p>
         </div>
       </section>
     </template>

@@ -8,8 +8,8 @@ import { BackgroundProvider } from '@proj-airi/stage-layouts/components/Backgrou
 import { themeColorFromValue, useThemeColor } from '@proj-airi/stage-layouts/composables/theme-color'
 import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
 import { OnboardingDialog } from '@proj-airi/stage-ui/components'
+import { QqConnectionNotice } from '@proj-airi/stage-ui/components/qq-settings'
 import { client } from '@proj-airi/stage-ui/composables/api'
-import { useAutomaticDailyCheckIn } from '@proj-airi/stage-ui/composables/use-automatic-daily-check-in'
 import { isVisionScreenshotOwnerHash, useAutomaticVisionScreenshot } from '@proj-airi/stage-ui/composables/use-automatic-vision-screenshot'
 import { provideConversationNavigation } from '@proj-airi/stage-ui/composables/use-conversation-navigation'
 import { provideDisplayModelFilePicker } from '@proj-airi/stage-ui/composables/use-display-model-file-dialog'
@@ -219,7 +219,6 @@ provideVisionScreenCapture(visionScreenCapture)
 // Capture the window role before routing initializes; auxiliary windows must
 // not acquire ownership while their route temporarily looks like the stage.
 const isMainStageWindow = isVisionScreenshotOwnerHash(window.location.hash)
-useAutomaticDailyCheckIn(isMainStageWindow)
 useAutomaticVisionScreenshot(visionScreenCapture, isMainStageWindow, isStageRoute)
 const {
   state: autoUpdaterState,
@@ -751,7 +750,7 @@ watch(themeColorsHueDynamic, () => {
   document.documentElement.classList.toggle('dynamic-hue', themeColorsHueDynamic.value)
 }, { immediate: true })
 
-watch(isComposerRoute, composer => {
+watch(isComposerRoute, (composer) => {
   document.documentElement.classList.toggle('composer-window-surface', composer)
 }, { immediate: true })
 
@@ -771,6 +770,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <QqConnectionNotice settings-path="/settings/modules/messaging-qq" />
   <Toaster />
   <ResizeHandler v-if="!isStageRoute && !isComposerRoute" />
   <ChatSpeechRuntime v-if="shouldMountChatSpeechRuntime" />

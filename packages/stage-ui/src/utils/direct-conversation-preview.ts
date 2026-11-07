@@ -9,8 +9,9 @@ export function directConversationMessagePreview(message: ChatHistoryItem, maxLe
   if (message.role !== 'user' && message.role !== 'assistant')
     return ''
   if (message.metadata?.pendingBubble || message.metadata?.speechDisplayPending
-    || message.metadata?.messageKind === 'status' || message.metadata?.toolStatus)
+    || message.metadata?.messageKind === 'status' || message.metadata?.toolStatus) {
     return ''
+  }
 
   const content = message.content
   const hasImage = Array.isArray(content) && content.some(part => part.type === 'image_url')

@@ -26,6 +26,7 @@
     "./stores/live2d": "./src/stores/live2d.ts",
     "./utils/eye-motions": "./src/utils/eye-motions.ts",
     "./utils/action-debug": "./src/utils/action-debug.ts",
+    "./utils/idle-motion-baseline": "./src/utils/idle-motion-baseline.ts",
     "./utils/idle-motion-scheduler": "./src/utils/idle-motion-scheduler.ts",
     "./utils/live2d-preview": "./src/utils/live2d-preview.ts",
     "./utils/live2d-zip-loader": "./src/utils/live2d-zip-loader.ts",

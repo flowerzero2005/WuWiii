@@ -4,6 +4,7 @@ export { CHARACTER_PERFORMANCE_CONTEXT_ID, createCharacterPerformanceContext } f
 export { createDatetimeContext, DATETIME_CONTEXT_ID } from './datetime'
 export { createEmotionHistoryContext, EMOTION_HISTORY_CONTEXT_ID } from './emotion-history'
 export { createEmotionMemoryContext, EMOTION_MEMORY_CONTEXT_ID } from './emotion-memory'
+export { createMemeWikiContextMessage, lookupMemeWikiContext, MEME_WIKI_CONTEXT_ID } from './meme-wiki'
 export { createMemoryCapturePrompt, createMemorySystemPrompt, MEMORY_CAPTURE_CONTEXT_ID, MEMORY_SYSTEM_CONTEXT_ID } from './memory-system-prompt'
 export { createNotebookMemoryContext, NOTEBOOK_MEMORY_CONTEXT_ID, searchRelevantNotebookMemories } from './notebook-memory'
 export { createPersonaStateContext } from './persona-state'

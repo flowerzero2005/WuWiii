@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import type { MemorySyncConflict } from '@proj-airi/stage-ui/libs/shared-memory-sync'
 import type { NotebookEntry, NotebookMemoryScope } from '@proj-airi/stage-ui/stores/character/notebook'
 
 import { useConversationNavigation } from '@proj-airi/stage-ui/composables/use-conversation-navigation'
+import { ACCOUNT_MEMORY_SETTING_ID, getMemorySyncConflicts, listSharedMemorySettings, resolveMemorySyncConflict, setSharedMemoryAccountEnabled, setSharedMemoryEnabled, syncCharacterMemory, syncEnabledCharacterMemories, syncMemoryForLocalCard } from '@proj-airi/stage-ui/libs/shared-memory-sync'
+import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useCharacterNotebookStore } from '@proj-airi/stage-ui/stores/character/notebook'
 import { useMemoryManager } from '@proj-airi/stage-ui/stores/chat/memory-manager'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
@@ -14,6 +17,68 @@ const chatSession = useChatSessionStore()
 const memoryManager = useMemoryManager()
 const notebookStore = useCharacterNotebookStore()
 const airiCards = useAiriCardStore()
+const selectedCharacterId = ref('')
+const auth = useAuthStore()
+const accountMemoryEnabled = ref(true)
+const legacyDisabledCards = ref<string[]>([])
+const accountMemoryBusy = ref(false)
+const accountMemoryError = ref('')
+const accountMemoryNotice = ref('')
+
+async function loadAccountMemorySettings() {
+  if (!auth.isAuthenticated)
+    return
+  try {
+    const settings = await listSharedMemorySettings()
+    accountMemoryEnabled.value = settings.find(setting => setting.personaCardId === ACCOUNT_MEMORY_SETTING_ID)?.enabled !== 0
+    legacyDisabledCards.value = settings.filter(setting => setting.personaCardId !== ACCOUNT_MEMORY_SETTING_ID && !setting.enabled).map(setting => setting.personaCardId)
+    accountMemoryError.value = ''
+  }
+  catch {
+    accountMemoryError.value = '暂时无法读取云端记忆同步状态。'
+  }
+}
+
+async function restoreLegacyCardMemory() {
+  if (!selectedCharacterId.value || !accountMemoryEnabled.value)
+    return
+  accountMemoryBusy.value = true
+  try {
+    await setSharedMemoryEnabled(selectedCharacterId.value, true)
+    legacyDisabledCards.value = legacyDisabledCards.value.filter(id => id !== selectedCharacterId.value)
+    await syncCharacterMemory(selectedCharacterId.value)
+    accountMemoryNotice.value = '此角色的旧版关闭状态已解除，记忆会继续同步。'
+  }
+  catch {
+    accountMemoryError.value = '恢复此角色记忆同步失败，请稍后重试。'
+  }
+  finally {
+    accountMemoryBusy.value = false
+  }
+}
+
+async function toggleAccountMemory(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked
+  accountMemoryBusy.value = true
+  accountMemoryError.value = ''
+  try {
+    await setSharedMemoryAccountEnabled(enabled)
+    accountMemoryEnabled.value = enabled
+    accountMemoryNotice.value = enabled ? '已开启三端记忆同步。旧记忆会在联网后合并。' : '已暂停三端记忆同步，本机和云端记忆仍保留。'
+    if (enabled)
+      await syncEnabledCharacterMemories()
+  }
+  catch {
+    (event.target as HTMLInputElement).checked = accountMemoryEnabled.value
+    accountMemoryError.value = '保存记忆同步设置失败，请稍后重试。'
+  }
+  finally {
+    accountMemoryBusy.value = false
+  }
+}
+
+onMounted(() => void loadAccountMemorySettings())
+watch(() => auth.isAuthenticated, enabled => enabled && void loadAccountMemorySettings())
 const navigation = useConversationNavigation()
 const route = useRoute()
 const router = useRouter()
@@ -57,8 +122,8 @@ const isLoading = ref(true)
 const editingId = ref<string | null>(null)
 const editingText = ref('')
 const editingScope = ref<NotebookMemoryScope>()
-const selectedCharacterId = ref('')
 const scopedEntries = ref<NotebookEntry[]>([])
+const syncConflicts = ref<MemorySyncConflict[]>([])
 const actionPending = ref(false)
 const scopeError = ref('')
 const selectedScope = computed(() => notebookStore.resolveMemoryScope({ personaCardId: selectedCharacterId.value }))
@@ -79,8 +144,11 @@ async function refreshLongTermMemory() {
   scopeError.value = ''
   try {
     const notebook = await notebookStore.getNotebookForScope(scope, { force: true })
-    if (revision === loadRevision && selectedScope.value.characterId === scope.characterId)
+    const conflicts = await getMemorySyncConflicts(scope.personaCardId)
+    if (revision === loadRevision && selectedScope.value.characterId === scope.characterId) {
       scopedEntries.value = notebook.entries.filter(entry => notebookStore.entryBelongsToMemoryScope(entry, scope))
+      syncConflicts.value = conflicts
+    }
   }
   catch {
     if (revision === loadRevision)
@@ -95,6 +163,7 @@ async function refreshLongTermMemory() {
 watch(() => selectedScope.value.characterId, () => {
   ++loadRevision
   scopedEntries.value = []
+  syncConflicts.value = []
   cancelEdit()
   void refreshLongTermMemory()
 }, { flush: 'sync' })
@@ -263,6 +332,7 @@ function shortId(value: string) {
 
 function getSourceSurfaceLabel(sourceSurface: string) {
   const labels: Record<string, string> = {
+    'qq': 'QQ',
     'chat-area': mt('source-surface.chat-area'),
     'chat-area:auto-speech': mt('source-surface.chat-area-auto-speech'),
     'chat-area:auto-speech-stop': mt('source-surface.chat-area-auto-speech-stop'),
@@ -315,6 +385,8 @@ function getSourceJumpTarget(entry: NotebookEntry) {
 }
 
 function canJumpToSource(entry: NotebookEntry) {
+  if (entry.metadata?.sourceSurface === 'qq')
+    return false
   return Boolean(getSourceJumpTarget(entry))
 }
 
@@ -450,8 +522,34 @@ async function deleteEntry(id: string) {
   if (confirm(mt('confirm.delete'))) {
     await runScopedAction(scope, () => notebookStore.updateNotebookForScope(scope, (data) => {
       data.entries = data.entries.filter(entry => entry.id !== id)
+      data.deletedMemoryEntryIds = [...new Set([...(data.deletedMemoryEntryIds ?? []), id])]
     }))
   }
+}
+
+async function toggleQqShare(entry: NotebookEntry) {
+  const scope = { ...selectedScope.value }
+  const updated = await runScopedAction(scope, () => notebookStore.updateMemoryEntryInScope(entry.id, scope, (target) => {
+    target.metadata = { ...target.metadata, qqShare: target.metadata?.qqShare !== true }
+  }))
+  if (updated) {
+    try {
+      const synced = await syncMemoryForLocalCard(scope.personaCardId)
+      accountMemoryError.value = ''
+      accountMemoryNotice.value = synced ? 'QQ 记忆共享设置已同步。' : '共享选择已保存在本机；开启账号记忆同步后 QQ 才能读取。'
+    }
+    catch {
+      accountMemoryError.value = 'QQ 记忆共享已保存在本机，但云端同步失败；联网后会自动重试。'
+    }
+  }
+}
+
+async function resolveSyncConflict(id: string, choice: 'local' | 'remote') {
+  const scope = { ...selectedScope.value }
+  await runScopedAction(scope, async () => {
+    if (!await resolveMemorySyncConflict(scope.personaCardId, id, choice))
+      throw new Error('Memory conflict changed')
+  })
 }
 
 async function solidifyPersonaGrowthCandidate(id: string) {
@@ -501,6 +599,30 @@ async function saveEdit() {
 
 <template>
   <div class="p-6 space-y-6">
+    <section class="airi-surface-panel rounded-xl p-4 space-y-2">
+      <label class="flex items-start justify-between gap-4">
+        <span>
+          <span class="block text-sm font-semibold">三端记忆同步</span>
+          <span class="block text-xs text-[var(--airi-text-muted)]">登录后默认开启，电脑、手机和 QQ 共用允许共享的记忆；各 QQ 联系人和群仍分别保存。关闭只暂停同步，不会删除旧记忆。</span>
+        </span>
+        <input type="checkbox" :checked="accountMemoryEnabled" :disabled="!auth.isAuthenticated || accountMemoryBusy" class="mt-1 size-5 shrink-0 accent-sky-600" @change="toggleAccountMemory">
+      </label>
+      <p v-if="!auth.isAuthenticated" class="text-xs text-[var(--airi-text-muted)]">
+        登录账号后可管理三端记忆同步。
+      </p>
+      <div v-if="accountMemoryEnabled && legacyDisabledCards.includes(selectedCharacterId)" class="flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-300/10 dark:text-amber-100">
+        <span>此角色曾在旧版中单独关闭记忆同步，该选择已保留。</span>
+        <button type="button" :disabled="accountMemoryBusy" class="shrink-0 airi-control px-3 py-1.5" @click="restoreLegacyCardMemory">
+          为此角色开启
+        </button>
+      </div>
+      <p v-if="accountMemoryNotice" role="status" class="text-xs text-[var(--airi-accent-text)]">
+        {{ accountMemoryNotice }}
+      </p>
+      <p v-if="accountMemoryError" role="alert" class="text-xs text-red-600">
+        {{ accountMemoryError }}
+      </p>
+    </section>
     <section :class="filtersPanelClass">
       <label :class="['flex max-w-sm flex-col gap-2 text-sm font-medium']">
         {{ mt('character-selector.label') }}
@@ -508,9 +630,39 @@ async function saveEdit() {
           <option v-for="character in characterOptions" :key="character.id" :value="character.id">{{ character.name }}</option>
         </select>
       </label>
-      <p :class="['text-xs text-[var(--airi-text-muted)] leading-5']">{{ mt('character-selector.description') }}</p>
-      <p v-if="editingId" :class="['text-xs text-[var(--airi-text-muted)]']">{{ mt('character-selector.finish-edit') }}</p>
-      <p v-if="scopeError" role="alert" :class="['airi-status-danger rounded-md p-3 text-sm']">{{ scopeError }}</p>
+      <p :class="['text-xs text-[var(--airi-text-muted)] leading-5']">
+        {{ mt('character-selector.description') }}
+      </p>
+      <p v-if="editingId" :class="['text-xs text-[var(--airi-text-muted)]']">
+        {{ mt('character-selector.finish-edit') }}
+      </p>
+      <p v-if="scopeError" role="alert" :class="['airi-status-danger rounded-md p-3 text-sm']">
+        {{ scopeError }}
+      </p>
+    </section>
+    <section v-if="syncConflicts.length" class="airi-surface-panel rounded-xl p-4 space-y-3">
+      <h3 class="text-sm font-semibold">
+        三端记忆冲突 · {{ syncConflicts.length }}
+      </h3>
+      <p class="text-xs text-[var(--airi-text-muted)]">
+        同一条记忆在不同端被修改。请选择保留哪一边，系统不会自动覆盖。
+      </p>
+      <div v-for="conflict in syncConflicts" :key="conflict.id" class="airi-card rounded-lg p-3 space-y-2">
+        <p class="text-xs text-[var(--airi-text-muted)]">
+          本机：{{ scopedEntries.find(entry => entry.id === conflict.id)?.text ?? '已删除' }}
+        </p>
+        <p class="text-xs text-[var(--airi-text-muted)]">
+          云端：{{ conflict.remote.deletedAt ? '已删除' : conflict.remote.text }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="airi-control px-3 py-1.5 text-xs" :disabled="actionPending" @click="resolveSyncConflict(conflict.id, 'local')">
+            保留本机
+          </button>
+          <button type="button" class="airi-control px-3 py-1.5 text-xs" :disabled="actionPending" @click="resolveSyncConflict(conflict.id, 'remote')">
+            采用云端
+          </button>
+        </div>
+      </div>
     </section>
     <!-- Statistics -->
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -680,6 +832,9 @@ async function saveEdit() {
               <div class="mb-3 break-words text-base leading-relaxed">
                 {{ entry.text }}
               </div>
+              <button v-if="entry.metadata?.sourceSurface !== 'qq'" type="button" :disabled="actionPending" class="mb-2 border border-[var(--airi-border-subtle)] rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-50" :class="entry.metadata?.qqShare === true ? 'bg-[var(--airi-accent-surface)] text-[var(--airi-accent-text)]' : 'text-[var(--airi-text-muted)]'" @click="toggleQqShare(entry)">
+                {{ entry.metadata?.qqShare === true ? '已共享给 QQ · 点击取消' : '仅本人可见 · 点击共享给 QQ' }}
+              </button>
               <div v-if="entry.tags && entry.tags.length > 0" class="flex flex-wrap gap-2">
                 <span
                   v-for="tag in entry.tags"

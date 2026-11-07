@@ -428,10 +428,16 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     return output
   }
 
-  async function createAudioStreamFromMediaStream(stream: MediaStream, sampleRate = DEFAULT_SAMPLE_RATE, onActivity?: () => void) {
+  async function createAudioStreamFromMediaStream(stream: MediaStream, sampleRate = DEFAULT_SAMPLE_RATE, onActivity?: () => void, onAudioLevel?: (volume: number) => void) {
     const audioContext = new AudioContext({ sampleRate, latencyHint: 'interactive' })
     await audioContext.audioWorklet.addModule(vadWorkletUrl)
     const workletNode = new AudioWorkletNode(audioContext, 'vad-audio-worklet-processor')
+    const analyser = onAudioLevel ? audioContext.createAnalyser() : undefined
+    if (analyser) {
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.3
+    }
+    const frequencyData = analyser ? new Uint8Array(analyser.frequencyBinCount) : undefined
 
     let audioStreamController: ReadableStreamDefaultController<ArrayBuffer> | undefined
     const audioStream = new ReadableStream<ArrayBuffer>({
@@ -452,6 +458,14 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       if (audioStreamController.desiredSize !== null && audioStreamController.desiredSize <= 0)
         return
 
+      if (analyser && frequencyData) {
+        analyser.getByteFrequencyData(frequencyData)
+        let sum = 0
+        for (const value of frequencyData)
+          sum += value * value
+        onAudioLevel?.(Math.min(100, Math.sqrt(sum / frequencyData.length) / 255 * 300))
+      }
+
       const pcm16 = float32ToInt16(buffer)
       // Clone buffer to avoid retaining underlying ArrayBuffer references
       audioStreamController.enqueue(pcm16.buffer.slice(0))
@@ -459,7 +473,13 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     }
 
     const mediaStreamSource = audioContext.createMediaStreamSource(stream)
-    mediaStreamSource.connect(workletNode)
+    if (analyser) {
+      mediaStreamSource.connect(analyser)
+      analyser.connect(workletNode)
+    }
+    else {
+      mediaStreamSource.connect(workletNode)
+    }
 
     // Sink to avoid feedback/echo
     const silentGain = audioContext.createGain()
@@ -623,6 +643,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     idleTimeoutMs?: number
     onSentenceEnd?: (delta: string) => boolean | Promise<boolean> | void
     onSpeechEnd?: (text: string) => boolean | Promise<boolean> | void
+    onAudioLevel?: (volume: number) => void
     trace?: {
       callId?: string
       requestId?: string
@@ -904,6 +925,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
         stream,
         options?.sampleRate ?? DEFAULT_SAMPLE_RATE,
         () => bumpIdle(),
+        options?.onAudioLevel,
       )
 
       if (!selectionIsCurrent()) {

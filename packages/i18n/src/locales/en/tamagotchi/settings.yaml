@@ -160,8 +160,8 @@ pages:
         clear: Clear custom position
       fields:
         recommended-replies:
-          description: Disabled by default. When enabled, each completed assistant reply makes one additional request to your selected third-party provider and may incur provider charges. Official cloud stays disabled until separate pricing consent is available.
-          label: Generate reply suggestions (uses an additional model request)
+          description: When enabled, each completed assistant reply makes an additional model request. When disabled, you can generate suggestions from the chat history when needed. Requests may incur provider charges.
+          label: Automatically generate reply suggestions
         floating-replies-enabled:
           label: Show floating desktop replies
           description: Show user, thinking, and reply bubbles near the resident only for collapsed quick chat or voice calls.

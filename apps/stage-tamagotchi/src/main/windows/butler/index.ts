@@ -242,7 +242,8 @@ function createButlerWindow() {
   })
 
   let startedAt = Date.now()
-  window.setAlwaysOnTop(true, 'screen-saver', 1)
+  // Keep the butler above the stage and other app-owned overlay windows.
+  window.setAlwaysOnTop(true, 'screen-saver', 7)
   warnIfSlowButlerOperation(window, 'butler.setAlwaysOnTop', startedAt)
   window.setFullScreenable(false)
   window.setHasShadow(false)
@@ -394,6 +395,14 @@ export function setupButlerWindowManager(params: {
       window,
       i18n: params.i18n,
       serverChannel: params.serverChannel,
+    })
+    window.on('blur', () => {
+      // On Windows, sibling topmost windows can overtake one another when focus
+      // changes even when both retain their always-on-top flag.
+      setTimeout(() => {
+        if (!window.isDestroyed() && window.isVisible())
+          window.moveTop()
+      }, 0)
     })
     defineInvokeHandler(context, electronButlerRendererRuntimeReady, (_, options) => {
       if (isIpcEventFromWindow(window, options))

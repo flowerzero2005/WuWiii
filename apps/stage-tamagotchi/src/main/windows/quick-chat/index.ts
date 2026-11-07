@@ -7,8 +7,8 @@ import type { ServerChannel } from '../../services/airi/channel-server'
 
 import { join, resolve } from 'node:path'
 
-import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { defineInvokeHandler } from '@moeru/eventa'
+import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
 import { BrowserWindow as ElectronBrowserWindow, screen, shell } from 'electron'
 import { debounce } from 'es-toolkit'
 import { isMacOS } from 'std-env'

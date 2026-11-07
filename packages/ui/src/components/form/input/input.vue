@@ -85,18 +85,39 @@ const variantClasses: Record<InputVariant, Record<InputTheme, {
         v-model="modelValue"
         :type="inputType"
         :class="[
-          'cursor-disabled:not-allowed pr-10',
+          'cursor-disabled:not-allowed pr-12',
           ...variantClasses[props.variant][props.theme].default,
         ]"
       >
       <button
         type="button"
-        class="absolute right-2 top-1/2 size-7 rounded-md text-[var(--airi-text-muted)] transition-colors -translate-y-1/2 hover:bg-black/5 hover:text-[var(--airi-text)] dark:hover:bg-white/10"
+        class="absolute right-1 top-1/2 size-9 flex items-center justify-center rounded-md text-[var(--airi-text)] transition-colors -translate-y-1/2 hover:bg-black/5 dark:hover:bg-white/10"
         :aria-label="passwordVisible ? 'Hide password' : 'Show password'"
+        :aria-pressed="passwordVisible"
         :title="passwordVisible ? 'Hide password' : 'Show password'"
         @click="togglePasswordVisibility"
       >
-        <span :class="[passwordVisible ? 'i-solar:eye-closed-bold' : 'i-solar:eye-bold', 'size-4']" />
+        <svg
+          class="block size-5 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <template v-if="passwordVisible">
+            <path d="M3 3l18 18" />
+            <path d="M10.6 5.2A10.5 10.5 0 0 1 12 5c5 0 9.3 3 11 7a11.5 11.5 0 0 1-3.2 4.4" />
+            <path d="M6.5 6.5A11.8 11.8 0 0 0 1 12c1.7 4 6 7 11 7 1.5 0 3-.3 4.3-.8" />
+            <path d="M10 10a2.8 2.8 0 0 0 4 4" />
+          </template>
+          <template v-else>
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
+          </template>
+        </svg>
       </button>
     </div>
   </template>

@@ -428,7 +428,9 @@ const panelClass = ['airi-surface-panel rounded-xl p-4', 'flex flex-col gap-5']
       <p :class="['text-xs airi-text-muted']">
         {{ t('settings.pages.modules.vision.test.selection-local') }}
       </p>
-      <p :class="['text-xs airi-text-muted']">{{ t('stage.chat.composer.image-failed', VISION_IMAGE_LIMITS_I18N_PARAMS) }}</p>
+      <p :class="['text-xs airi-text-muted']">
+        {{ t('stage.chat.composer.image-failed', VISION_IMAGE_LIMITS_I18N_PARAMS) }}
+      </p>
       <div v-if="testImagePreviewUrls.length" :class="['flex min-w-0 gap-2 overflow-x-auto']">
         <img v-for="(url, index) in testImagePreviewUrls" :key="url" :src="url" :alt="testImages[index]?.name" :class="['max-h-40 max-w-48 rounded-lg border airi-border-subtle object-contain']">
       </div>

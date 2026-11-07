@@ -1,3 +1,44 @@
+mobile:
+  contacts: 联系人
+  microphone-permission: 请在手机设置中允许呜异屋使用麦克风，然后重试。
+  login: 登录
+  account-menu: 账户菜单
+  signed-in-as: 当前登录账户
+  active-sessions: 已登录设备
+  active-session-count: '当前有 {count} 个登录会话'
+  sessions-failed: 加载登录设备失败。
+  sign-out: 退出登录
+  signing-out: 正在退出…
+  signed-out: 已退出登录
+  sign-out-failed: 退出登录失败，请重试。
+  chat-sign-in-required: 请先登录，再使用官方模型。
+  chat-points-required: 点数不足，请前往账户查看。
+  chat-rate-limited: 请求太频繁，请稍后再试。
+  chat-service-unavailable: '回复服务暂时不可用（{status}），请稍后重试。'
+  chat-failed: 回复失败，请检查网络或模型设置后重试。
+  conversation: 对话
+  expand-chat: 展开对话
+  collapse-chat: 收起对话
+  responding: 正在回复
+  ready: 随时聊聊
+  character-stage: 角色空间
+  touch-hint: 拖动移动 · 双指缩放
+  loading-character: 正在准备角色
+  loading-hint: 马上就能见面
+  start-chat: 说点什么，开始对话
+  message-placeholder: 说点什么…
+  tools: 更多工具
+  open-tools: 打开工具
+  close-tools: 收起工具
+  background: 背景
+  theme: 主题
+  settings: 设置
+  clear-chat: 清空
+  about: 关于
+  hearing: 听觉设置
+  auto-replies: 自动推荐
+  adjust-character: 调整角色
+  adjust-hint: 用下方控件调整角色的位置和大小。
 chat:
   conversations:
     browse: 聊天
@@ -195,6 +236,10 @@ chat:
   recommended-replies:
     failed: 推荐回复生成失败，请稍后重试
     fill-input: 填入消息框
+    generate: 生成推荐回复
+    generating: 正在生成…
+    request-note: 会额外请求一次模型，可能产生费用。
+    retry: 重试生成
     title: 你可以这样回复
   message:
     character-name:

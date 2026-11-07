@@ -134,8 +134,9 @@ function isTerminalProviderFailure(error: unknown): boolean {
       || ['401', '403', '409', '429'].includes(code)
       || [401, 403, 409, 429].includes(Number(record.status))
       || [401, 403, 429].includes(Number(details?.upstreamStatus))
-      || ['rate-limited', 'empty-response', 'content-filtered', 'truncated-response', 'invalid-response', 'delivery-failed'].includes(reason))
+      || ['rate-limited', 'empty-response', 'content-filtered', 'truncated-response', 'invalid-response', 'delivery-failed'].includes(reason)) {
       return true
+    }
     current = record.cause
   }
   return false

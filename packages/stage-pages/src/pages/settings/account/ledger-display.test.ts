@@ -101,6 +101,62 @@ describe('account ledger display', () => {
     })
   })
 
+  it('shows a failed QQ send as one fully refunded charge', () => {
+    const result = buildDisplayLedger([
+      entry({ amount: 5, bucket: 'trial', note: 'qq-send-failed', sourceSurface: 'qq', type: 'refund' }),
+      entry({ amount: 7, bucket: 'paid', note: 'qq-send-failed', sourceSurface: 'qq', type: 'refund' }),
+      entry({ amount: -5, bucket: 'trial', sourceSurface: 'qq', type: 'settle' }),
+      entry({ amount: -7, bucket: 'paid', sourceSurface: 'qq', type: 'settle' }),
+    ])
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ displayAmount: 0, displayType: 'refund', note: 'qq-send-failed', refundedPoints: 12, sourceSurface: 'qq' })
+  })
+
+  it('shows a failed QQ search as a refund while keeping its follow-up reply charge separate', () => {
+    const result = buildDisplayLedger([
+      entry({ amount: 10, note: 'qq-search-failed', sourceId: 'search-initial', sourceSurface: 'qq', type: 'refund' }),
+      entry({ amount: -10, sourceId: 'search-initial', sourceSurface: 'qq', type: 'settle' }),
+      entry({ amount: -10, sourceId: 'search-follow-up', sourceSurface: 'qq', type: 'settle' }),
+    ])
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ displayAmount: 0, note: 'qq-search-failed', refundedPoints: 10 }),
+      expect.objectContaining({ displayAmount: -10, sourceId: 'search-follow-up' }),
+    ]))
+  })
+
+  it('shows a model-chosen QQ skip as one fully refunded charge', () => {
+    const result = buildDisplayLedger([
+      entry({ amount: 5, bucket: 'trial', note: 'qq-no-reply', sourceSurface: 'qq', type: 'refund' }),
+      entry({ amount: 7, bucket: 'paid', note: 'qq-no-reply', sourceSurface: 'qq', type: 'refund' }),
+      entry({ amount: -5, bucket: 'trial', sourceSurface: 'qq', type: 'settle' }),
+      entry({ amount: -7, bucket: 'paid', sourceSurface: 'qq', type: 'settle' }),
+    ])
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ displayAmount: 0, displayType: 'refund', note: 'qq-no-reply', refundedPoints: 12, sourceSurface: 'qq' })
+  })
+
+  it('shows an unusable QQ sticker recognition as refunded rather than charged', () => {
+    const result = buildDisplayLedger([
+      entry({ amount: 5, note: 'qq-analysis-unusable', sourceSurface: 'qq', type: 'refund', usagePurpose: 'sticker-vision' }),
+      entry({ amount: -5, sourceSurface: 'qq', type: 'settle', usagePurpose: 'sticker-vision' }),
+    ])
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ displayAmount: 0, displayType: 'refund', note: 'qq-analysis-unusable', refundedPoints: 5, usagePurpose: 'sticker-vision' })
+  })
+
+  it('shows unusable QQ image understanding as a separate zero-cost recognition', () => {
+    const result = buildDisplayLedger([
+      entry({ amount: 5, note: 'qq-image-unusable', sourceSurface: 'qq', sourceId: 'image-vision', type: 'refund', usagePurpose: 'vision' }),
+      entry({ amount: -5, sourceSurface: 'qq', sourceId: 'image-vision', type: 'settle', usagePurpose: 'vision' }),
+      entry({ amount: -8, sourceSurface: 'qq', sourceId: 'main-reply', type: 'settle', usagePurpose: 'main-reply' }),
+    ])
+    expect(result).toHaveLength(2)
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ displayAmount: 0, note: 'qq-image-unusable', refundedPoints: 5 }),
+      expect.objectContaining({ displayAmount: -8, usagePurpose: 'main-reply' }),
+    ]))
+  })
+
   it('normalizes legacy daily check-in notes for localization', () => {
     const result = buildDisplayLedger([
       entry({ note: 'Daily check-in', source: 'trial', sourceId: 'check-in-1', type: 'grant' }),

@@ -1,11 +1,13 @@
 import type { BeatSyncDetectorState } from '@proj-airi/stage-shared/beat-sync'
 
 import { getBeatSyncState, listenBeatSyncStateChange } from '@proj-airi/stage-shared/beat-sync'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import factorioIcon from '../assets/factorio-simple.png'
 
+import { getOfficialApiFetch, SERVER_URL } from '../libs/auth'
+import { useAuthStore } from '../stores/auth'
 import { useMcpRuntimeStatusStore } from '../stores/mcp-runtime'
 import { useConsciousnessStore } from '../stores/modules/consciousness'
 import { useDiscordStore } from '../stores/modules/discord'
@@ -41,7 +43,9 @@ export function useModulesList() {
   const visionStore = useVisionStore()
   const webSearchStore = useWebSearchStore()
   const mcpRuntimeStatusStore = useMcpRuntimeStatusStore()
+  const authStore = useAuthStore()
   const beatSyncState = ref<BeatSyncDetectorState>()
+  const qqConfigured = ref(false)
 
   const modulesList = computed<Module[]>(() => [
     {
@@ -117,6 +121,15 @@ export function useModulesList() {
       category: 'messaging',
     },
     {
+      id: 'messaging-qq',
+      name: 'QQ 小号与群聊',
+      description: '绑定人格，管理小号和群聊回复规则',
+      icon: 'i-solar:chat-round-dots-bold-duotone',
+      to: '/settings/modules/messaging-qq',
+      configured: qqConfigured.value,
+      category: 'messaging',
+    },
+    {
       id: 'x',
       name: t('settings.pages.modules.x.title'),
       description: t('settings.pages.modules.x.description'),
@@ -178,6 +191,20 @@ export function useModulesList() {
     const removeListener = listenBeatSyncStateChange(newState => beatSyncState.value = { ...newState })
     onUnmounted(() => removeListener())
   })
+
+  watch(() => authStore.isAuthenticated, async (signedIn) => {
+    qqConfigured.value = false
+    if (!signedIn)
+      return
+    try {
+      const response = await getOfficialApiFetch()(`${SERVER_URL}/api/qq/accounts`, { credentials: 'include' })
+      if (response.ok) {
+        const accounts = await response.json() as Array<{ status: string }>
+        qqConfigured.value = accounts.some(account => account.status === 'active')
+      }
+    }
+    catch { /* QQ status is optional on the module overview. */ }
+  }, { immediate: true })
 
   return {
     modulesList,

@@ -3,14 +3,17 @@ import { PageHeader } from '@proj-airi/stage-ui/components'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { getSettingsSurfaceStyle, useSettingsTheme } from '@proj-airi/stage-ui/stores/settings/theme'
 import { useTheme } from '@proj-airi/ui'
+import { useMediaQuery } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { themeColorFromValue, useThemeColor } from '../composables/theme-color'
 
 const route = useRoute()
+const router = useRouter()
+const isMobile = useMediaQuery('(max-width: 767px)')
 const { isDark: dark } = useTheme()
 const { settingsSurfacePreset } = storeToRefs(useSettingsTheme())
 const { t } = useI18n()
@@ -68,6 +71,19 @@ const { updateThemeColor } = useThemeColor(themeColorFromValue({ light: 'rgb(255
 const settingsSurfaceStyle = computed(() => getSettingsSurfaceStyle(settingsSurfacePreset.value, dark.value))
 const scrollContainer = ref<HTMLElement>()
 const showMemoryScrollbar = computed(() => route.path === '/settings/memory' || route.path === '/settings/modules/memory-long-term')
+const settingsBackTo = computed(() => {
+  if (route.path.startsWith('/devtools/'))
+    return '/settings/system/developer'
+
+  const segments = route.path.split('/').filter(Boolean)
+  const routes = router.getRoutes()
+  for (let index = segments.length - 1; index > 0; index--) {
+    const parent = `/${segments.slice(0, index).join('/')}`
+    if (routes.some(candidate => candidate.path === parent))
+      return parent
+  }
+  return '/'
+})
 watch(dark, () => updateThemeColor(), { immediate: true })
 watch(route, () => updateThemeColor(), { immediate: true })
 watch(() => route.fullPath, async () => {
@@ -80,23 +96,25 @@ onMounted(() => updateThemeColor())
 <template>
   <div
     :class="[
-      'h-full w-full font-sans',
+      'settings-layout h-full w-full font-sans',
       'airi-surface-page',
     ]"
     :style="{
       ...settingsSurfaceStyle,
-      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      paddingTop: 'env(safe-area-inset-top, 0px)',
-      paddingRight: 'env(safe-area-inset-right, 0px)',
-      paddingLeft: 'env(safe-area-inset-left, 0px)',
+      paddingBottom: 'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))',
+      paddingTop: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
+      paddingRight: 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))',
+      paddingLeft: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
     }"
   >
     <!-- Content -->
     <div class="px-3 py-0 2xl:max-w-screen-2xl xl:px-4" flex="~ col" mx-auto h-full min-h-0>
       <PageHeader
+        class="settings-page-header"
         :title="routeHeaderMetadata?.title || ''"
         :subtitle="routeHeaderMetadata?.subtitle"
-        :disable-back-button="route.path === '/settings'"
+        :disable-back-button="route.path === '/settings' && !isMobile"
+        :back-to="isMobile ? settingsBackTo : undefined"
       />
       <div ref="scrollContainer" relative min-h-0 flex-1 overflow-y-auto :class="showMemoryScrollbar ? 'settings-memory-scrollbar' : 'scrollbar-none'">
         <RouterView />

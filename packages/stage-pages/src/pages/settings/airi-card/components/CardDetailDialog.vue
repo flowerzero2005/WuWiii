@@ -10,6 +10,7 @@ import type {
 
 import DOMPurify from 'dompurify'
 
+import { saveBlobDocument } from '@proj-airi/stage-ui/composables/download'
 import { useDisplayModelFileDialog } from '@proj-airi/stage-ui/composables/use-display-model-file-dialog'
 import { useCharacterNotebookStore } from '@proj-airi/stage-ui/stores/character/notebook'
 import { useMemoryManager } from '@proj-airi/stage-ui/stores/chat/memory-manager'
@@ -24,6 +25,7 @@ import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { DEFAULT_STAGE_MODEL_ID } from '@proj-airi/stage-ui/stores/settings/stage-model'
 import { resolveProviderResourceLabel } from '@proj-airi/stage-ui/utils'
+import { displayModelErrorMessage } from '@proj-airi/stage-ui/utils/display-model-error'
 import { Button, FieldInput, FieldValues, Select } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import {
@@ -270,7 +272,7 @@ async function importAndBindDisplayModel(format: DisplayModelFormat, file: File)
   }
   catch (error) {
     console.error('[CardDetailDialog] Failed to import display model:', error)
-    toast.error(t('settings.pages.card.display_model.import_failed'))
+    toast.error(t('settings.pages.card.display_model.import_failed'), { description: displayModelErrorMessage(error) })
   }
   finally {
     importingDisplayModel.value = false
@@ -278,6 +280,19 @@ async function importAndBindDisplayModel(format: DisplayModelFormat, file: File)
 }
 
 const fileDialogError = () => toast.error(t('settings.pages.card.display_model.import_failed'))
+async function exportBoundDisplayModel() {
+  const model = boundDisplayModel.value
+  if (model?.type !== 'file')
+    return
+  try {
+    await saveBlobDocument(model.file, model.file.name || model.name)
+  }
+  catch (error) {
+    if (error instanceof Error && error.message.includes('cancelled'))
+      return
+    toast.error('模型保存失败，请选择可写入的位置后重试。')
+  }
+}
 const live2dImportDialog = useDisplayModelFileDialog({
   accept: '.zip',
   kind: 'live2d',
@@ -836,7 +851,7 @@ function createGrowthMemoryExportEntries(): Array<{ createdAt?: number, id: stri
   }))
 }
 
-function downloadPersonaPackage() {
+async function downloadPersonaPackage() {
   if (!selectedCard.value)
     return
 
@@ -849,13 +864,14 @@ function downloadPersonaPackage() {
   if (!personaPackage)
     return
 
-  const blob = new Blob([JSON.stringify(personaPackage, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `wuwiii-resident-package-${selectedCard.value.name.replace(/[^\w-]+/g, '-') || 'card'}.json`
-  anchor.click()
-  URL.revokeObjectURL(url)
+  try {
+    await saveBlobDocument(new Blob([JSON.stringify(personaPackage, null, 2)], { type: 'application/json' }), `wuwiii-resident-package-${selectedCard.value.name.replace(/[^\w-]+/g, '-') || 'card'}.json`)
+  }
+  catch (error) {
+    if (error instanceof Error && error.message.includes('cancelled'))
+      return
+    toast.error('角色卡保存失败，请选择可写入的位置后重试。')
+  }
 }
 
 // Tab type definition
@@ -1667,6 +1683,14 @@ function getResourceDisplayValue(
                   <p class="text-[11px] text-neutral-500 leading-4 dark:text-neutral-400">
                     {{ t('settings.pages.card.display_model.local_reference') }}
                   </p>
+                  <Button
+                    v-if="boundDisplayModel?.type === 'file'"
+                    class="min-w-0 w-full"
+                    variant="secondary"
+                    icon="i-solar:download-square-line-duotone"
+                    label="导出当前角色模型"
+                    @click="exportBoundDisplayModel"
+                  />
 
                   <div
                     v-if="boundDisplayModel?.format === DisplayModelFormat.PictureOcZip"

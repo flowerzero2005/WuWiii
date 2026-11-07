@@ -8,10 +8,10 @@ import { clipFromVRMAnimation, loadVrm, loadVRMAnimation, reAnchorRootPositionTr
 /**
  * Render a VRM file to an offscreen canvas and return a preview data URL.
  */
-export async function loadVrmModelPreview(file: File) {
+export async function loadVrmModelPreview(file: File, compact = false) {
   const offscreenCanvas = document.createElement('canvas')
-  offscreenCanvas.width = 1440
-  offscreenCanvas.height = 2560
+  offscreenCanvas.width = compact ? 720 : 1440
+  offscreenCanvas.height = compact ? 1280 : 2560
   offscreenCanvas.style.position = 'absolute'
   offscreenCanvas.style.top = '0'
   offscreenCanvas.style.left = '0'
@@ -21,12 +21,19 @@ export async function loadVrmModelPreview(file: File) {
   offscreenCanvas.style.opacity = '0'
   document.body.appendChild(offscreenCanvas)
 
-  const renderer = new WebGLRenderer({
-    canvas: offscreenCanvas,
-    alpha: true,
-    antialias: true,
-    preserveDrawingBuffer: true,
-  })
+  let renderer: WebGLRenderer
+  try {
+    renderer = new WebGLRenderer({
+      canvas: offscreenCanvas,
+      alpha: true,
+      antialias: true,
+      preserveDrawingBuffer: true,
+    })
+  }
+  catch (error) {
+    offscreenCanvas.remove()
+    throw error
+  }
   renderer.setSize(offscreenCanvas.width, offscreenCanvas.height, false)
   renderer.setPixelRatio(1)
 
@@ -43,7 +50,7 @@ export async function loadVrmModelPreview(file: File) {
   try {
     const vrmData = await loadVrm(objUrl, { scene, lookAt: true })
     if (!vrmData)
-      return
+      throw new Error('无法加载 VRM 模型')
 
     vrmInstance = vrmData._vrm
     const { modelCenter, initialCameraOffset } = vrmData

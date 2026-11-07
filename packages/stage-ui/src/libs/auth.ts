@@ -45,7 +45,7 @@ export class VerificationCodeRateLimitError extends Error {
 export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://127.0.0.1:3000'
 const TURTLE_SOUP_URL = import.meta.env.VITE_TURTLE_SOUP_URL || 'http://127.0.0.1:3001/'
 
-function getOfficialApiFetch(): typeof fetch {
+export function getOfficialApiFetch(): typeof fetch {
   const electronFetch = (globalThis as typeof globalThis & {
     __AIRI_ELECTRON_FETCH_PROXY__?: typeof fetch
   }).__AIRI_ELECTRON_FETCH_PROXY__
@@ -154,6 +154,13 @@ export async function fetchSession(options: { broadcast?: boolean } = {}) {
   return false
 }
 
+function fetchSignedInSession() {
+  // Ignore a session check started before this sign-in; its late 401 must not
+  // clear the identity established by the new cookie.
+  sessionRefreshVersion += 1
+  return fetchSession({ broadcast: true })
+}
+
 export async function listSessions() {
   return await authClient.listSessions()
 }
@@ -182,7 +189,7 @@ export async function signInWithEmailPassword(credentials: EmailPasswordCredenti
   })
   assertAuthSuccess(result, '无法使用该账号和密码登录。')
 
-  if (!await fetchSession({ broadcast: true }))
+  if (!await fetchSignedInSession())
     throw new Error('登录未能建立会话，请重试。')
 
   return true
@@ -194,7 +201,7 @@ export async function signInWithPhonePassword(credentials: { password: string, p
     throw new Error('请输入有效的中国大陆手机号。')
   const result = await authClient.signIn.phoneNumber({ password: credentials.password, phoneNumber })
   assertAuthSuccess(result, '无法使用该账号和密码登录。')
-  if (!await fetchSession({ broadcast: true }))
+  if (!await fetchSignedInSession())
     throw new Error('登录未能建立会话，请重试。')
   return true
 }
@@ -213,7 +220,7 @@ export async function signUpWithEmailPassword(credentials: EmailSignUpCredential
   })
   assertAuthSuccess(result, '无法创建该账户。')
 
-  if (!await fetchSession({ broadcast: true }))
+  if (!await fetchSignedInSession())
     throw new Error('Account creation completed without creating a session. Please sign in.')
 
   return true
@@ -324,7 +331,7 @@ export async function signInWithEmailCode(credentials: { code: string, email: st
   })
   assertAuthSuccess(result, '无法验证邮箱验证码。')
 
-  if (!await fetchSession({ broadcast: true }))
+  if (!await fetchSignedInSession())
     throw new Error('登录未能建立会话，请重试。')
 }
 
@@ -352,6 +359,6 @@ export async function signInWithPhoneCode(credentials: { code: string, phoneNumb
   })
   assertAuthSuccess(result, '无法验证短信验证码。')
 
-  if (!await fetchSession({ broadcast: true }))
+  if (!await fetchSignedInSession())
     throw new Error('登录未能建立会话，请重试。')
 }

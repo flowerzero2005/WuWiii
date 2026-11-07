@@ -559,8 +559,9 @@ export const useMemoryManager = defineStore('memory-manager', () => {
           return
         const candidateKey = `${processedTurnKey}:${candidateIndex}`
         if (scopedEntries.some(entry => Array.isArray(entry.metadata?.appliedMemoryCandidateKeys)
-          && entry.metadata.appliedMemoryCandidateKeys.includes(candidateKey)))
+          && entry.metadata.appliedMemoryCandidateKeys.includes(candidateKey))) {
           continue
+        }
         // A malformed or temporarily unwritable candidate must not prevent
         // the remaining model-approved memories from being persisted.
         try {
@@ -637,6 +638,9 @@ export const useMemoryManager = defineStore('memory-manager', () => {
             importance: memoryResult.importance,
             reason: memoryResult.reason,
             extractedAt: Date.now(),
+            sourceDevice: typeof navigator === 'undefined'
+              ? 'unknown'
+              : /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : /Electron/i.test(navigator.userAgent) ? 'desktop' : 'web',
             userMessage: userMessage.slice(0, 200), // 保留原始消息片段
             ...(structuredCandidate
               ? {

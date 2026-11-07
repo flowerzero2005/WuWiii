@@ -1029,8 +1029,9 @@ onUnmounted(() => {
               />
 
               <!-- Threshold Controls -->
-              <div v-if="useVADModel" class="space-y-3">
+              <div class="space-y-3">
                 <FieldRange
+                  v-if="useVADModel"
                   v-model="useVADThreshold"
                   :label="ht('monitoring.sensitivity')"
                   :description="ht('monitoring.sensitivity-description')"
@@ -1039,13 +1040,10 @@ onUnmounted(() => {
                   :step="0.05"
                   :format-value="value => `${(value * 100).toFixed(0)}%`"
                 />
-              </div>
-
-              <div v-else class="space-y-3">
                 <FieldRange
                   v-model="volumeThreshold"
-                  :label="ht('monitoring.sensitivity')"
-                  :description="ht('monitoring.sensitivity-description')"
+                  :label="ht('monitoring.volume-threshold')"
+                  :description="ht('monitoring.volume-threshold-description')"
                   :min="1"
                   :max="80"
                   :step="1"

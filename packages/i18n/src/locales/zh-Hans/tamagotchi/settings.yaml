@@ -160,8 +160,8 @@ pages:
         clear: 清除自定义位置
       fields:
         recommended-replies:
-          description: 默认关闭。开启后，每次助手回复完成都会向当前第三方聊天服务额外请求一次，可能产生服务商费用；官方云在支持独立计价确认前不会生成。
-          label: 生成推荐回复（每次会额外请求一次模型）
+          description: 开启后，每次助手回复完成都会额外请求一次模型；关闭后仍可在聊天记录中按需生成。请求可能产生服务商费用。
+          label: 自动生成推荐回复
         floating-replies-enabled:
           label: 显示桌面浮动回复
           description: 仅在收起快捷聊天或语音通话时，在角色附近显示用户、思考和回复气泡。

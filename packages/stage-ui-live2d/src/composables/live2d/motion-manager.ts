@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 
 import type { BeatSyncController } from './beat-sync'
 
+import { LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE, LIVE2D_IDLE_MOTION_SPEED_BASELINE, LIVE2D_IDLE_SWAY_STRENGTH_BASELINE } from '../../utils/idle-motion-baseline'
 import { useLive2DIdleEyeFocus } from './animation'
 
 type CubismModel = Cubism4InternalModel['coreModel']
@@ -125,7 +126,7 @@ export function useLive2DMotionManagerUpdate(options: UseLive2DMotionManagerUpda
       return idleMotionNow
     }
 
-    idleMotionNow += (now - previousNow) * normalizeIdleMotionSpeed(live2dIdleMotionSpeed.value)
+    idleMotionNow += (now - previousNow) * normalizeIdleMotionSpeed(live2dIdleMotionSpeed.value * LIVE2D_IDLE_MOTION_SPEED_BASELINE)
     return idleMotionNow
   }
 
@@ -286,7 +287,7 @@ export function useMotionUpdatePluginIdleDisable(idleEyeFocus = useLive2DIdleEye
 
       // Still update eye focus and blink even if idle motion is stopped
       if (ctx.now >= ctx.idleFocusSuppressedUntil.value)
-        idleEyeFocus.update(ctx.internalModel, ctx.motionNow * 1000, ctx.live2dIdleSwayStrength.value)
+        idleEyeFocus.update(ctx.internalModel, ctx.motionNow * 1000, ctx.live2dIdleSwayStrength.value * LIVE2D_IDLE_SWAY_STRENGTH_BASELINE)
       if (ctx.internalModel.eyeBlink != null) {
         ctx.internalModel.eyeBlink.updateParameters(ctx.model, ctx.timeDelta)
       }
@@ -307,7 +308,7 @@ export function useMotionUpdatePluginIdleFocus(idleEyeFocus = useLive2DIdleEyeFo
     if (ctx.now < ctx.idleFocusSuppressedUntil.value)
       return
 
-    idleEyeFocus.update(ctx.internalModel, ctx.motionNow * 1000, ctx.live2dIdleSwayStrength.value)
+    idleEyeFocus.update(ctx.internalModel, ctx.motionNow * 1000, ctx.live2dIdleSwayStrength.value * LIVE2D_IDLE_SWAY_STRENGTH_BASELINE)
   }
 }
 
@@ -359,7 +360,7 @@ export function useMotionUpdatePluginIdleMotionStrength(): MotionManagerPlugin {
     if (!ctx.isNativeIdleMotion || ctx.handled)
       return
 
-    const strength = normalizeIdleMotionStrength(ctx.live2dIdleSwayStrength.value)
+    const strength = normalizeIdleMotionStrength(ctx.live2dIdleSwayStrength.value * LIVE2D_IDLE_SWAY_STRENGTH_BASELINE)
     if (Math.abs(strength - 1) < 0.001)
       return
 
@@ -403,7 +404,7 @@ export function useMotionUpdatePluginIdleBodyFocusFollow(): MotionManagerPlugin 
     if (!Number.isFinite(y))
       return
 
-    const strength = normalizeStrength(ctx.live2dBodyFocusFollowStrength.value)
+    const strength = normalizeStrength(ctx.live2dBodyFocusFollowStrength.value * LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE)
     if (strength <= 0) {
       bodyFollowY = 0
       return

@@ -363,6 +363,8 @@ live2d:
       sequential: 按上方列表从前到后播放，播完最后一个后回到第一个。
       random: 从已启用动作中随机选择，并避免与上一个动作紧邻重复。
       single: 始终播放第一个已启用动作；将其他动作移到首位即可切换。
+    loop-title: 单动作无缝循环
+    loop-description: 只有一个待机动作时连续播放，不在每轮结束后重新起播；多个动作仍按播放方式轮换。
   advanced-calibration:
     title: 模型校准
     description: 仅用于修正少数模型原始中立姿态的临时基准值，不属于动作、表情或 AI 情绪设置。
@@ -719,6 +721,7 @@ pages:
         minimum: 最低 {points} 点
         points-per-unit: 点 / 每 {tokens} tokens（参考）
         chat-billing-explanation: 每 4000 tokens 仅用于比较价格，不是固定扣费档位。实际按本次完整输入与输出分别结算；输入包括系统规则、对话历史、记忆和工具上下文，因此可见回复较短时，总用量也可能较高。
+        qq-billing-explanation: QQ 私聊和群聊使用默认聊天模型，按上方该模型的官方聊天价格结算。只有触发回复才扣点；发送失败会返还本次点数。
         points-per-minute: 点 / 分钟
         asr: 实时语音识别：首个开始计费的 60 秒 {first} 点，之后每个开始计费的 60 秒 {additional} 点
         embedding: 文本嵌入
@@ -967,6 +970,7 @@ pages:
         auto-label: 自动领取（此设备）
         auto-enabled-description: 已开启：登录并保持软件运行时自动领取，也可手动领取。
         auto-disabled-description: 已关闭：可使用领取按钮手动领取。
+        auto-server-description: 服务器每天自动领取，直到当前账户的签到点数达到上限；也可手动领取。
         schedule: 北京时间每天 08:00 刷新；软件关闭期间不补签，漏领不累计。
         capacity-rule: 余额接近上限时，只补到上限；当天领取后再消费，不会增加当日领取额度。
         loading: 正在加载
@@ -1012,10 +1016,16 @@ pages:
         settled-final: 本次实际扣除 {points} 点。
         refunded-final: 请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点。
         refunded-display-failure: 回复未能成功展示，已返还 {points} 点；本次净消费 0 点。
+        refunded-qq-send-failed: QQ 回复发送失败，已返还 {points} 点；本次净消费 0 点。
+        refunded-qq-search-failed: QQ 联网搜索失败，已返还本轮搜索前的 {points} 点；后续回复单独计费。
+        refunded-qq-no-reply: QQ 角色选择本轮不回复，已返还 {points} 点；本次净消费 0 点。
+        refunded-qq-analysis-unusable: QQ 表情识别没有产生可用结果，已返还 {points} 点；本次净消费 0 点。
+        refunded-qq-image-unusable: QQ 图片识别没有产生可用结果，已返还 {points} 点；这笔识别净消费 0 点。
         refunded-main-reply: 主回复请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点。
         refunded-auxiliary: 后台“{purpose}”请求未完成，临时暂扣的 {points} 点已解除；本次净消费 0 点，不代表主回复失败。
         refunded-unknown: 此记录未包含可识别的请求用途；临时暂扣的 {points} 点已解除，本次净消费 0 点。
         source-surfaces:
+          qq: QQ 对话
           automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
@@ -1025,12 +1035,16 @@ pages:
           unknown: 来源未知
         purposes:
           main-reply: 主回复
+          diary: QQ 日记
           tool-routing: 工具判断
           tool-processing: 工具处理
           response-enhancement: 回复优化
           inner-voice-note: 内心札记
           memory: 记忆整理
           recommended-replies: 推荐回复
+          sticker-selection: 表情选择
+          sticker-search: 表情搜索
+          sticker-vision: 表情识别
           group-narration: 群聊旁白生成
           group-narration-speech: 群聊旁白语音
           group-script-evaluation: 剧本进度评估
@@ -1047,6 +1061,11 @@ pages:
           official-transcription: 语音识别
           inner-voice-note: 内心札记
           reply-display-failure-refund: 回复展示失败返还
+          qq-send-failed: QQ 发送失败返还
+          qq-search-failed: QQ 搜索失败返还
+          qq-no-reply: QQ 角色选择不回复返还
+          qq-analysis-unusable: QQ 表情识别无可用结果返还
+          qq-image-unusable: QQ 图片识别无可用结果返还
           workbench: 工作台
           entertainment:
             turtle_soup:
@@ -1080,6 +1099,7 @@ pages:
           speech: 语音
           service: 服务处理
         surfaces:
+          qq: QQ 对话
           automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
@@ -1101,7 +1121,9 @@ pages:
           not-charged: 实际扣费 0 点
           refunded: 已返还 {points} 点，实际扣费 0 点
         failures:
+          delivery-failure: QQ 消息发送失败，本次点数已返还。
           not-needed: 本处无需旁白，本次未扣费。
+          reply-skipped: QQ 角色选择本轮不回复，本次点数已返还。
           no-content: 没有返回可显示的内容，本次未扣费。
           incomplete-response: 回复未完整完成，本次未扣费。
           provider-unavailable: 服务暂时不可用，本次未扣费。
@@ -1168,12 +1190,16 @@ pages:
           unknown: 其他
         purposes:
           main-reply: 主回复
+          diary: QQ 日记
           tool-routing: 工具判断
           tool-processing: 工具处理
           response-enhancement: 回复优化
           inner-voice-note: 内心札记
           memory: 记忆整理
           recommended-replies: 推荐回复
+          sticker-selection: 表情选择
+          sticker-search: 表情搜索
+          sticker-vision: 表情识别
           group-narration: 群聊旁白生成
           group-narration-speech: 群聊旁白语音
           group-script-evaluation: 剧本进度评估
@@ -1184,6 +1210,8 @@ pages:
           unknown: 其他服务
         failures:
           not-needed: 本处无需旁白，本次未收费。
+          reply-skipped: QQ 角色选择本轮不回复，本次点数已返还。
+          delivery-failure: QQ 消息发送失败，本次点数已返还。
           no-content: 没有返回可显示的内容，本次未收费。
           incomplete-response: 回复未完整完成，本次未收费。
           provider-unavailable: 服务暂时不可用，本次未收费。
@@ -2034,6 +2062,8 @@ pages:
         threshold: 检测阈值
         sensitivity: 灵敏度
         sensitivity-description: 调整语音检测阈值。
+        volume-threshold: 音量阈值
+        volume-threshold-description: 过滤手机电话中的低音量录入和误打断；数值越高，触发越严格。
         speaking-detected: 检测到说话
         model-based: 模型检测
         volume-based: 音量检测

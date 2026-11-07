@@ -10,6 +10,7 @@ export type ChatRequestStage
     | 'inner-voice-note'
     | 'memory-extraction'
     | 'recommended-replies'
+    | 'sticker-selection'
     | 'group-narration-tts'
     | 'group-script-evaluation'
     | 'group-script-sequel'

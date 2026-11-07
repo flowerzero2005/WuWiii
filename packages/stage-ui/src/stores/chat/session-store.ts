@@ -2582,6 +2582,10 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     if (!ready.value)
       await initialize()
 
+    for (const sessionId of [...scheduledSessionPersists.keys()])
+      await flushScheduledSessionPersist(sessionId)
+    await persistQueue
+
     const currentUserId = await resolveCurrentUserId()
     if (!index.value || index.value.userId !== currentUserId)
       await loadIndexForUser(currentUserId)

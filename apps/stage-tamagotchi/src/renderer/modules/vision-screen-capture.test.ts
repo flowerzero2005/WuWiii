@@ -1,17 +1,18 @@
 import type { ScreenCaptureSourceImageResult, SerializableDesktopCapturerSource } from '@proj-airi/electron-screen-capture'
 
-import { describe, expect, it, vi } from 'vitest'
-
 import { VisionScreenSourceUnavailableError } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createDesktopVisionScreenCapture, getVisionScreenCaptureErrorKey, VisionScreenCapturePermissionError, VisionScreenSourceThumbnailUnavailableError, VisionScreenSourceTimeoutError } from './vision-screen-capture'
 
-const screenSource = (thumbnail = new Uint8Array([255, 216, 255])): SerializableDesktopCapturerSource => ({
-  id: 'screen:0',
-  name: 'Screen',
-  display_id: '0',
-  thumbnail,
-})
+function screenSource(thumbnail = new Uint8Array([255, 216, 255])): SerializableDesktopCapturerSource {
+  return {
+    id: 'screen:0',
+    name: 'Screen',
+    display_id: '0',
+    thumbnail,
+  }
+}
 
 const sourceImage = (thumbnail?: Uint8Array, sourceAvailable = true): ScreenCaptureSourceImageResult => ({ sourceAvailable, thumbnail })
 

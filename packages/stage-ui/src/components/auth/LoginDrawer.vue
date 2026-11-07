@@ -85,7 +85,7 @@ onBeforeUnmount(() => window.clearInterval(cooldownTimer))
 <template>
   <DrawerRoot v-model:open="open" should-scale-background>
     <DrawerPortal>
-      <DrawerOverlay :class="['fixed inset-0 z-1000 bg-black/45 backdrop-blur-sm']" />
+      <DrawerOverlay :class="['fixed inset-0 z-1000 bg-black/30 backdrop-blur-sm']" />
       <DrawerContent
         :class="['fixed bottom-0 left-0 right-0 z-1001 flex flex-col rounded-t-lg border-t border-[var(--airi-border-subtle)] bg-[var(--airi-surface-panel)] outline-none shadow-2xl']"
         :style="{ paddingBottom: `${Math.max(Number.parseFloat(screenSafeArea.bottom.value.replace('px', '')), 24)}px` }"
@@ -116,7 +116,7 @@ onBeforeUnmount(() => window.clearInterval(cooldownTimer))
             <label :class="['flex flex-col gap-1.5']"><span :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.login-drawer.identity') }}</span><Input v-model="identity" autocomplete="username" :placeholder="t('settings.pages.account.login-drawer.identity-placeholder')" variant="primary-dimmed" /></label>
             <label v-if="method === 'password'" :class="['flex flex-col gap-1.5']"><span :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.login-drawer.password') }}</span><Input v-model="password" autocomplete="current-password" type="password" show-password-toggle :placeholder="t('settings.pages.account.login-drawer.password-placeholder')" variant="primary-dimmed" /></label>
             <label v-else :class="['flex flex-col gap-1.5']"><span :class="['text-sm font-medium airi-text']">{{ t('settings.pages.account.login-drawer.code') }}</span><span :class="['grid grid-cols-[minmax(0,1fr)_auto] gap-2']"><Input v-model="code" autocomplete="one-time-code" inputmode="numeric" maxlength="6" :placeholder="t('settings.pages.account.login-drawer.code-placeholder')" variant="primary-dimmed" /><Button type="button" variant="secondary" :disabled="!canSend" :loading="sending" @click="sendCode">{{ cooldown > 0 ? t('settings.pages.account.actions.resend-code-in', { seconds: cooldown }) : t('settings.pages.account.actions.send-code') }}</Button></span></label>
-            <Button type="submit" :class="['h-11 w-full']" icon="i-solar:login-3-bold" :disabled="!canSubmit" :loading="submitting">
+            <Button type="submit" :class="['h-11 w-full transition-[background-color,box-shadow,transform] duration-200 active:scale-[0.985]', canSubmit ? 'shadow-[0_8px_22px_rgba(70,92,150,0.22)]' : '']" icon="i-solar:login-3-bold" :disabled="!canSubmit" :loading="submitting">
               {{ t('settings.pages.account.actions.sign-in-email') }}
             </Button>
             <a href="/account" :class="['text-center text-sm font-medium text-[var(--airi-accent-strong)] underline-offset-4 hover:underline']" @click="open = false">{{ t('settings.pages.account.login-drawer.manage-account') }}</a>

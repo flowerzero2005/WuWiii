@@ -33,6 +33,7 @@ import { createLive2DCompositeExpressionKey, filterLive2DCompositeExpressionPres
 import { isLive2DActionDebugEnabled, logLive2DActionEvent, warnLive2DActionEvent } from '../../../utils/action-debug'
 import { advanceLive2DCoreStateTransition } from '../../../utils/core-state-transition'
 import { createLive2DEmotionTransforms, interpolateLive2DEmotionTransforms } from '../../../utils/emotion-transition'
+import { LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE, LIVE2D_IDLE_MOTION_SPEED_BASELINE, LIVE2D_IDLE_SWAY_STRENGTH_BASELINE } from '../../../utils/idle-motion-baseline'
 import { buildLive2DIdleMotionPool, selectNextLive2DIdleMotion } from '../../../utils/idle-motion-scheduler'
 
 const props = withDefaults(defineProps<{
@@ -52,6 +53,7 @@ const props = withDefaults(defineProps<{
   xOffset?: number | string
   yOffset?: number | string
   scale?: number
+  fitDrawableBounds?: boolean
   themeColorsHue?: number
   themeColorsHueDynamic?: boolean
   live2dIdleAnimationEnabled?: boolean
@@ -62,6 +64,7 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled?: boolean
   live2dShadowEnabled?: boolean
   live2dIdleMotionKeys?: string[]
+  live2dIdleMotionLoopEnabled?: boolean
   live2dIdleRotationMode?: Live2DIdleRotationMode
 }>(), {
   mouthFormSize: 0,
@@ -72,6 +75,7 @@ const props = withDefaults(defineProps<{
   focusAt: () => ({ x: 0, y: 0 }),
   disableFocusAt: false,
   scale: 1,
+  fitDrawableBounds: false,
   themeColorsHue: 220.44,
   themeColorsHueDynamic: false,
   live2dIdleAnimationEnabled: true,
@@ -82,6 +86,7 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled: false,
   live2dShadowEnabled: true,
   live2dIdleMotionKeys: () => [],
+  live2dIdleMotionLoopEnabled: false,
   live2dIdleRotationMode: 'sequential',
 })
 
@@ -273,6 +278,7 @@ function resolvePositiveDimension(...values: unknown[]) {
 function resolveDrawableBounds(live2DModel: Live2DModel<PixiLive2DInternalModel>): ModelBounds | null {
   const internalModel = live2DModel.internalModel as any
   const coreModel = internalModel.coreModel
+  const transform = internalModel.localTransform
   const drawableCount = coreModel?.getDrawableCount?.() ?? 0
 
   let minX = Number.POSITIVE_INFINITY
@@ -291,10 +297,12 @@ function resolveDrawableBounds(live2DModel: Live2DModel<PixiLive2DInternalModel>
       if (!Number.isFinite(x) || !Number.isFinite(y))
         continue
 
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x)
-      maxY = Math.max(maxY, y)
+      const transformedX = transform.a * x + transform.c * y + transform.tx
+      const transformedY = transform.b * x + transform.d * y + transform.ty
+      minX = Math.min(minX, transformedX)
+      minY = Math.min(minY, transformedY)
+      maxX = Math.max(maxX, transformedX)
+      maxY = Math.max(maxY, transformedY)
     }
   }
 
@@ -319,6 +327,27 @@ function resolveInitialModelMetrics(live2DModel: Live2DModel<PixiLive2DInternalM
     drawableBounds: resolveDrawableBounds(live2DModel),
     height,
     width,
+  }
+}
+
+function resolveFitBounds(): ModelBounds | null {
+  const drawable = initialDrawableBounds.value
+  if (!props.fitDrawableBounds)
+    return drawable
+
+  const modelWidth = Math.max(1, initialModelWidth.value)
+  const modelHeight = Math.max(1, initialModelHeight.value)
+  if (!drawable)
+    return { x: 0, y: 0, width: modelWidth, height: modelHeight }
+
+  // The initial drawable vertices can omit feet revealed by a motion. Keep
+  // their tight horizontal bounds, but fit the full vertical model canvas.
+  const top = Math.min(0, drawable.y)
+  return {
+    x: drawable.x,
+    y: top,
+    width: drawable.width,
+    height: Math.max(modelHeight, drawable.y + drawable.height) - top,
   }
 }
 
@@ -357,7 +386,7 @@ function setScaleAndPosition() {
   model.value.x = (props.width / 2) + offset.value.xOffset
   model.value.y = props.height + offset.value.yOffset
 
-  const drawableBounds = initialDrawableBounds.value
+  const drawableBounds = resolveFitBounds()
   if (!drawableBounds)
     return
 
@@ -373,7 +402,7 @@ function setScaleAndPosition() {
     ? (visibleWidth * visibleHeight) / (worldWidth * worldHeight)
     : 0
 
-  if (visibleRatio >= 0.08)
+  if (!props.fitDrawableBounds && visibleRatio >= 0.08)
     return
 
   const safeScale = Math.min(
@@ -590,8 +619,8 @@ function applyProceduralIdleSway(internalModel: PixiLive2DInternalModel, now = p
     : 1
   if (resumeBlend >= 1)
     beginNaturalIdleResume(0)
-  const strength = Math.min(2.5, Math.max(0, live2dIdleSwayStrength.value)) * resumeBlend
-  const speed = Math.min(2.5, Math.max(0.25, live2dIdleMotionSpeed.value))
+  const strength = Math.min(2.5, Math.max(0, live2dIdleSwayStrength.value * LIVE2D_IDLE_SWAY_STRENGTH_BASELINE)) * resumeBlend
+  const speed = Math.min(2.5, Math.max(0.25, live2dIdleMotionSpeed.value * LIVE2D_IDLE_MOTION_SPEED_BASELINE))
   const deltaMs = naturalIdleLastUpdateAt > 0 ? Math.min(100, now - naturalIdleLastUpdateAt) : 16
   naturalIdleLastUpdateAt = now
   const focusBlendAlpha = 1 - Math.exp(-deltaMs / (mouseTracking ? 650 : 1600))
@@ -644,7 +673,7 @@ function applyProceduralIdleSway(internalModel: PixiLive2DInternalModel, now = p
   const bodyFocusAlpha = 1 - Math.exp(-deltaMs / (mouseTracking ? 750 : 1800))
   naturalIdleBodyFocusX += ((mouseTracking ? focusX : 0) - naturalIdleBodyFocusX) * bodyFocusAlpha
   naturalIdleBodyFocusY += ((mouseTracking ? focusY : 0) - naturalIdleBodyFocusY) * bodyFocusAlpha
-  const focusFollowStrength = Math.min(2, Math.max(0, live2dBodyFocusFollowStrength.value))
+  const focusFollowStrength = Math.min(2, Math.max(0, live2dBodyFocusFollowStrength.value * LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE))
   const offsets = [
     ['ParamEyeBallX', eyeX],
     ['ParamEyeBallY', eyeY],
@@ -659,6 +688,8 @@ function applyProceduralIdleSway(internalModel: PixiLive2DInternalModel, now = p
     ['ParamArmLB', armL * 0.7],
     ['ParamArmRA', armR],
     ['ParamArmRB', armR * 0.7],
+    ['ParamArmL', armL],
+    ['ParamArmR', armR],
   ] as const
 
   for (const [parameterId, offset] of offsets) {
@@ -1260,7 +1291,7 @@ function beginMotionPlayback(
   return token
 }
 
-function finishMotionPlayback(token: number, status: 'completed' | 'interrupted' | 'failed' = 'completed') {
+function finishMotionPlayback(token: number, status: 'completed' | 'interrupted' | 'failed' = 'completed', stopMotion = false) {
   if (!activeMotionPlayback || activeMotionPlayback.token !== token)
     return false
 
@@ -1276,7 +1307,7 @@ function finishMotionPlayback(token: number, status: 'completed' | 'interrupted'
   beginNaturalIdleResume(performance.now())
   if (playback.owner === 'preview' || playback.owner === 'action') {
     const internalModel = model.value?.internalModel
-    if (playback.owner === 'preview')
+    if (playback.owner === 'preview' || stopMotion)
       internalModel?.motionManager.stopAllMotions()
     const restore = activeMotionBaselineRestore
     const coreModel = internalModel?.coreModel
@@ -1315,6 +1346,16 @@ function stopUnconfiguredIdleMotion() {
   // was installed, so stop only when no higher-priority owner is active.
   if (activeMotionPlayback?.owner === 'action' || activeMotionPlayback?.owner === 'preview' || motionOwner.value === 'action' || motionOwner.value === 'preview')
     return false
+  if (activeMotionBaselineRestore)
+    return false
+
+  // An empty idle pool is normal for models that rely on procedural breathing.
+  // Resetting its baseline every time the scheduler checks would keep the
+  // procedural motion permanently in its fade-in phase.
+  const nativeState = (model.value.internalModel.motionManager as any).state as { currentGroup?: string } | undefined
+  const nativeIdleGroup = model.value.internalModel.motionManager.groups.idle
+  if (!activeMotionPlayback && motionOwner.value === 'stopped' && (!nativeIdleGroup || nativeState?.currentGroup !== nativeIdleGroup))
+    return false
 
   if (activeMotionPlayback?.owner === 'idle')
     clearActiveMotionPlayback('interrupted')
@@ -1347,7 +1388,12 @@ async function playNextIdleMotion() {
 
   previousIdleMotionKey = next.key
   const token = beginMotionPlayback('idle', undefined, next)
-  const started = await setMotion(next.group, next.index, MotionPriority.IDLE)
+  const started = await setMotion(
+    next.group,
+    next.index,
+    MotionPriority.IDLE,
+    props.live2dIdleMotionLoopEnabled && (pool.length === 1 || props.live2dIdleRotationMode === 'single'),
+  )
   const playback = activeMotionPlayback as ActiveMotionPlayback | undefined
   if (!started || !playback?.started || playback.token !== token || playback.epoch !== modelEpoch) {
     if (playback?.token === token)
@@ -1659,7 +1705,7 @@ async function loadModel(
   }
 }
 
-async function setMotion(motionName: string, index?: number, priority: MotionPriority = MotionPriority.FORCE) {
+async function setMotion(motionName: string, index?: number, priority: MotionPriority = MotionPriority.FORCE, loop = false) {
   // TODO: motion? Not every Live2D model has motion, we do need to help users to set motion
   if (!model.value) {
     console.warn('Cannot set motion: model not loaded')
@@ -1667,6 +1713,13 @@ async function setMotion(motionName: string, index?: number, priority: MotionPri
   }
 
   try {
+    if (index != null) {
+      const motionManager = model.value.internalModel.motionManager as any
+      const motion = loop
+        ? await motionManager.loadMotion(motionName, index)
+        : motionManager.motionGroups[motionName]?.[index]
+      motion?.setIsLoop?.(loop)
+    }
     return await model.value.motion(motionName, index, priority)
   }
   catch (error) {
@@ -2318,7 +2371,12 @@ watch([mouthFormSize, mouthOpenSize], () => {
 watch(mouthSyncActive, () => applyDisplayedMouth())
 watch(actionRequest, request => void applyLive2DActionRequest(request))
 watch(emotionTransitionRequest, request => void applyLive2DEmotionTransitionRequest(request))
-watch([() => props.live2dIdleMotionKeys, () => props.live2dIdleRotationMode], () => {
+watch([() => props.live2dIdleMotionKeys, () => props.live2dIdleRotationMode, () => props.live2dIdleMotionLoopEnabled], () => {
+  if (model.value && activeMotionPlayback?.owner === 'idle') {
+    const motionManager = model.value.internalModel.motionManager as any
+    const playback = activeMotionPlayback
+    motionManager.motionGroups[playback.expectedGroup ?? '']?.[playback.expectedIndex ?? -1]?.setIsLoop?.(false)
+  }
   previousIdleMotionKey = undefined
   void playNextIdleMotion()
 }, { deep: true })
@@ -2326,7 +2384,10 @@ watch(returnToIdleRequestId, () => {
   if (!shouldRunAutomaticMotionTakeover() || !model.value)
     return
 
-  clearActiveMotionPlayback()
+  if (activeMotionPlayback?.owner === 'idle')
+    return
+  if (activeMotionPlayback)
+    finishMotionPlayback(activeMotionPlayback.token, 'interrupted', true)
   void playNextIdleMotion()
 })
 watch([model, availableMotions, availableExpressions], () => {
@@ -2478,12 +2539,11 @@ watch(() => modelParameters.value.rightEyebrowForm, (value) => {
 
 // Watch for idle animation setting changes and stop motions if disabled
 watch(live2dIdleAnimationEnabled, (enabled) => {
-  if (!enabled && model.value) {
-    const internalModel = model.value.internalModel
-    if (internalModel?.motionManager) {
-      internalModel.motionManager.stopAllMotions()
-    }
+  if (enabled) {
+    void playNextIdleMotion()
+    return
   }
+  stopUnconfiguredIdleMotion()
 })
 
 watch(disableFocusAt, (disabled) => {
@@ -2559,6 +2619,10 @@ function displayObject() {
 
 defineExpose({
   displayObject,
+  drawableAspectRatio: () => {
+    const bounds = resolveFitBounds()
+    return bounds && bounds.height > 0 ? bounds.width / bounds.height : null
+  },
   modelIdentity: () => loadedModelIdentity && { ...loadedModelIdentity },
   listExpressions,
   setMotion,

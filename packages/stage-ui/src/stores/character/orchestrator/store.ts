@@ -388,8 +388,9 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     const sessionMeta = chatSession.getSessionMeta(sessionId)
     const history = chatSession.getSessionMessages(sessionId)
     if (!sessionMeta || sessionMeta.kind === 'room' || chatOrchestrator.sending
-      || !history.some(message => message.role === 'user') || isSessionMemoryWorkCancelled(sessionId))
+      || !history.some(message => message.role === 'user') || isSessionMemoryWorkCancelled(sessionId)) {
       return false
+    }
     const latestMessageId = history.at(-1)?.id
     const controller = new AbortController()
     proactiveTopicAbort = controller
@@ -399,8 +400,9 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
       || sessionId !== chatSession.activeSessionId || scopeId !== notebookStore.characterId
       || activityAt !== readLastConversationActivityAt() || chatOrchestrator.sending
       || latestMessageId !== chatSession.getSessionMessages(sessionId).at(-1)?.id
-      || isSessionMemoryWorkCancelled(sessionId))
+      || isSessionMemoryWorkCancelled(sessionId)) {
       return false
+    }
     lastProactiveTopicTime.value = now
 
     await chatOrchestrator.ingest(prompt, {
@@ -575,7 +577,9 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
       resetProactiveTopicWait()
     }, { flush: 'sync' })
     watch(() => chatSession.getSessionMessages(chatSession.activeSessionId)
-      .filter(message => message.role === 'user').at(-1)?.id, () => {
+      .filter(message => message.role === 'user')
+      .at(-1)
+      ?.id, () => {
       proactiveTopicAbort?.abort('user-message-arrived')
       recordConversationActivity()
     }, { flush: 'sync' })

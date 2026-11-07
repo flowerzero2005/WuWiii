@@ -7,6 +7,7 @@ const props = withDefaults(defineProps<{
   subtitle?: string
   showBackButton?: boolean
   disableBackButton?: boolean
+  backTo?: string
 }>(), {
   showBackButton: true,
   disableBackButton: false,
@@ -14,6 +15,13 @@ const props = withDefaults(defineProps<{
 
 const router = useRouter()
 const { t } = useI18n()
+
+function handleBack() {
+  if (props.backTo)
+    void router.push(props.backTo)
+  else
+    router.back()
+}
 </script>
 
 <template>
@@ -25,17 +33,17 @@ const { t } = useI18n()
     ]"
     :style="{
       background: 'var(--airi-page-header-surface, var(--airi-surface-page))',
-      top: 'env(safe-area-inset-top, 0px)',
-      right: 'env(safe-area-inset-right, 0px)',
-      left: 'env(safe-area-inset-left, 0px)',
+      top: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
+      right: 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))',
+      left: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
     }"
   >
     <button
       v-if="!props.disableBackButton"
-      :class="['mt-0.5 grid size-9 shrink-0 place-items-center rounded-md', 'airi-overlay-control']"
+      :class="['mt-0.5 grid size-11 shrink-0 place-items-center rounded-md md:size-9', 'airi-overlay-control']"
       :disabled="!showBackButton"
       :aria-label="t('settings.dialogs.onboarding.back')"
-      @click="router.back()"
+      @click="handleBack"
     >
       <div
         i-solar:alt-arrow-left-line-duotone text-xl

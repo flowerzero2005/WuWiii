@@ -23,7 +23,7 @@ const textareaHeight = ref('auto')
 defineExpose({ textareaRef })
 
 function onKeyDown(e: KeyboardEvent) {
-  if (e.code === 'Enter' && !e.shiftKey) { // just block Enter is enough, Shift+Enter by default generates a newline
+  if ((e.key === 'Enter' || e.code === 'Enter') && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault()
     events('submit', input.value)
   }

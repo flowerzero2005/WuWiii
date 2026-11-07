@@ -2,15 +2,25 @@ import type { Live2DAvailableMotion } from '@proj-airi/stage-ui-live2d/stores/li
 
 import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
 import { createLive2DMotionKey } from '@proj-airi/stage-ui-live2d/stores/live2d'
+import { LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE, LIVE2D_IDLE_MOTION_SPEED_BASELINE, LIVE2D_IDLE_SWAY_STRENGTH_BASELINE } from '@proj-airi/stage-ui-live2d/utils/idle-motion-baseline'
 import { resolveLegacyLive2DIdleMotionKey } from '@proj-airi/stage-ui-live2d/utils/idle-motion-scheduler'
 import { LIVE2D_RANDOM_IDLE_MAX_INTERVAL_MS_DEFAULT, LIVE2D_RANDOM_IDLE_MIN_INTERVAL_MS_DEFAULT } from '@proj-airi/stage-ui-live2d/utils/random-idle-motion'
+import { useBroadcastChannel } from '@vueuse/core'
 import { defineStore } from 'pinia'
+import { onScopeDispose, watch } from 'vue'
 
 export const LIVE2D_MOUTH_SYNC_SPEED_DEFAULT = 0.65
 export const LIVE2D_MOUTH_SYNC_AUTO_SPEED_ENABLED_DEFAULT = false
 export const LIVE2D_IDLE_MOTION_SPEED_DEFAULT = 1
 export const LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_DEFAULT = 1
 export const LIVE2D_RANDOM_IDLE_MOTION_ENABLED_DEFAULT = true
+
+interface Live2DIdleTuning {
+  enabled: boolean
+  swayStrength: number
+  motionSpeed: number
+  focusFollowStrength: number
+}
 
 export interface Live2DModelMotionSettings {
   authoredIdleMode: 'none' | 'selected'
@@ -24,7 +34,7 @@ export type Live2DModelMotionSettingsMap = Record<string, Live2DModelMotionSetti
 
 export function createDefaultLive2DModelMotionSettings(availableMotions: Live2DAvailableMotion[]): Live2DModelMotionSettings {
   const idleMotionKeys = availableMotions
-    .filter(motion => motion.motionName.trim().toLowerCase() === 'idle' && motion.motionIndex >= 0 && motion.motionIndex <= 2)
+    .filter(motion => /^(?:idle|待机)/i.test(motion.motionName.trim()) && motion.motionIndex >= 0)
     .map(motion => createLive2DMotionKey(motion.motionName, motion.motionIndex))
   const idleMotionKeySet = new Set(idleMotionKeys)
 
@@ -99,6 +109,24 @@ function readNumberSetting(key: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback
 }
 
+function migrateIdleMotionBaseline() {
+  if (typeof localStorage === 'undefined' || localStorage.getItem('settings/live2d/idle-baseline-v2') === '1')
+    return
+  for (const [key, baseline] of [
+    ['settings/live2d/idle-sway-strength', LIVE2D_IDLE_SWAY_STRENGTH_BASELINE],
+    ['settings/live2d/idle-motion-speed', LIVE2D_IDLE_MOTION_SPEED_BASELINE],
+    ['settings/live2d/body-focus-follow-strength', LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_BASELINE],
+  ] as const) {
+    const raw = localStorage.getItem(key)
+    if (raw == null)
+      continue
+    const value = Number(raw)
+    if (Number.isFinite(value))
+      localStorage.setItem(key, String(Math.round(value / baseline * 1000) / 1000))
+  }
+  localStorage.setItem('settings/live2d/idle-baseline-v2', '1')
+}
+
 function readStringArraySetting(key: string, fallback: string[]) {
   if (typeof localStorage === 'undefined')
     return fallback
@@ -137,11 +165,41 @@ function readJsonSetting<T>(key: string, fallback: T) {
 }
 
 export const useSettingsLive2d = defineStore('settings-live2d', () => {
+  migrateIdleMotionBaseline()
   const live2dDisableFocus = useLocalStorageManualReset<boolean>('settings/live2d/disable-focus', false)
   const live2dIdleAnimationEnabled = useLocalStorageManualReset<boolean>('settings/live2d/idle-animation-enabled', true)
   const live2dIdleSwayStrength = useLocalStorageManualReset<number>('settings/live2d/idle-sway-strength', 1)
   const live2dIdleMotionSpeed = useLocalStorageManualReset<number>('settings/live2d/idle-motion-speed', LIVE2D_IDLE_MOTION_SPEED_DEFAULT)
   const live2dBodyFocusFollowStrength = useLocalStorageManualReset<number>('settings/live2d/body-focus-follow-strength', LIVE2D_BODY_FOCUS_FOLLOW_STRENGTH_DEFAULT)
+  const { data: externalIdleTuning, post: postIdleTuning, close: closeIdleTuningChannel } = useBroadcastChannel<Live2DIdleTuning, Live2DIdleTuning>({ name: 'airi-settings-live2d-idle-tuning' })
+  let applyingExternalIdleTuning = false
+
+  watch([live2dIdleAnimationEnabled, live2dIdleSwayStrength, live2dIdleMotionSpeed, live2dBodyFocusFollowStrength], () => {
+    if (applyingExternalIdleTuning)
+      return
+    postIdleTuning({
+      enabled: live2dIdleAnimationEnabled.value,
+      swayStrength: live2dIdleSwayStrength.value,
+      motionSpeed: live2dIdleMotionSpeed.value,
+      focusFollowStrength: live2dBodyFocusFollowStrength.value,
+    })
+  }, { flush: 'sync' })
+
+  watch(externalIdleTuning, (tuning) => {
+    if (!tuning || !Number.isFinite(tuning.swayStrength) || !Number.isFinite(tuning.motionSpeed) || !Number.isFinite(tuning.focusFollowStrength))
+      return
+    applyingExternalIdleTuning = true
+    try {
+      live2dIdleAnimationEnabled.value = tuning.enabled
+      live2dIdleSwayStrength.value = tuning.swayStrength
+      live2dIdleMotionSpeed.value = tuning.motionSpeed
+      live2dBodyFocusFollowStrength.value = tuning.focusFollowStrength
+    }
+    finally {
+      applyingExternalIdleTuning = false
+    }
+  }, { flush: 'sync' })
+  onScopeDispose(closeIdleTuningChannel)
   const live2dAutoBlinkEnabled = useLocalStorageManualReset<boolean>('settings/live2d/auto-blink-enabled', true)
   const live2dForceAutoBlinkEnabled = useLocalStorageManualReset<boolean>('settings/live2d/force-auto-blink-enabled', false)
   const live2dShadowEnabled = useLocalStorageManualReset<boolean>('settings/live2d/shadow-enabled', true)

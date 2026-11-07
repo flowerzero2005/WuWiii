@@ -71,7 +71,7 @@ export function projectPublicCharacterUpdatePayload(value: UpdateCharacterPayloa
 /** Only client-visible endpoints belong here; no server implementation is imported. */
 export type ClientApi = Hono<Env, {
   '/api/announcements': {
-    $get: JsonEndpoint<{ query: { locale?: string } }, { announcements: PublicProductAnnouncement[] }>
+    $get: JsonEndpoint<{ query: { locale?: string, surface?: 'desktop' | 'mobile' } }, { announcements: PublicProductAnnouncement[] }>
   }
   '/api/releases': {
     $get: JsonEndpoint<{ query: { channel?: string } }, { release: PublicProductRelease | null }>

@@ -109,32 +109,54 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     return preset
   }
 
-  async function loadLive2DModelPreview(file: File) {
+  async function loadLive2DModelPreview(file: File, compact = false) {
     await Promise.all([
       import('@proj-airi/stage-ui-live2d/utils/live2d-zip-loader'),
       import('@proj-airi/stage-ui-live2d/utils/live2d-opfs-registration'),
     ])
     const { loadLive2DModelPreview: generateLive2DPreview } = await import('@proj-airi/stage-ui-live2d/utils/live2d-preview')
-    return generateLive2DPreview(file)
+    return generateLive2DPreview(file, compact)
   }
 
-  async function loadVrmModelPreview(file: File) {
+  async function loadVrmModelPreview(file: File, compact = false) {
     const { loadVrmModelPreview: generateVrmPreview } = await import('@proj-airi/stage-ui-three/utils/vrm-preview')
-    return generateVrmPreview(file)
+    return generateVrmPreview(file, compact)
   }
 
   async function addDisplayModel(format: DisplayModelFormat, file: File, provenance?: AssetProvenanceManifest) {
     await until(displayModelsFromIndexedDBLoading).toBe(false)
+    if (file.size === 0)
+      throw new Error('模型文件为空，请重新选择。')
     const newDisplayModel: DisplayModelFile = { id: `display-model-${nanoid()}`, format, type: 'file', file, name: file.name, importedAt: Date.now(), provenance }
+    const isPocket = typeof window !== 'undefined' && Boolean((window as Window & { pocketBridge?: unknown }).pocketBridge)
 
     if (format === DisplayModelFormat.Live2dZip) {
-      const previewImage = await loadLive2DModelPreview(file)
-      newDisplayModel.previewImage = previewImage
+      if (isPocket) {
+        const { default: JSZip } = await import('jszip')
+        const archive = await JSZip.loadAsync(await file.arrayBuffer())
+        const paths = Object.keys(archive.files)
+        if (!paths.some(path => path.endsWith('model3.json')) && !paths.some(path => path.endsWith('.moc3')))
+          throw new Error('压缩包中没有 Live2D 模型文件。')
+        newDisplayModel.previewImage = await loadLive2DModelPreview(file, true)
+      }
+      else {
+        newDisplayModel.previewImage = await loadLive2DModelPreview(file)
+      }
     }
     else if (format === DisplayModelFormat.VRM) {
-      const previewImage = await loadVrmModelPreview(file)
-      newDisplayModel.previewImage = previewImage
+      if (isPocket) {
+        const header = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+        if (String.fromCharCode(...header) !== 'glTF')
+          throw new Error('这不是有效的 VRM 模型文件。')
+        newDisplayModel.previewImage = await loadVrmModelPreview(file, true)
+      }
+      else {
+        newDisplayModel.previewImage = await loadVrmModelPreview(file)
+      }
     }
+
+    if (isPocket && (format === DisplayModelFormat.Live2dZip || format === DisplayModelFormat.VRM) && !newDisplayModel.previewImage)
+      throw new Error('模型预览生成失败，请检查模型文件是否完整。')
 
     await localforage.setItem<DisplayModelFile>(newDisplayModel.id, newDisplayModel)
     displayModels.value.unshift(newDisplayModel)

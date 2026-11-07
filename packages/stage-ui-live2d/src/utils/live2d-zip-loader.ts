@@ -195,13 +195,81 @@ ZipLoader.getFilePaths = (jsZip: JSZip) => {
   return Promise.resolve(paths)
 }
 
-ZipLoader.getFiles = (jsZip: JSZip, paths: string[]) =>
-  Promise.all(paths.map(
-    async (path) => {
-      const fileName = path.slice(path.lastIndexOf('/') + 1)
+// A texture can decode successfully yet exceed Android WebView's WebGL limit,
+// leaving a loaded Live2D model black. Resize only oversized atlases before
+// Pixi uploads them; the model's normalized UVs continue to match.
+let mobileTextureLimit: number | undefined
+const mobileTexturePixelBudget = 4096 * 4096
+const androidUserAgentPattern = /Android/i
+const pngPathPattern = /\.png$/i
 
-      const blob = await jsZip.file(path)!.async('blob')
+function getMobileTextureLimit() {
+  if (!androidUserAgentPattern.test(navigator.userAgent))
+    return 0
+  if (mobileTextureLimit !== undefined)
+    return mobileTextureLimit
 
-      return new File([blob], fileName)
-    },
-  ))
+  const canvas = document.createElement('canvas')
+  const gl = canvas.getContext('webgl')
+  const reportedLimit = gl?.getParameter(gl.MAX_TEXTURE_SIZE) as number | undefined
+  mobileTextureLimit = reportedLimit && reportedLimit > 0 ? reportedLimit : 4096
+  gl?.getExtension('WEBGL_lose_context')?.loseContext()
+  return mobileTextureLimit
+}
+
+async function fitMobileTexture(blob: Blob, path: string) {
+  const limit = getMobileTextureLimit()
+  if (!limit || !pngPathPattern.test(path))
+    return blob
+
+  const header = new DataView(await blob.slice(0, 24).arrayBuffer())
+  if (header.byteLength < 24 || header.getUint32(0) !== 0x89504E47 || header.getUint32(12) !== 0x49484452)
+    return blob
+
+  const width = header.getUint32(16)
+  const height = header.getUint32(20)
+  if (!width || !height)
+    return blob
+
+  // A long atlas can keep an 8K edge when its total RGBA memory is no larger
+  // than a 4096x4096 atlas. A huge square atlas still scales down.
+  const ratio = Math.min(1, limit / width, limit / height, Math.sqrt(mobileTexturePixelBudget / (width * height)))
+  if (ratio >= 1)
+    return blob
+  const targetWidth = Math.max(1, Math.floor(width * ratio))
+  const targetHeight = Math.max(1, Math.floor(height * ratio))
+  const bitmap = await createImageBitmap(blob, { resizeWidth: targetWidth, resizeHeight: targetHeight, resizeQuality: 'high' })
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+    const context = canvas.getContext('2d')
+    if (!context)
+      throw new Error(`Cannot resize Live2D texture: ${path}`)
+    context.drawImage(bitmap, 0, 0, targetWidth, targetHeight)
+    const resized = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!resized)
+      throw new Error(`Cannot encode resized Live2D texture: ${path}`)
+    return resized
+  }
+  finally {
+    bitmap.close()
+  }
+}
+
+ZipLoader.getFiles = async (jsZip: JSZip, paths: string[]) => {
+  const readFile = async (path: string) => {
+    const fileName = path.slice(path.lastIndexOf('/') + 1)
+    const blob = await jsZip.file(path)!.async('blob')
+    return new File([await fitMobileTexture(blob, path)], fileName)
+  }
+
+  if (!getMobileTextureLimit())
+    return Promise.all(paths.map(readFile))
+
+  // Avoid decoding multiple large atlases into mobile memory at once.
+  const files: File[] = []
+  for (const path of paths)
+    files.push(await readFile(path))
+  return files
+}

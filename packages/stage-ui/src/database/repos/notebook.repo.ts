@@ -10,6 +10,7 @@ export interface NotebookData {
   diaryDrafts?: CharacterDiaryDraft[]
   /** Diary-entry tombstones keep stale windows from resurrecting a deletion. */
   deletedDiaryEntryIds?: string[]
+  deletedMemoryEntryIds?: string[]
   version: number
   /** Monotonically increasing local revision for cross-window merge writes. */
   revision?: number
@@ -19,6 +20,7 @@ export interface NotebookData {
 export interface NotebookSaveOptions {
   preserveMetadata?: boolean
   sourceSessionId?: string
+  restoreEntryIds?: string[]
 }
 
 const NOTEBOOK_LOCK_TIMEOUT_MS = 2_000
@@ -109,13 +111,19 @@ export function mergeNotebookData(current: NotebookData | null, incoming: Notebo
     ...(incoming.deletedDiaryEntryIds ?? []),
   ])
   const deletedDiaryEntryIdSet = new Set(deletedDiaryEntryIds)
+  const deletedMemoryEntryIds = uniqueRecentIds([
+    ...(current?.deletedMemoryEntryIds ?? []),
+    ...(incoming.deletedMemoryEntryIds ?? []),
+  ])
+  const deletedMemoryEntryIdSet = new Set(deletedMemoryEntryIds)
 
   return {
     entries: mergeEntries(current?.entries ?? [], incoming.entries)
-      .filter(entry => !deletedDiaryEntryIdSet.has(entry.id)),
+      .filter(entry => !deletedDiaryEntryIdSet.has(entry.id) && !deletedMemoryEntryIdSet.has(entry.id)),
     tasks: mergeTasks(current?.tasks ?? [], incoming.tasks),
     diaryDrafts: mergeDiaryDrafts(current?.diaryDrafts ?? [], incoming.diaryDrafts ?? []),
     deletedDiaryEntryIds,
+    deletedMemoryEntryIds,
     version: incoming.version,
     revision: incoming.revision,
     lastSyncedAt: incoming.lastSyncedAt,
@@ -169,7 +177,8 @@ export const notebookRepo = {
       // 验证数据完整性
       if (data && (!Array.isArray(data.entries) || !Array.isArray(data.tasks)
         || (data.diaryDrafts !== undefined && !Array.isArray(data.diaryDrafts))
-        || (data.deletedDiaryEntryIds !== undefined && !Array.isArray(data.deletedDiaryEntryIds)))) {
+        || (data.deletedDiaryEntryIds !== undefined && !Array.isArray(data.deletedDiaryEntryIds))
+        || (data.deletedMemoryEntryIds !== undefined && !Array.isArray(data.deletedMemoryEntryIds)))) {
         throw new TypeError('[NotebookRepo] Corrupted notebook data')
       }
 
@@ -200,11 +209,16 @@ export const notebookRepo = {
         const currentData = await notebookStore.getItem<NotebookData>(key)
         if (isSessionMemoryWorkCancelled(options.sourceSessionId))
           throw new Error('Notebook work source session was deleted')
-        const merged = mergeNotebookData(currentData, {
+        const restoreIds = new Set(options.restoreEntryIds ?? [])
+        const currentForMerge = currentData && restoreIds.size > 0
+          ? { ...currentData, deletedMemoryEntryIds: (currentData.deletedMemoryEntryIds ?? []).filter(id => !restoreIds.has(id)) }
+          : currentData
+        const merged = mergeNotebookData(currentForMerge, {
           entries: safeClone(data.entries),
           tasks: safeClone(data.tasks),
           diaryDrafts: safeClone(data.diaryDrafts ?? []),
           deletedDiaryEntryIds: safeClone(data.deletedDiaryEntryIds ?? []),
+          deletedMemoryEntryIds: safeClone(data.deletedMemoryEntryIds ?? []),
           version: data.version,
           revision: data.revision,
           lastSyncedAt: data.lastSyncedAt,
@@ -238,6 +252,23 @@ export const notebookRepo = {
       console.error('[NotebookRepo] Error during save:', error)
       throw error
     }
+  },
+
+  /** Apply an external memory delta against the latest notebook under the same cross-window lock as save(). */
+  async update(characterId: string, apply: (current: NotebookData) => NotebookData): Promise<NotebookData> {
+    if (!characterId || typeof characterId !== 'string')
+      throw new Error('[NotebookRepo] Invalid characterId')
+    return withNotebookLock(characterId, async () => {
+      const key = `notebook-${characterId}`
+      const current = await notebookStore.getItem<NotebookData>(key) ?? { entries: [], tasks: [], version: 1 }
+      const next = apply(safeClone(current))
+      if (!Array.isArray(next.entries) || !Array.isArray(next.tasks))
+        throw new TypeError('[NotebookRepo] Invalid updated data structure')
+      const revision = Math.max(current.revision ?? current.version, next.revision ?? next.version) + 1
+      const saved = { ...next, version: revision, revision, lastSyncedAt: Date.now() }
+      await notebookStore.setItem(key, saved)
+      return saved
+    })
   },
 
   async addToSyncQueue(characterId: string, data: NotebookData): Promise<void> {

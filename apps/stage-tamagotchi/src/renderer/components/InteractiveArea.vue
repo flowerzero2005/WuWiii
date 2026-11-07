@@ -516,6 +516,11 @@ const conversationActionError = ref('')
 const personaContactsDesktopCollapsed = ref(false)
 const voiceCallStarting = ref(false)
 const voiceCallSessionActive = ref(false)
+const voiceCallMuted = ref(false)
+const voiceCallMicTrackStates = new Map<MediaStreamTrack, boolean>()
+const voiceCallMicLabel = computed(() => locale.value.startsWith('zh')
+  ? voiceCallMuted.value ? '打开麦克风' : '关闭麦克风'
+  : voiceCallMuted.value ? 'Unmute microphone' : 'Mute microphone')
 let voiceCallOwnsHearingStream = false
 let voiceCallAudioInputWasEnabled: boolean | undefined
 let voiceCallTraceId: string | undefined
@@ -1143,6 +1148,11 @@ async function startVoiceCallTranscription() {
     return false
   if (!stream || !voiceCallOwnsHearingStream || !isCurrentWindowHearingStreamOwner())
     return false
+  for (const track of stream.getAudioTracks()) {
+    if (!voiceCallMicTrackStates.has(track))
+      voiceCallMicTrackStates.set(track, track.enabled)
+    track.enabled = !voiceCallMuted.value && voiceCallMicTrackStates.get(track)!
+  }
 
   // VAD is an optional interruption detector. Do not make microphone/ASR
   // startup wait for a remote model download or fail when that download is
@@ -1172,6 +1182,8 @@ async function startVoiceCallTranscription() {
       hearingPipeline.transcribeForMediaStream(stream, {
         idleTimeoutMs: 0,
         onSentenceEnd: (text) => {
+          if (voiceCallMuted.value)
+            return true
           // ASR sentence boundaries provide an interruption fallback when the
           // optional local VAD model is disabled or unavailable.
           if (text.trim()) {
@@ -1206,6 +1218,10 @@ async function startVoiceCallTranscription() {
 
 // The call owns the shared stream only when it enabled it for this session.
 function stopVoiceCallTranscription() {
+  for (const [track, wasEnabled] of voiceCallMicTrackStates)
+    track.enabled = wasEnabled
+  voiceCallMicTrackStates.clear()
+  voiceCallMuted.value = false
   const callId = voiceCallTraceId
   const chatSessionId = activeVoiceCallSessionId
   traceVoiceCall('transcription-stop-requested', { callId, chatSessionId })
@@ -1271,6 +1287,14 @@ function interruptVoiceCallOutput(reason: string) {
     postVoiceCallPresentEvent({ type: 'quick-chat-turn-dismiss', turnId })
   clearVoiceCallAssistantSegments()
   activeVoiceCallTurnIds.clear()
+}
+
+function toggleVoiceCallMicrophone() {
+  if (!voiceCallSessionActive.value)
+    return
+  voiceCallMuted.value = !voiceCallMuted.value
+  for (const [track, wasEnabled] of voiceCallMicTrackStates)
+    track.enabled = wasEnabled && !voiceCallMuted.value
 }
 
 watch(shouldInterruptPlayback, (shouldInterrupt) => {
@@ -1951,8 +1975,9 @@ async function ensureOfficialCapabilityConsent(capability: OfficialPaidCapabilit
     return false
   }
   if (!officialCapabilityConsentStore.needsConsent(scopeId, capability, quote)
-    && !(options?.modelScreenshot && !visionStore.skipModelScreenshotConfirmation))
+    && (!options?.modelScreenshot || visionStore.skipModelScreenshotConfirmation)) {
     return true
+  }
   if (capabilityConsentRequest.value)
     return false
   if (isCollapsed.value) {
@@ -3652,8 +3677,9 @@ async function handleGroupSend(textToSend: string, attachmentCount: number, trac
       void scheduleChapterEvaluation({ sessionId: roomSessionId, sourceUserMessageId, groupTurnId }).then(async () => {
         if (authStore.userId !== chapterOwner || activeSessionId.value !== roomSessionId
           || chatSession.getSessionGeneration(roomSessionId) !== chapterGeneration
-          || activeGroupRun.value?.phase === 'running' || settledGroupRun.value?.runId !== groupTurnId)
+          || activeGroupRun.value?.phase === 'running' || settledGroupRun.value?.runId !== groupTurnId) {
           return
+        }
         await chatSession.autoCleanupSession(roomSessionId)
       }).catch(error => console.warn('[Chat] Automatic group history cleanup did not run:', error))
       const latestRecommendation = [...groupRecommendationInputs].reverse().find((input) => {
@@ -4511,14 +4537,18 @@ function isRecommendedRepliesTarget(message: ChatHistoryItem | undefined): messa
     && message.id
     && !message.id.endsWith(':speech-context')
     && message.metadata?.messageKind !== 'narration'
+    && message.metadata?.messageKind !== 'status'
+    && !message.metadata?.scriptAct
     && !message.metadata?.speechDisplayPending)
 }
 
-function hasPendingAssistantDisplayAfterUser(messages: ChatHistoryItem[], userIndex: number) {
+function hasPendingAssistantDisplayAfterUser(messages: ChatHistoryItem[], userIndex: number, sessionId = activeSessionId.value) {
+  const locallyCompleted = locallyCompletedTypingBySession.value[sessionId] ?? []
   return messages
     .slice(userIndex + 1)
     .some(message => message.role === 'assistant'
-      && (message.metadata?.speechDisplayPending === true || message.metadata?.typingCompleted === false))
+      && (message.metadata?.speechDisplayPending === true
+        || (message.metadata?.typingCompleted === false && !locallyCompleted.includes(message.id ?? ''))))
 }
 
 function hasPendingGroupTurnDisplay(input: {
@@ -4537,7 +4567,7 @@ function hasPendingGroupTurnDisplay(input: {
   // speaker and narration bubble to finish its own speech/typewriter reveal;
   // checking only the target speaker lets the chips appear while a later
   // narrator is still being displayed.
-  return hasPendingAssistantDisplayAfterUser(sessionMessages, sourceUserIndex)
+  return hasPendingAssistantDisplayAfterUser(sessionMessages, sourceUserIndex, input.sessionId)
 }
 
 function scheduleChapterEvaluation(input: { sessionId: string, sourceUserMessageId: string, groupTurnId: string }) {
@@ -4607,6 +4637,68 @@ const visibleRecommendedReplies = computed(() => {
   return metadataReplies?.length ? metadataReplies : sessionReplies
 })
 
+const manualRecommendedReplyTarget = computed(() => {
+  if (quickChatSettings.value.recommendedRepliesEnabled || isCollapsed.value
+    || !isInitialized.value || manualSendPending.value || sending.value || responding.value
+    || groupSendingForActiveSession.value || visibleRecommendedReplies.value.length) {
+    return
+  }
+
+  const sessionMessages = historyMessages.value
+  const lastUserIndex = sessionMessages.reduce((latest, message, index) => message.role === 'user' ? index : latest, -1)
+  if (lastUserIndex < 0 || hasPendingAssistantDisplayAfterUser(sessionMessages, lastUserIndex)) {
+    return
+  }
+
+  const message = sessionMessages.slice(lastUserIndex + 1)
+    .filter(isRecommendedRepliesTarget)
+    .at(-1)
+  if (!message || !getRecommendedReplyAssistantText(message)
+    || (message.metadata?.typingCompleted === false
+      && !locallyCompletedTypingBySession.value[activeSessionId.value]?.includes(message.id))) {
+    return
+  }
+
+  const userMessage = sessionMessages[lastUserIndex]
+  if (message.metadata?.speaker?.sourceUserMessageId
+    && message.metadata.speaker.sourceUserMessageId !== userMessage?.id) {
+    return
+  }
+
+  const speakerId = activeGroupMeta.value ? message.metadata?.speaker?.characterId : undefined
+  const speakerRuntime = speakerId ? airiCardStore.getCardRuntime(speakerId) : undefined
+  if (activeGroupMeta.value && !speakerRuntime) {
+    return
+  }
+  const providerId = speakerRuntime?.providerId || activeProvider.value
+  const model = speakerRuntime?.modelId || activeModel.value
+  if (!providerId || !model) {
+    return
+  }
+
+  const userText = userMessage?.role === 'user'
+    ? typeof userMessage.content === 'string'
+      ? userMessage.content
+      : Array.isArray(userMessage.content)
+        ? userMessage.content.map(part => part.type === 'text' ? part.text : '').join(' ').trim()
+        : ''
+    : ''
+
+  return { message, model, providerId, userText }
+})
+
+const manualRecommendedReplyAction = computed<'idle' | 'loading' | 'failed' | undefined>(() => {
+  const target = manualRecommendedReplyTarget.value
+  if (!target) {
+    return
+  }
+  const status = recommendedReplyStatusBySession.value[activeSessionId.value]
+  if (status?.messageId === target.message.id && status.status === 'loading') {
+    return 'loading'
+  }
+  return status?.messageId === target.message.id && status.status === 'failed' ? 'failed' : 'idle'
+})
+
 let lastRecommendedRepliesRenderSignature = ''
 watch(visibleRecommendedReplies, (replies) => {
   const signature = `${activeSessionId.value}:${replies.join('|')}`
@@ -4624,6 +4716,30 @@ function fillRecommendedReply(reply: string) {
   if (detachedComposer.readonly.value)
     return
   messageInput.value = reply
+}
+
+function generateManualRecommendedReplies() {
+  const target = manualRecommendedReplyTarget.value
+  if (!target || manualRecommendedReplyAction.value === 'loading'
+    || recommendedReplyControllers.has(activeSessionId.value)) {
+    return
+  }
+
+  const sessionId = activeSessionId.value
+  const requestGeneration = (recommendedReplyGenerationBySession.value[sessionId] ?? 0) + 1
+  recommendedReplyGenerationBySession.value = {
+    ...recommendedReplyGenerationBySession.value,
+    [sessionId]: requestGeneration,
+  }
+  scheduleRecommendedReplies({
+    ...target,
+    manual: true,
+    requestGeneration,
+    sessionId,
+    sourceSurface: voiceCallSessionActive.value
+      ? 'voice-call'
+      : activeGroupMeta.value ? 'group-chat' : props.surface === 'widget' ? 'quick-chat' : 'chat',
+  })
 }
 
 function findLatestAssistantMessage(sessionId: string, sourceUserMessageId?: string, speakerCharacterId?: string, includeSpeechPending = false, afterCreatedAt?: number) {
@@ -4850,6 +4966,7 @@ function attachRecommendedReplies(messagesToUpdate: ChatHistoryItem[], preferred
 }
 
 function scheduleRecommendedReplies(input: {
+  manual?: boolean
   message: ChatAssistantMessage & { id?: string }
   model: string
   providerId: string
@@ -4859,7 +4976,7 @@ function scheduleRecommendedReplies(input: {
   userText: string
 }) {
   const requestGeneration = input.requestGeneration ?? (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0)
-  if (!quickChatSettings.value.recommendedRepliesEnabled) {
+  if (!input.manual && !quickChatSettings.value.recommendedRepliesEnabled) {
     logGroupDiagnostic('recommendations-skipped-disabled', {
       sessionId: input.sessionId,
       messageId: input.message.id,
@@ -4886,9 +5003,10 @@ function scheduleRecommendedReplies(input: {
     if (recommendedRepliesDisposed || controller.signal.aborted
       || activeSessionId.value !== input.sessionId
       || composerUserScope.value !== requestUserScope
-      || !quickChatSettings.value.recommendedRepliesEnabled
-      || requestGeneration !== (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0))
+      || (!input.manual && !quickChatSettings.value.recommendedRepliesEnabled)
+      || requestGeneration !== (recommendedReplyGenerationBySession.value[input.sessionId] ?? 0)) {
       return false
+    }
     const sessionMessages = chatSession.getSessionMessages(input.sessionId)
     const targetIndex = sessionMessages.findIndex(message => message.id === messageId)
     return targetIndex >= 0 && !sessionMessages.slice(targetIndex + 1).some(message => message.role === 'user')
@@ -5378,6 +5496,16 @@ const chatSurfaceStyle = computed(() => {
           </button>
           <button
             type="button"
+            :title="voiceCallMicLabel"
+            :aria-label="voiceCallMicLabel"
+            :aria-pressed="voiceCallMuted"
+            class="[-webkit-app-region:no-drag] grid size-9 shrink-0 place-items-center border border-[var(--airi-border-subtle)] rounded-full text-[var(--airi-text)] hover:bg-[var(--airi-surface-control-muted)]"
+            @click="toggleVoiceCallMicrophone"
+          >
+            <div :class="voiceCallMuted ? 'i-lucide:mic-off' : 'i-lucide:mic'" class="size-4" />
+          </button>
+          <button
+            type="button"
             :title="t('stage.voice-call.end')"
             :aria-label="t('stage.voice-call.end')"
             class="[-webkit-app-region:no-drag] grid size-9 shrink-0 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600"
@@ -5495,15 +5623,27 @@ const chatSurfaceStyle = computed(() => {
             <div class="h-4 flex items-center gap-1" aria-hidden="true">
               <span v-for="index in 7" :key="index" class="h-2 w-1 animate-pulse rounded-full bg-emerald-400/75 motion-reduce:animate-none" :style="{ animationDelay: `${index * 90}ms` }" />
             </div>
-            <button
-              type="button"
-              :title="t('stage.voice-call.end')"
-              :aria-label="t('stage.voice-call.end')"
-              class="grid size-11 place-items-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/25 transition-transform active:scale-95 hover:bg-red-600"
-              @click="() => toggleVoiceCall()"
-            >
-              <div class="i-lucide:phone-off size-5" />
-            </button>
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                :title="voiceCallMicLabel"
+                :aria-label="voiceCallMicLabel"
+                :aria-pressed="voiceCallMuted"
+                class="grid size-11 place-items-center border border-[var(--airi-border-subtle)] rounded-full bg-[var(--airi-surface-control-muted)] text-[var(--airi-text)] transition-transform active:scale-95"
+                @click="toggleVoiceCallMicrophone"
+              >
+                <div :class="voiceCallMuted ? 'i-lucide:mic-off' : 'i-lucide:mic'" class="size-5" />
+              </button>
+              <button
+                type="button"
+                :title="t('stage.voice-call.end')"
+                :aria-label="t('stage.voice-call.end')"
+                class="grid size-11 place-items-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/25 transition-transform active:scale-95 hover:bg-red-600"
+                @click="() => toggleVoiceCall()"
+              >
+                <div class="i-lucide:phone-off size-5" />
+              </button>
+            </div>
           </div>
         </template>
       </section>
@@ -5601,7 +5741,9 @@ const chatSurfaceStyle = computed(() => {
           {{ t('stage.chat.conversations.title') }}
         </button>
       </div>
-      <p v-if="conversationActionError" role="alert" :class="['airi-status-danger rounded-md p-2 text-xs']">{{ conversationActionError }}</p>
+      <p v-if="conversationActionError" role="alert" :class="['airi-status-danger rounded-md p-2 text-xs']">
+        {{ conversationActionError }}
+      </p>
       <div class="min-h-0 flex-1 overflow-y-auto pr-0.5">
         <section
           v-if="groupCreateOpen"
@@ -5813,7 +5955,9 @@ const chatSurfaceStyle = computed(() => {
         </div>
         <template v-if="personaSidebarView === 'conversations' && !activeGroupMeta && !groupAddMode">
           <div :class="['mb-3 flex items-center gap-2 px-1 pt-1']">
-            <CharacterAvatarImage :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <CharacterAvatarImage :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">
+              {{ assistantIdentityName.slice(0, 1) }}
+            </CharacterAvatarImage>
             <span :class="['min-w-0 truncate text-sm font-semibold']">{{ assistantIdentityName }}</span>
           </div>
           <DirectConversationList
@@ -5853,7 +5997,9 @@ const chatSurfaceStyle = computed(() => {
         >
           <div :class="['flex min-w-0 flex-1 items-center gap-1']">
             <button type="button" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['[-webkit-app-region:no-drag] min-w-0 flex flex-1 items-center gap-2 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click="openConversations">
-              <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-7 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-7']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+              <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-7 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-7']">
+                {{ assistantIdentityName.slice(0, 1) }}
+              </CharacterAvatarImage>
               <span :class="['min-w-0']"><span :class="['block truncate text-xs font-semibold']">{{ activeGroupMeta?.title || assistantIdentityName }}</span><span v-if="!activeGroupMeta" :class="['block truncate text-[10px] text-[var(--airi-text-muted)]']">{{ activeSessionMeta?.title || t('stage.chat.conversations.untitled') }}</span></span>
               <span class="i-lucide:chevron-down size-3 shrink-0" aria-hidden="true" />
             </button>
@@ -5913,7 +6059,9 @@ const chatSurfaceStyle = computed(() => {
             <div class="i-lucide:users size-4" />
           </button>
           <button type="button" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['min-w-0 flex flex-1 items-center gap-2 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click="openConversations">
-            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-8 shrink-0 overflow-hidden rounded-full bg-[var(--airi-accent-surface)] text-center leading-8']">
+              {{ assistantIdentityName.slice(0, 1) }}
+            </CharacterAvatarImage>
             <span :class="['min-w-0']"><span :class="['block truncate text-sm font-semibold']">{{ activeGroupMeta?.title || assistantIdentityName }}</span><span v-if="!activeGroupMeta" :class="['block truncate text-xs text-[var(--airi-text-muted)]']">{{ activeSessionMeta?.title || t('stage.chat.conversations.untitled') }}</span></span>
             <span class="i-lucide:chevron-down size-3 shrink-0" aria-hidden="true" />
           </button>
@@ -6076,10 +6224,12 @@ const chatSurfaceStyle = computed(() => {
           :session-id="activeSessionId"
           :focused-message-id="focusedMessageId"
           :recommended-replies="isCollapsed ? [] : visibleRecommendedReplies"
+          :recommended-reply-action="manualRecommendedReplyAction"
           message-deletion-enabled
           @error-action="handleChatErrorAction"
           @typing-complete="handleHistoryTypingComplete"
           @recommended-reply-select="fillRecommendedReply"
+          @recommended-reply-request="generateManualRecommendedReplies"
         />
       </div>
 
@@ -6189,7 +6339,9 @@ const chatSurfaceStyle = computed(() => {
             <div class="i-lucide:triangle-alert size-4" />
           </button>
           <button v-if="isCollapsed" type="button" :title="`${activeGroupMeta?.title || assistantIdentityName} · ${activeSessionMeta?.title || t('stage.chat.conversations.untitled')}`" :aria-label="t('stage.chat.conversations.with-character', { name: activeGroupMeta?.title || assistantIdentityName })" :class="['[-webkit-app-region:no-drag] relative z-20 grid size-8 shrink-0 place-items-center overflow-hidden rounded-full airi-overlay-control-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--airi-accent)]']" @click.stop="openConversations">
-            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-full text-center leading-8']">{{ assistantIdentityName.slice(0, 1) }}</CharacterAvatarImage>
+            <CharacterAvatarImage v-if="!activeGroupMeta" :src="assistantIdentityAvatarUrl" :model-id="assistantIdentityAvatarModelId" :alt="assistantIdentityName" :class="['size-full text-center leading-8']">
+              {{ assistantIdentityName.slice(0, 1) }}
+            </CharacterAvatarImage>
             <span v-else class="i-lucide:users size-4" aria-hidden="true" />
           </button>
           <div :class="isCollapsed ? 'contents' : 'relative order-1 min-h-0 w-full flex-1 self-stretch overflow-hidden'">

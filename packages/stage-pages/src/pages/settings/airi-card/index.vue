@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import type { ccv3 } from '@proj-airi/ccc'
+import type { PersonaCardConflict } from '@proj-airi/stage-ui/libs/persona-card-sync'
 import type {
   AiriPersonaPackage,
   AiriPersonaPackageSectionKey,
 } from '@proj-airi/stage-ui/stores/modules/persona-package'
 
 import { Alert } from '@proj-airi/stage-ui/components'
-import { useDownload } from '@proj-airi/stage-ui/composables/download'
+import { saveBlobDocument } from '@proj-airi/stage-ui/composables/download'
+import { getPersonaCardConflicts, resolvePersonaCardConflict, syncPersonaCards } from '@proj-airi/stage-ui/libs/persona-card-sync'
+import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { AIRI_PERSONA_PACKAGE_SECTION_KEYS } from '@proj-airi/stage-ui/stores/modules/persona-package'
 import { Button, InputFile } from '@proj-airi/ui'
@@ -27,8 +30,9 @@ import {
   DialogRoot,
   DialogTitle,
 } from 'reka-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { toast } from 'vue-sonner'
 
 import CardCreate from './components/CardCreate.vue'
 import CardCreationDialog from './components/CardCreationDialog.vue'
@@ -37,17 +41,64 @@ import CardListItem from './components/CardListItem.vue'
 import DeleteCardDialog from './components/DeleteCardDialog.vue'
 
 const { t } = useI18n()
+const auth = useAuthStore()
 const cardStore = useAiriCardStore()
 const { addCard, addPersonaPackage, removeCard, restoreDefaultCard, updateCardFromPersonaPackage } = cardStore
 const { cards, activeCardId } = storeToRefs(cardStore)
+const cardConflicts = ref<PersonaCardConflict[]>([])
+const resolvingCardId = ref('')
 
-function exportActivePersonaPackage() {
+async function refreshCardConflicts() {
+  cardConflicts.value = await getPersonaCardConflicts()
+}
+
+onMounted(() => {
+  void syncPersonaCards().then(refreshCardConflicts).catch((error) => {
+    toast.error(error instanceof Error ? error.message : '角色卡同步失败')
+    return refreshCardConflicts()
+  })
+})
+watch(() => auth.isAuthenticated, (authenticated) => {
+  if (authenticated)
+    void syncPersonaCards().then(refreshCardConflicts).catch(() => undefined)
+  else
+    cardConflicts.value = []
+})
+
+async function resolveCardVersion(id: string, choice: 'local' | 'remote') {
+  resolvingCardId.value = id
+  try {
+    if (!await resolvePersonaCardConflict(id, choice)) {
+      toast.error('角色卡版本已变化，请重新同步后再选择')
+      await syncPersonaCards()
+    }
+    else {
+      toast.success(choice === 'local' ? '已保留此设备的角色卡' : '已采用云端版本，旧角色卡和本地记忆已备份')
+    }
+    await refreshCardConflicts()
+  }
+  catch {
+    toast.error('角色卡冲突处理失败，请稍后重试')
+  }
+  finally {
+    resolvingCardId.value = ''
+  }
+}
+
+async function exportActivePersonaPackage() {
   if (!activeCardId.value)
     return
   const payload = cardStore.exportPersonaPackage(activeCardId.value)
   if (!payload)
     return
-  useDownload(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `${payload.card.name || 'airi-persona'}.json`).download()
+  try {
+    await saveBlobDocument(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `${payload.card.name || 'airi-persona'}.json`)
+  }
+  catch (error) {
+    if (error instanceof Error && error.message.includes('cancelled'))
+      return
+    toast.error('角色卡保存失败，请选择可写入的位置后重试。')
+  }
 }
 
 // Currently selected card ID (different from active card ID)
@@ -108,6 +159,8 @@ watch(inputFiles, async (newFiles) => {
   }
   catch (error) {
     console.error('Error processing card file:', error)
+    toast.error('角色卡导入失败，请选择有效的 JSON 角色卡文件。')
+    inputFiles.value = []
   }
 })
 
@@ -396,8 +449,25 @@ function getModuleShortName(id: string, module: 'consciousness' | 'voice') {
 
 <template>
   <div :class="['airi-surface-panel', 'rounded-xl p-4', 'flex flex-col gap-4']">
+    <section v-if="cardConflicts.length" class="airi-card rounded-xl p-4" aria-label="角色卡同步冲突">
+      <h2 class="font-semibold">
+        角色卡需要选择版本
+      </h2>
+      <p class="mt-1 text-sm airi-text-muted">
+        这些角色卡在不同设备上都改过。选择云端版本时，此设备的旧卡及本地记忆会另存备份。
+      </p>
+      <div v-for="conflict in cardConflicts" :key="conflict.id" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg p-3">
+        <span class="min-w-0 flex-1 text-sm">{{ conflict.local.name }} · 此设备 / 云端：{{ conflict.remote.name }}</span>
+        <Button variant="secondary" :disabled="!!resolvingCardId" @click="resolveCardVersion(conflict.id, 'local')">
+          保留此设备
+        </Button>
+        <Button variant="secondary" :disabled="!!resolvingCardId" @click="resolveCardVersion(conflict.id, 'remote')">
+          采用云端并备份
+        </Button>
+      </div>
+    </section>
     <!-- Toolbar with search and filters -->
-    <div flex="~ row" flex-wrap items-center justify-between gap-4>
+    <div class="pocket-card-toolbar" flex="~ row" flex-wrap items-center justify-between gap-4>
       <!-- Search bar -->
       <div class="relative min-w-[200px] flex-1" inline-flex="~" w-full items-center>
         <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -424,7 +494,7 @@ function getModuleShortName(id: string, module: 'consciousness' | 'voice') {
             { value: 'recent', label: t('settings.pages.card.recent') },
           ]"
           :placeholder="t('settings.pages.card.sort_placeholder')"
-          class="min-w-[150px]"
+          class="pocket-card-sort min-w-[150px]"
         />
       </div>
       <Button variant="secondary" :disabled="!activeCardId" @click="exportActivePersonaPackage">
@@ -435,11 +505,11 @@ function getModuleShortName(id: string, module: 'consciousness' | 'voice') {
 
     <!-- Masonry card layout -->
     <div
-      class="mt-4"
+      class="pocket-card-grid mt-4"
       :class="{ 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 grid-auto-rows-[minmax(min-content,max-content)] grid-auto-flow-dense sm:grid-cols-[repeat(auto-fill,minmax(240px,1fr))] sm:gap-5 md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(250px,1fr))]': cards.size > 0 }"
     >
       <!-- Upload card -->
-      <InputFile v-model="inputFiles" accept="*.json">
+      <InputFile v-model="inputFiles" class="pocket-card-shortcut" accept=".json,application/json">
         <template #default="{ isDragging }">
           <template v-if="!isDragging">
             <div flex flex-col items-center>
@@ -464,7 +534,7 @@ function getModuleShortName(id: string, module: 'consciousness' | 'voice') {
       </InputFile>
 
       <!-- Create card -->
-      <CardCreate @click="handleCardCreationDialog" />
+      <CardCreate class="pocket-card-shortcut" @click="handleCardCreationDialog" />
 
       <!-- Card Items -->
       <template v-if="cards.size > 0">
@@ -472,6 +542,7 @@ function getModuleShortName(id: string, module: 'consciousness' | 'voice') {
           v-for="item in sortedFilteredCards"
           :id="item.id"
           :key="item.id"
+          class="pocket-card-item"
           :name="item.name"
           :description="item.description"
           :is-active="item.id === activeCardId"

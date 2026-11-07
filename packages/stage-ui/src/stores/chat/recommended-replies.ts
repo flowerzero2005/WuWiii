@@ -145,8 +145,9 @@ export function isRecommendedRepliesRetryableError(error: unknown) {
       || [401, 403, 429].includes(Number(details?.upstreamStatus))
       || candidate?.refunded === true || details?.refunded === true
       || ['rate-limited', 'empty-response', 'content-filtered', 'truncated-response', 'invalid-response', 'delivery-failed'].includes(reason)
-      || message.includes('rate limit') || message.includes('too many requests'))
+      || message.includes('rate limit') || message.includes('too many requests')) {
       return false
+    }
 
     retryable ||= code.includes('processing')
       || code.includes('in_progress')

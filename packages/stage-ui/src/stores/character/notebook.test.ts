@@ -364,6 +364,52 @@ describe('character notebook store', () => {
     notebookStore.cleanup()
   })
 
+  it('announces a new diary only after its scoped save succeeds', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue({
+      entries: [],
+      tasks: [],
+      diaryDrafts: [{
+        id: 'older-draft',
+        title: 'Older draft',
+        text: 'Already saved',
+        periodStart: 1,
+        periodEnd: 2,
+        sourceMessageIds: [],
+        importantEvents: [],
+        preferenceNotes: [],
+        status: 'draft',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+      version: 1,
+    })
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+    expect(notebookStore.lastCreatedDiaryDraft).toBeNull()
+
+    const scope = notebookStore.resolveMemoryScope()
+    const input = {
+      title: 'New draft',
+      text: 'A new memory',
+      periodStart: 3,
+      periodEnd: 4,
+      sourceMessageIds: [],
+      importantEvents: [],
+      preferenceNotes: [],
+    }
+    repoMock.save.mockRejectedValueOnce(new Error('save failed'))
+    await expect(notebookStore.createDiaryDraftForScope(scope, input)).rejects.toThrow('save failed')
+    expect(notebookStore.lastCreatedDiaryDraft).toBeNull()
+
+    const draft = await notebookStore.createDiaryDraftForScope(scope, input)
+    expect(notebookStore.lastCreatedDiaryDraft).toMatchObject({
+      id: draft?.id,
+      title: 'New draft',
+      scope,
+    })
+    notebookStore.cleanup()
+  })
+
   it('waits for the current scope before confirming a diary draft', async () => {
     const pendingLoad = deferredNotebookLoad('default::card:default')
     vi.mocked(notebookRepo.load).mockReturnValue(pendingLoad.promise)

@@ -50,6 +50,7 @@ const hiddenHomeEntryPaths = new Set([
 
 const companionSettingPaths = new Set([
   '/settings/airi-card',
+  '/settings/modules',
   '/settings/group-scenarios',
   '/settings/speech',
   '/settings/memory',

@@ -366,6 +366,8 @@ live2d:
       sequential: Play enabled motions from top to bottom, then start again from the first one.
       random: Pick from enabled motions without immediately repeating the previous one.
       single: Always use the first enabled motion; move another motion to the top to switch it.
+    loop-title: Seamless single motion loop
+    loop-description: Keep one selected idle motion playing without restarting it. Multiple motions still rotate in order.
   advanced-calibration:
     title: Model calibration
     description: Temporary baseline values for models whose authored neutral pose needs correction. These are not actions or AI emotion settings.
@@ -722,6 +724,7 @@ pages:
         minimum: minimum {points} points
         points-per-unit: points / {tokens} tokens (reference)
         chat-billing-explanation: The per-4,000-token figure is for price comparison, not a fixed billing block. Actual charges use the full input and output of each request separately. Input includes system rules, conversation history, memory, and tool context, so a short visible reply can still have higher total usage.
+        qq-billing-explanation: QQ private and group replies use the default chat model at its official chat rate shown above. Points are charged only when a reply is triggered and returned if sending fails.
         points-per-minute: points / minute
         asr: 'Realtime transcription: {first} points for the first started 60 seconds, then {additional} points for each additional started 60 seconds'
         embedding: Text embedding
@@ -970,6 +973,7 @@ pages:
         auto-label: Auto-claim on this device
         auto-enabled-description: 'On: claims automatically while you are signed in and the app is running. You can also claim manually.'
         auto-disabled-description: 'Off: use the claim button to collect points manually.'
+        auto-server-description: 'The server claims daily until this account reaches its check-in point cap. You can also claim manually.'
         schedule: Resets daily at 08:00 Beijing time. Days missed while the app is closed are not claimed later; missed claims do not carry over.
         capacity-rule: If the balance is near its cap, the claim only fills the remaining space. Spending after claiming does not increase today's allowance.
         loading: Loading
@@ -1015,10 +1019,16 @@ pages:
         settled-final: This request charged {points} points.
         refunded-final: 'The request did not complete. The temporary {points}-point hold was released; net charge: 0.'
         refunded-display-failure: 'The reply could not be shown. {points} points were returned; net charge: 0.'
+        refunded-qq-send-failed: 'The QQ reply could not be sent. {points} points were returned; net charge: 0.'
+        refunded-qq-search-failed: 'QQ web search failed. {points} points from before the follow-up reply were returned; the follow-up reply is billed separately.'
+        refunded-qq-no-reply: 'The QQ character chose not to reply. {points} points were returned; net charge: 0.'
+        refunded-qq-analysis-unusable: 'QQ sticker recognition returned no usable result. {points} points were returned; net charge: 0.'
+        refunded-qq-image-unusable: 'QQ image understanding returned no usable result. {points} points were returned; net charge for recognition: 0.'
         refunded-main-reply: 'The main reply did not complete. The temporary {points}-point hold was released; net charge: 0.'
         refunded-auxiliary: 'The background "{purpose}" request did not complete. The temporary {points}-point hold was released; net charge: 0. This does not mean the main reply failed.'
         refunded-unknown: 'This record has no recognized request purpose. The temporary {points}-point hold was released; net charge: 0.'
         source-surfaces:
+          qq: QQ chat
           automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
@@ -1028,12 +1038,16 @@ pages:
           unknown: Unknown source
         purposes:
           main-reply: Main reply
+          diary: QQ diary
           tool-routing: Tool decision
           tool-processing: Tool processing
           response-enhancement: Reply refinement
           inner-voice-note: Inner voice note
           memory: Memory organization
           recommended-replies: Recommended replies
+          sticker-selection: Sticker selection
+          sticker-search: Sticker search
+          sticker-vision: Sticker recognition
           group-narration: Group narration
           group-narration-speech: Narration voice
           group-script-evaluation: Story progress evaluation
@@ -1050,6 +1064,11 @@ pages:
           official-transcription: Speech recognition
           inner-voice-note: Inner voice notes
           reply-display-failure-refund: Reply display failure refund
+          qq-send-failed: QQ send failure refund
+          qq-search-failed: QQ search failure refund
+          qq-no-reply: QQ character chose not to reply refund
+          qq-analysis-unusable: QQ sticker recognition had no usable result refund
+          qq-image-unusable: QQ image understanding had no usable result refund
           workbench: Workbench
           entertainment:
             turtle_soup:
@@ -1083,6 +1102,7 @@ pages:
           speech: Voice
           service: Service request
         surfaces:
+          qq: QQ chat
           automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
@@ -1104,7 +1124,9 @@ pages:
           not-charged: Charged 0 points
           refunded: Refunded {points} points; charged 0 points
         failures:
+          delivery-failure: The QQ message could not be sent. The points were returned.
           not-needed: No narration was needed here. You were not charged.
+          reply-skipped: The QQ character chose not to reply. The points were returned.
           no-content: No displayable reply was returned. You were not charged.
           incomplete-response: The reply did not complete. You were not charged.
           provider-unavailable: The service was temporarily unavailable. You were not charged.
@@ -1171,12 +1193,16 @@ pages:
           unknown: Other
         purposes:
           main-reply: Main reply
+          diary: QQ diary
           tool-routing: Tool decision
           tool-processing: Tool processing
           response-enhancement: Reply refinement
           inner-voice-note: Inner voice note
           memory: Memory organization
           recommended-replies: Recommended replies
+          sticker-selection: Sticker selection
+          sticker-search: Sticker search
+          sticker-vision: Sticker recognition
           group-narration: Group narration
           group-narration-speech: Narration voice
           group-script-evaluation: Story progress evaluation
@@ -1187,6 +1213,8 @@ pages:
           unknown: Other service
         failures:
           not-needed: No narration was needed here. You were not charged.
+          reply-skipped: The QQ character chose not to reply. The points were returned.
+          delivery-failure: The QQ message could not be sent. The points were returned.
           no-content: No displayable reply was returned. You were not charged.
           incomplete-response: The reply did not complete. You were not charged.
           provider-unavailable: The service was temporarily unavailable. You were not charged.
@@ -2045,6 +2073,8 @@ pages:
         threshold: Detection threshold
         sensitivity: Sensitivity
         sensitivity-description: Adjust the threshold for speech detection.
+        volume-threshold: Volume threshold
+        volume-threshold-description: Filters quiet input and accidental interruptions during mobile voice calls. Higher values are stricter.
         speaking-detected: Speaking Detected
         model-based: Model Based
         volume-based: Volume Based

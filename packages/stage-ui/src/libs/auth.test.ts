@@ -197,6 +197,20 @@ describe('email/password auth helpers', () => {
     expect(store.isAuthenticated).toBe(false)
   })
 
+  it('keeps a new login when an older session check returns 401 late', async () => {
+    const store = useAuthStore()
+    await store.waitUntilReady()
+    let resolveOldSession: (value: { data: null, error: { status: number } }) => void
+    authClientMock.getSession.mockImplementationOnce(() => new Promise(resolve => resolveOldSession = resolve))
+
+    const oldRefresh = fetchSession()
+    await signInWithEmailPassword({ email: 'test@example.com', password: 'password-123' })
+    resolveOldSession!({ data: null, error: { status: 401 } })
+    await oldRefresh
+
+    expect(store.isAuthenticated).toBe(true)
+  })
+
   it('exposes an awaitable initial identity decision', async () => {
     const store = useAuthStore()
 

@@ -47,11 +47,21 @@ const checkoutOpen = ref(false)
 const checkoutPanel = ref<HTMLElement>()
 const qrCodeDataUrl = ref<string>()
 const qrCodeError = ref<unknown>()
+const paymentOpenError = ref('')
+const qrSaved = ref(false)
+const savingQr = ref(false)
+const pocketBridge = (window as Window & { pocketBridge?: {
+  openPayment: (input: { url: string }) => Promise<void>
+  savePaymentQr: (input: { data: string }) => Promise<void>
+  openWechat: () => Promise<void>
+  payWithWechat: (input: { appId: string, partnerId: string, prepayId: string, packageValue: string, nonceStr: string, timeStamp: string, sign: string }) => Promise<void>
+} }).pocketBridge
 const now = useNow({ interval: 1_000 })
 const showAllOrders = ref(false)
 
 const visibleProducts = computed(() => paymentProducts.value.filter(product => product.kind === selectedKind.value))
 const selectedProduct = computed(() => visibleProducts.value.find(product => product.sku === selectedSku.value))
+const mobileWechatAppAvailable = computed(() => paymentMethods.value.find(item => item.paymentMethod === 'wechat')?.appAvailable === true)
 const paymentMethodOptions = computed(() => [
   { available: paymentMethods.value.find(item => item.paymentMethod === 'wechat')?.available ?? false, color: 'text-[#07c160]', icon: 'i-simple-icons:wechat', label: t('settings.pages.account.sections.recharge.methods.wechat'), selectedClass: 'border-[#07c160] bg-[#07c160]/10 text-[#067a3f] dark:text-[#55e69a]', value: 'wechat' as const },
   { available: paymentMethods.value.find(item => item.paymentMethod === 'alipay')?.available ?? false, color: 'text-[#1677ff]', icon: 'i-simple-icons:alipay', label: t('settings.pages.account.sections.recharge.methods.alipay'), selectedClass: 'border-[#1677ff] bg-[#1677ff]/10 text-[#1264c4] dark:text-[#72adff]', value: 'alipay' as const },
@@ -81,6 +91,78 @@ const checkoutCountdown = computed(() => {
   return `${minutes}:${seconds}`
 })
 const activeCheckoutUrl = computed(() => normalizeCheckoutUrl(activePaymentCheckout.value?.value))
+const mobilePaymentUrl = computed(() => {
+  if (!pocketBridge || !activeCheckoutUrl.value)
+    return undefined
+  if (activePaymentOrder.value?.paymentMethod === 'wechat')
+    return undefined
+  return activeCheckoutUrl.value
+})
+
+async function launchWechatAppPayment(value: string) {
+  if (!pocketBridge)
+    return
+  paymentOpenError.value = ''
+  try {
+    const params = JSON.parse(value) as Parameters<typeof pocketBridge.payWithWechat>[0]
+    const keys = ['appId', 'partnerId', 'prepayId', 'packageValue', 'nonceStr', 'timeStamp', 'sign'] as const
+    if (keys.some(key => typeof params[key] !== 'string' || !params[key]))
+      throw new Error('Invalid WeChat APP checkout')
+    await pocketBridge.payWithWechat(params)
+  }
+  catch {
+    paymentOpenError.value = '未能打开微信付款。请确认已安装微信，或稍后重试。'
+  }
+}
+
+function handleWechatPayResult(event: Event) {
+  const code = (event as CustomEvent<{ code: number }>).detail?.code
+  if (code === -2)
+    paymentOpenError.value = '已取消付款。订单仍在有效期内，可重新打开微信。'
+  else if (code !== 0)
+    paymentOpenError.value = '微信未完成付款，请重试或查看订单状态。'
+  if (activePaymentOrder.value?.status === 'pending')
+    void pollOrder(activePaymentOrder.value.id)
+}
+
+async function openMobilePayment() {
+  if (!pocketBridge || !mobilePaymentUrl.value)
+    return
+  paymentOpenError.value = ''
+  try {
+    await pocketBridge.openPayment({ url: mobilePaymentUrl.value })
+  }
+  catch {
+    paymentOpenError.value = '未能打开付款应用。请确认已安装对应应用，或使用另一台设备扫描二维码。'
+  }
+}
+
+async function saveWechatQrAndOpen() {
+  if (!pocketBridge || !qrCodeDataUrl.value || savingQr.value)
+    return
+  savingQr.value = true
+  paymentOpenError.value = ''
+  try {
+    if (!qrSaved.value) {
+      await pocketBridge.savePaymentQr({ data: qrCodeDataUrl.value })
+      qrSaved.value = true
+    }
+    await pocketBridge.openWechat()
+  }
+  catch {
+    paymentOpenError.value = qrSaved.value
+      ? '二维码已保存到相册。请手动打开微信，在“扫一扫”中从相册选择刚保存的图片。'
+      : '二维码保存失败。请使用手机系统截图，或让另一台设备扫描屏幕上的二维码。'
+  }
+  finally {
+    savingQr.value = false
+  }
+}
+
+function handlePaymentReturn() {
+  if (pocketBridge && document.visibilityState === 'visible' && checkoutOpen.value && activePaymentOrder.value?.status === 'pending')
+    void pollOrder(activePaymentOrder.value.id)
+}
 const activeCheckoutImage = computed(() => normalizeHttpUrl(activePaymentCheckout.value?.value) ?? normalizeDataImage(activePaymentCheckout.value?.value))
 const projectedMembershipPoints = computed(() => selectedProduct.value?.kind === 'membership'
   ? selectedProduct.value.basePoints + selectedProduct.value.giftPoints + selectedProduct.value.dailyRewardPoints * selectedProduct.value.validDays
@@ -221,11 +303,14 @@ async function createOrder() {
   try {
     const result = await commerceStore.createPaymentOrder({
       clientRequestId: requestId,
+      checkoutMode: pocketBridge && paymentMethod.value === 'wechat' && mobileWechatAppAvailable.value ? 'app' : undefined,
       paymentMethod: paymentMethod.value,
       sku: selectedProduct.value.sku,
     })
     checkoutOpen.value = true
     void pollOrder(result.order.id)
+    if (result.checkout?.kind === 'app')
+      void launchWechatAppPayment(result.checkout.value)
   }
   catch {
     if (activePaymentOrder.value?.status === 'failed')
@@ -271,9 +356,11 @@ watch(selectedKind, () => {
 })
 
 watch(() => activePaymentCheckout.value?.value, async (value) => {
+  paymentOpenError.value = ''
+  qrSaved.value = false
   qrCodeDataUrl.value = undefined
   qrCodeError.value = undefined
-  if (!value || activePaymentCheckout.value?.kind === 'image' || activePaymentCheckout.value?.kind === 'mock')
+  if (!value || activePaymentCheckout.value?.kind === 'app' || activePaymentCheckout.value?.kind === 'image' || activePaymentCheckout.value?.kind === 'mock')
     return
   try {
     qrCodeDataUrl.value = await toDataURL(value, {
@@ -307,8 +394,17 @@ watch(() => props.isAuthenticated, (authenticated) => {
     commerceStore.stopPaymentPolling()
 })
 
-onMounted(() => void loadPayments())
-onBeforeUnmount(() => commerceStore.stopPaymentPolling())
+onMounted(() => {
+  void loadPayments()
+  if (pocketBridge)
+    document.addEventListener('visibilitychange', handlePaymentReturn)
+  window.addEventListener('pocket-wechat-pay-result', handleWechatPayResult)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handlePaymentReturn)
+  window.removeEventListener('pocket-wechat-pay-result', handleWechatPayResult)
+  commerceStore.stopPaymentPolling()
+})
 </script>
 
 <template>
@@ -478,6 +574,9 @@ onBeforeUnmount(() => commerceStore.stopPaymentPolling())
               {{ method.label }} · {{ t(method.available ? 'settings.pages.account.sections.recharge.availability.available' : 'settings.pages.account.sections.recharge.availability.unavailable') }}
             </span>
           </div>
+          <p v-if="pocketBridge && paymentMethods.length > 0 && !mobileWechatAppAvailable" class="mt-2 text-xs airi-text-muted leading-5">
+            手机微信直接付款尚未开通，当前可继续使用二维码付款。
+          </p>
         </div>
       </div>
 
@@ -679,6 +778,36 @@ onBeforeUnmount(() => commerceStore.stopPaymentPolling())
               </p>
               <code :class="['mt-2 block break-all rounded bg-black/5 px-2 py-1.5 text-xs dark:bg-white/8']">{{ activePaymentCheckout.value }}</code>
             </div>
+            <div v-else-if="activePaymentCheckout.kind === 'app'" class="border border-[#07c160]/30 rounded-xl bg-[#07c160]/6 p-5">
+              <div class="flex items-center gap-3">
+                <span class="i-simple-icons:wechat size-7 text-[#07c160]" />
+                <div>
+                  <p class="text-base airi-text font-semibold">
+                    微信 APP 支付
+                  </p>
+                  <p class="text-sm airi-text-muted">
+                    在微信中确认付款
+                  </p>
+                </div>
+              </div>
+              <button
+                v-if="pocketBridge"
+                type="button"
+                class="mt-5 min-h-11 w-full rounded-lg bg-[#07a653] px-4 text-sm text-white font-semibold"
+                @click="launchWechatAppPayment(activePaymentCheckout.value)"
+              >
+                打开微信付款
+              </button>
+              <p v-else class="mt-4 text-sm airi-text-muted">
+                请在手机应用中继续支付此订单。
+              </p>
+              <p class="mt-3 text-xs airi-text-muted leading-5">
+                付款结果以订单状态为准，返回应用后会自动查询。
+              </p>
+              <p v-if="paymentOpenError" role="alert" class="mt-2 text-xs text-rose-600 leading-5">
+                {{ paymentOpenError }}
+              </p>
+            </div>
             <img
               v-else-if="activePaymentCheckout.kind === 'image' && activeCheckoutImage"
               :src="activeCheckoutImage"
@@ -695,8 +824,33 @@ onBeforeUnmount(() => commerceStore.stopPaymentPolling())
                 <p :class="['mt-2 text-sm leading-6 airi-text-muted']">
                   {{ t('settings.pages.account.sections.recharge.checkout.scan-description') }}
                 </p>
+                <button
+                  v-if="mobilePaymentUrl"
+                  type="button"
+                  :class="['mt-4 inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-sm font-semibold text-white', activePaymentOrder.paymentMethod === 'wechat' ? 'bg-[#07a653]' : 'bg-[#1677ff]']"
+                  @click="openMobilePayment"
+                >
+                  <span :class="activePaymentOrder.paymentMethod === 'wechat' ? 'i-simple-icons:wechat size-4' : 'i-simple-icons:alipay size-4'" />
+                  {{ activePaymentOrder.paymentMethod === 'wechat' ? '尝试打开微信付款' : '打开支付宝付款' }}
+                </button>
+                <button
+                  v-if="pocketBridge && activePaymentOrder.paymentMethod === 'wechat'"
+                  type="button"
+                  :disabled="savingQr"
+                  class="mt-2 min-h-11 flex items-center gap-2 border border-[#07a653]/50 rounded-md px-4 text-sm text-[#087f42] font-semibold dark:text-[#66dda0] disabled:opacity-50"
+                  @click="saveWechatQrAndOpen"
+                >
+                  <span class="i-solar:gallery-download-linear size-4" />
+                  {{ savingQr ? '正在保存…' : qrSaved ? '再次打开微信' : '保存二维码并打开微信' }}
+                </button>
+                <p v-if="pocketBridge && activePaymentOrder.paymentMethod === 'wechat'" class="mt-2 text-xs airi-text-muted leading-5">
+                  打开微信后进入“扫一扫”，从相册选刚保存的二维码。此订单仍以微信支付结果为准。
+                </p>
+                <p v-if="paymentOpenError" role="alert" class="mt-2 text-xs text-rose-600 leading-5">
+                  {{ paymentOpenError }}
+                </p>
                 <a
-                  v-if="activePaymentOrder.paymentMethod === 'alipay' && activeCheckoutUrl"
+                  v-if="!pocketBridge && activePaymentOrder.paymentMethod === 'alipay' && activeCheckoutUrl"
                   :href="activeCheckoutUrl"
                   target="_blank"
                   rel="noopener noreferrer"

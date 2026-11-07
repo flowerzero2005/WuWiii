@@ -150,6 +150,7 @@ useScrollToHash(() => route.hash, {
     <nav
       :aria-label="t('settings.pages.providers.categories.navigation')"
       :class="[
+        'settings-provider-nav',
         'sticky top-2 z-20 grid grid-cols-2 gap-1 rounded-lg border p-1 shadow-sm backdrop-blur-md md:grid-cols-3',
         'border-[var(--airi-border-subtle)] bg-[var(--airi-surface-panel)]/92',
       ]"
@@ -187,12 +188,15 @@ useScrollToHash(() => route.hash, {
       :sections="providerBlocks"
       :get-items="block => block.providers"
       :columns="{ default: 1, sm: 2, xl: 3 }"
+      :animation-initial="{ opacity: 1, y: 0 }"
+      :animation-enter="{ opacity: 1, y: 0 }"
+      :animation-duration="0"
       :origin-index="lastClickedIndex"
       :delay-per-unit="0"
       @item-click="({ globalIndex }) => setLastClickedIndex(globalIndex)"
     >
       <template #header="{ section: block }">
-        <div :id="block.id" class="scroll-mt-24" flex="~ row items-center gap-2">
+        <div :id="block.id" class="settings-provider-section scroll-mt-24" flex="~ row items-center gap-2">
           <div :class="[block.icon, 'airi-text-muted text-4xl']" />
           <div>
             <div>

@@ -14,11 +14,11 @@ describe('quick chat startup visibility', () => {
 
     expect(quickChatLevel).toBeGreaterThan(overlayLevel)
     expect(composerLevel).toBeGreaterThan(quickChatLevel)
-    expect(quickChatSource).toContain("window.setAlwaysOnTop(true, 'screen-saver', QUICK_CHAT_TOP_LEVEL)")
+    expect(quickChatSource).toContain('window.setAlwaysOnTop(true, \'screen-saver\', QUICK_CHAT_TOP_LEVEL)')
   })
 
   it('shows the loaded window without waiting for a renderer runtime handshake', () => {
-    expect(quickChatSource).toContain("await load(window, withHashRoute(rendererBase, '/quick-chat'))")
+    expect(quickChatSource).toContain('await load(window, withHashRoute(rendererBase, \'/quick-chat\'))')
     expect(quickChatSource).not.toContain('await rendererReady')
   })
 })

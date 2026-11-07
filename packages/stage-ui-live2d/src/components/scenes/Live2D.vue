@@ -29,6 +29,7 @@ const props = withDefaults(defineProps<{
   xOffset?: number | string
   yOffset?: number | string
   scale?: number
+  fitDrawableBounds?: boolean
   themeColorsHue?: number
   themeColorsHueDynamic?: boolean
   live2dIdleAnimationEnabled?: boolean
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled?: boolean
   live2dShadowEnabled?: boolean
   live2dIdleMotionKeys?: string[]
+  live2dIdleMotionLoopEnabled?: boolean
   live2dIdleRotationMode?: Live2DIdleRotationMode
   live2dMaxFps?: number
 }>(), {
@@ -50,6 +52,7 @@ const props = withDefaults(defineProps<{
   mouthOpenSize: 0,
   mouthSyncActive: false,
   scale: 1,
+  fitDrawableBounds: false,
   themeColorsHue: 220.44,
   themeColorsHueDynamic: false,
   live2dIdleAnimationEnabled: true,
@@ -60,6 +63,7 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled: false,
   live2dShadowEnabled: true,
   live2dIdleMotionKeys: () => [],
+  live2dIdleMotionLoopEnabled: false,
   live2dIdleRotationMode: 'sequential',
   live2dMaxFps: 0,
 })
@@ -154,6 +158,7 @@ defineExpose({
   captureFrame,
   app,
   displayObject,
+  drawableAspectRatio: () => live2dModelRef.value?.drawableAspectRatio() ?? null,
   modelIdentity: () => live2dModelRef.value?.modelIdentity(),
   canvasElement: () => {
     return live2dCanvasRef.value?.canvasElement()
@@ -169,7 +174,7 @@ defineExpose({
 </script>
 
 <template>
-  <Screen v-slot="{ width, height }" relative>
+  <Screen v-slot="{ width, height }" :exact-size="fitDrawableBounds" relative>
     <Live2DCanvas
       ref="live2dCanvasRef"
       v-slot="{ app: pixiApp, width: canvasWidth, height: canvasHeight }"
@@ -199,6 +204,7 @@ defineExpose({
         :x-offset="modelXOffset"
         :y-offset="modelYOffset"
         :scale="scale"
+        :fit-drawable-bounds="fitDrawableBounds"
         :disable-focus-at="disableFocusAt"
         :theme-colors-hue="themeColorsHue"
         :theme-colors-hue-dynamic="themeColorsHueDynamic"
@@ -210,6 +216,7 @@ defineExpose({
         :live2d-force-auto-blink-enabled="live2dForceAutoBlinkEnabled"
         :live2d-shadow-enabled="live2dShadowEnabled"
         :live2d-idle-motion-keys="live2dIdleMotionKeys"
+        :live2d-idle-motion-loop-enabled="live2dIdleMotionLoopEnabled"
         :live2d-idle-rotation-mode="live2dIdleRotationMode"
         @model-error="handleModelError"
       />

@@ -1,4 +1,5 @@
 import type {
+  ElectronHttpFetchResponse,
   ElectronRealtimeTtsAuthorizeRequest,
   ElectronRealtimeTtsAuthorizeResponse,
 } from '../../shared/eventa'
@@ -66,6 +67,20 @@ function base64ToUint8Array(base64: string) {
   return bytes
 }
 
+export function responseFromProxyPayload(result: ElectronHttpFetchResponse): Response {
+  const body = result.status === 204 || result.status === 205 || result.status === 304
+    ? null
+    : typeof result.bodyBase64 === 'string'
+      ? base64ToUint8Array(result.bodyBase64)
+      : result.bodyText
+
+  return new Response(body, {
+    headers: result.headers,
+    status: result.status,
+    statusText: result.statusText,
+  })
+}
+
 async function toProxyPayload(input: URL | RequestInfo, init?: RequestInit) {
   const request = input instanceof Request
     ? input
@@ -97,15 +112,7 @@ export function setupHttpFetchProxy() {
 
   runtime.__AIRI_ELECTRON_FETCH_PROXY__ = async (input: URL | RequestInfo, init?: RequestInit) => {
     const result = await invokeHttpFetch(await toProxyPayload(input, init))
-    const body = typeof result.bodyBase64 === 'string'
-      ? base64ToUint8Array(result.bodyBase64)
-      : result.bodyText
-
-    return new Response(body, {
-      headers: result.headers,
-      status: result.status,
-      statusText: result.statusText,
-    })
+    return responseFromProxyPayload(result)
   }
 
   runtime.__AIRI_ELECTRON_REALTIME_TTS__ = {

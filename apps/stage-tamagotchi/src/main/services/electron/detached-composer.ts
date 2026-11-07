@@ -2,8 +2,8 @@ import type { BrowserWindow, Rectangle } from 'electron'
 
 import type { ComposerDetach } from '../../../shared/detached-composer'
 import type { ComposerClientRegion, ComposerPoint } from '../../../shared/detached-composer-geometry'
-import type { ComposerPersistence } from './detached-composer-persistence'
 import type { DesktopDiagnostics } from '../../libs/electron/desktop-diagnostics'
+import type { ComposerPersistence } from './detached-composer-persistence'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow as ElectronWindow, screen } from 'electron'

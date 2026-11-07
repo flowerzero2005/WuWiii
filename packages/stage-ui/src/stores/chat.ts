@@ -37,8 +37,9 @@ import { useAuthStore } from './auth'
 import { generateCharacterDiary } from './character/diary-generator'
 import { useCharacterNotebookStore } from './character/notebook'
 import { buildAiriAntiTemplateGuard, buildAiriAntiTemplateRewritePressure } from './chat/anti-template-guard'
+import { recordCharacterStickerUse, selectCharacterSticker } from './chat/character-stickers'
 import { isChatDiagnosticsEnabled, logChatTrace } from './chat/chat-diagnostics'
-import { ANTI_TEMPLATE_GUARD_CONTEXT_ID, createAntiTemplateGuardContext, createCharacterPerformanceContext, createDatetimeContext, createEmotionHistoryContext, createMemoryCapturePrompt, createMemorySystemPrompt, createNotebookMemoryContext, createPersonaStateContext, createPsychologicalCueContext, createRelationshipStateContext, createReplyFeedbackMemoryContext, createReplyIntentContext, createSceneModeContext, createWritingCraftContext, EMOTION_HISTORY_CONTEXT_ID, EMOTION_MEMORY_CONTEXT_ID, MEMORY_SYSTEM_CONTEXT_ID, NOTEBOOK_MEMORY_CONTEXT_ID, REPLY_FEEDBACK_MEMORY_CONTEXT_ID } from './chat/context-providers'
+import { ANTI_TEMPLATE_GUARD_CONTEXT_ID, createAntiTemplateGuardContext, createCharacterPerformanceContext, createDatetimeContext, createEmotionHistoryContext, createMemeWikiContextMessage, createMemoryCapturePrompt, createMemorySystemPrompt, createNotebookMemoryContext, createPersonaStateContext, createPsychologicalCueContext, createRelationshipStateContext, createReplyFeedbackMemoryContext, createReplyIntentContext, createSceneModeContext, createWritingCraftContext, EMOTION_HISTORY_CONTEXT_ID, EMOTION_MEMORY_CONTEXT_ID, lookupMemeWikiContext, MEMORY_SYSTEM_CONTEXT_ID, NOTEBOOK_MEMORY_CONTEXT_ID, REPLY_FEEDBACK_MEMORY_CONTEXT_ID } from './chat/context-providers'
 import { resolveEmotionMemoryContext } from './chat/context-providers/emotion-memory'
 import { useChatContextStore } from './chat/context-store'
 import { fitMessagesToContextWindow } from './chat/context-window'
@@ -874,6 +875,10 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       personaCardId: turnPersonaCardId,
       sessionId,
     }))
+    turnContext.ingestContextMessage(createMemeWikiContextMessage())
+    const memeContextPromise = authStore.isAuthenticated
+      ? resolveOptionalContext(lookupMemeWikiContext(providerInputText), 500)
+      : Promise.resolve(undefined)
 
     // 对话初始化：在对话开始时注入个性化提示
     // 使用 try-catch 确保功能失败时不影响对话
@@ -885,8 +890,8 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         turnContext.resetContexts()
       }
       else {
-        const conversationInitContext = await createConversationInitContext(sessionId)
-        if (conversationInitContext.text)
+        const conversationInitContext = await resolveOptionalContext(createConversationInitContext(sessionId), 1_500)
+        if (conversationInitContext?.text)
           turnContext.ingestContextMessage(conversationInitContext)
       }
     }
@@ -905,6 +910,9 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
     // Inject current datetime context before composing the message.
     turnContext.ingestContextMessage(createDatetimeContext({ recentMessages: recentSessionMessages }))
+    const memeContext = await memeContextPromise
+    if (memeContext)
+      turnContext.ingestContextMessage(memeContext)
     // Quick-chat can run without the Stage component mounted. Keep the
     // Live2D capability catalog anchored to the configured stage model so
     // actions remain available on every turn and surface.
@@ -1078,13 +1086,13 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     }
     // Resolve against the frozen persona scope so each group member recalls
     // its own notebook/emotion history without leaking another member's data.
-    const emotionMemorySelection = await resolveEmotionMemoryContext({
+    const emotionMemorySelection = await resolveOptionalContext(resolveEmotionMemoryContext({
       message: sendingMessage,
       personaState: { ...derivedPersonaState, updatedAt: Date.now() },
       relationshipState: relationshipStateSnapshot,
       recentMessages: recentSessionMessages,
       personaCardId: turnPersonaCardId,
-    })
+    }), 350)
     const appraisal = deriveAiriAppraisalEvent({
       scene: inferredSceneMode,
       message: sendingMessage,
@@ -1158,7 +1166,9 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
     let includeReplyFeedbackMemoriesInNotebookContext = true
     try {
-      const currentFeedbackScope = await replyFeedbackStore.resolveCurrentScope()
+      const currentFeedbackScope = await resolveOptionalContext(replyFeedbackStore.resolveCurrentScope(), 1_500)
+      if (!currentFeedbackScope)
+        throw new Error('Reply feedback scope was not ready before the chat request')
       const scope = {
         ...currentFeedbackScope,
         personaCardId: turnPersonaCardId,
@@ -1173,10 +1183,10 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         ]).catch(e => console.warn('[Chat] Background feedback sync failed:', e))
       }
       else {
-        const summary = await replyFeedbackReflection.loadPersistedSummary(scope, {
+        const summary = await resolveOptionalContext(replyFeedbackReflection.loadPersistedSummary(scope, {
           warmIfMissing: true,
           waitForPending: false,
-        })
+        }), 1_500)
         // Use the latest persisted summary without blocking first-token latency on a refresh.
         const replyFeedbackContext = createReplyFeedbackMemoryContext(summary)
         if (replyFeedbackContext)
@@ -4235,6 +4245,32 @@ ${contextTexts}
       const readableFinalText = createReadableFinalText(fullText, turnProviderId)
       const readableFinalSpeechText = createReadableSpeechText(finalSpeechSource, turnProviderId)
       const visibleAssistantText = readableFinalText
+      if (!groupRuntime && !options.hiddenUserMessage && authStore.isAuthenticated && visibleAssistantText && visibleAssistantMessageId) {
+        const stickerTurnMessages = chatSession.getSessionMessages(sessionId).filter(item => item.role === 'assistant' && item.metadata?.assistantTurnId === assistantTurnId)
+        const stickerTargetMessageId = stickerTurnMessages.at(-1)?.id ?? visibleAssistantMessageId
+        void selectCharacterSticker({
+          characterId: turnPersonaCardId,
+          turnId,
+          userText: sendingMessage,
+          assistantText: visibleAssistantText,
+          chatProvider: options.chatProvider,
+          model: options.model,
+          headers,
+          sourceSurface: turnTrace.sourceSurface,
+          characterName: turnTrace.characterName,
+        }).then(async (sticker) => {
+          if (!sticker || shouldAbort())
+            return
+          const message = chatSession.getSessionMessages(sessionId).find(item => item.id === stickerTargetMessageId && item.role === 'assistant')
+          if (!message)
+            return
+          message.metadata = { ...message.metadata, chatStickerAssetId: sticker.id, chatStickerImageData: sticker.imageData }
+          await chatSession.persistSessionMessages(sessionId, { immediate: true })
+          await recordCharacterStickerUse(turnPersonaCardId, sticker.id)
+        }).catch((error) => {
+          console.warn('[Chat] Character sticker selection unavailable:', error)
+        })
+      }
       // NOTICE: 第二十轮（2026-08-28）——performanceMarkers/actionCardIds 的提取
       // 与 'ACT markers parsed' 诊断日志已前移到 onEnd 快照落定处（见 onEnd 内），
       // 此处不再残留第二份提取；本赋值必须保持在 emitStreamEndHooks（含

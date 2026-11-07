@@ -1,35 +1,51 @@
 <script setup lang="ts">
-import { useTheme } from '@proj-airi/ui'
-import { storeToRefs } from 'pinia'
 import { RouterLink } from 'vue-router'
-
-import LogoDark from '../../assets/logo-dark.svg'
-import Logo from '../../assets/logo.svg'
-
-import { BackgroundKind, useBackgroundStore } from '../../stores/background'
-
-const { isDark: dark } = useTheme()
-const { selectedOption } = storeToRefs(useBackgroundStore())
 </script>
 
 <template>
   <RouterLink
-    to="/" flex="~" items-center
-    gap-2 px-2 text-nowrap text-2xl outline-none
+    to="/announcements"
+    class="mobile-brand"
+    aria-label="查看手机公告"
   >
-    <template v-if="selectedOption?.kind === BackgroundKind.Wave">
-      <template v-if="dark">
-        <img :src="LogoDark" h-8 w-8 class="theme-colored">
-      </template>
-      <template v-else>
-        <img :src="Logo" h-8 w-8 class="theme-colored">
-      </template>
-    </template>
+    <span class="mobile-brand-name">wuwiii</span>
   </RouterLink>
 </template>
 
 <style scoped>
-.theme-colored {
-  filter: hue-rotate(calc(var(--chromatic-hue, 0) * 1deg));
+.mobile-brand {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  color: var(--airi-text);
+  line-height: 1;
+  text-decoration: none;
+  text-shadow: 0 1px 12px rgb(255 255 255 / 0.35);
+}
+
+.mobile-brand-name {
+  font-family: 'Trebuchet MS', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.07em;
+}
+
+.mobile-brand::after {
+  width: 4px;
+  height: 4px;
+  align-self: center;
+  margin: 14px 0 0 1px;
+  border-radius: 50%;
+  background: var(--airi-accent-strong);
+  box-shadow: 0 0 10px var(--airi-accent-focus);
+  content: '';
+}
+
+.mobile-brand:focus-visible {
+  outline: 2px solid var(--airi-accent-strong);
+  outline-offset: 2px;
 }
 </style>

@@ -188,6 +188,18 @@ describe('chat session sync conflicts', () => {
     expect(records.get(first)?.meta.title).toBe('My original conversation')
   })
 
+  it('includes a message that is still waiting for its debounced save when exporting', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const sessionId = store.activeSessionId
+    store.setSessionMessages(sessionId, [{ id: 'just-sent', role: 'user', content: 'Save this message' }])
+
+    const exported = await store.exportSessions()
+
+    expect(exported.sessions[sessionId]?.messages).toEqual([expect.objectContaining({ id: 'just-sent' })])
+    expect(records.get(sessionId)?.messages).toEqual([expect.objectContaining({ id: 'just-sent' })])
+  })
+
   async function createStarHistory() {
     const store = useChatSessionStore()
     await store.initialize()

@@ -1,5 +1,7 @@
 # WuWiii 开发端
 
+本仓库的正式地址是 [GitHub：flowerzero2005/WuWiii](https://github.com/flowerzero2005/WuWiii)，Gitee 镜像是 [lovelylonely/wu-wiii](https://gitee.com/lovelylonely/wu-wiii)。源码更新以本开发端仓库的 `main` 为准；名称含 `airi` 的旧工程仓库不是这里的发布目标。
+
 WuWiii 是一个可自定义角色的桌面 AI 伙伴应用，使用 Electron、Vue 和 TypeScript。你可以配置自己的聊天模型、语音、听觉、视觉和联网搜索服务，使用 Live2D / VRM 角色、记忆、日记与群聊剧本。
 
 这个仓库提供桌面客户端、必要的共享包、测试和开发工具。官方服务端、生产配置与用户数据不在仓库内。开发版使用独立的应用数据目录，默认云服务地址为本机回环地址，官方自动更新关闭。

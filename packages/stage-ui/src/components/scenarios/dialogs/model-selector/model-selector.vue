@@ -9,9 +9,11 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
+import { saveBlobDocument } from '../../../../composables/download'
 import { useDisplayModelFileDialog } from '../../../../composables/use-display-model-file-dialog'
 import { DisplayModelFormat, useDisplayModelsStore } from '../../../../stores/display-models'
 import { DEFAULT_STAGE_MODEL_ID, useSettingsLive2d, useSettingsStageModel } from '../../../../stores/settings'
+import { displayModelErrorMessage } from '../../../../utils/display-model-error'
 
 const emits = defineEmits<{ (e: 'close', value: void): void }>()
 const selectedModel = defineModel<DisplayModel | undefined>({ type: Object, required: false })
@@ -40,6 +42,19 @@ async function handleRemoveModel(model: DisplayModel) {
   live2dSettings.removeModelMotionSettings(model.id)
 }
 
+async function handleExportModel(model: DisplayModel) {
+  if (model.type !== 'file')
+    return
+  try {
+    await saveBlobDocument(model.file, model.file.name || model.name)
+  }
+  catch (error) {
+    if (error instanceof Error && error.message.includes('cancelled'))
+      return
+    toast.error('模型保存失败，请选择可写入的位置后重试。')
+  }
+}
+
 function handleRenameModel(model: DisplayModel, name: string | null | undefined) {
   if (model.type === 'file' && name)
     void displayModelStore.renameDisplayModel(model.id, name)
@@ -62,7 +77,7 @@ async function handleAddModel(format: DisplayModelFormat.Live2dZip | DisplayMode
   }
   catch (error) {
     console.error('[ModelSelector] Failed to import display model:', error)
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error('模型导入失败', { description: displayModelErrorMessage(error) })
   }
   finally {
     importingFormat.value = undefined
@@ -91,7 +106,7 @@ async function handleAddPictureOcPackage(file: File) {
   }
   catch (error) {
     console.error('[ModelSelector] Failed to import picture OC package:', error)
-    toast.error(t('settings.pages.models.model-selector.picture_oc_import_failed'))
+    toast.error(t('settings.pages.models.model-selector.picture_oc_import_failed'), { description: displayModelErrorMessage(error) })
   }
   finally {
     importingFormat.value = undefined
@@ -225,6 +240,9 @@ const pictureOcDialog = useDisplayModelFileDialog({
               </template>
             </DoubleCheckButton>
           </div>
+          <button v-if="model.type === 'file'" type="button" class="absolute right-3 top-4 z-1 h-9 w-9 flex items-center justify-center rounded-lg bg-neutral-900/65 text-white backdrop-blur-sm" :aria-label="`导出 ${model.name}`" @click.stop="handleExportModel(model)">
+            <span class="i-solar:download-square-line-duotone size-5" />
+          </button>
           <div
             class="aspect-[3/4] w-full shrink-0 px-1 py-2 lg:w-60 md:w-52 sm:w-64"
           >

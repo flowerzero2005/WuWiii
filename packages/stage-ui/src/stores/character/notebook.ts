@@ -127,7 +127,9 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   const entries = ref<NotebookEntry[]>([])
   const tasks = ref<ScheduledTask[]>([])
   const diaryDrafts = ref<CharacterDiaryDraft[]>([])
+  const lastCreatedDiaryDraft = ref<{ id: string, title: string, scope: NotebookMemoryScope } | null>(null)
   const deletedDiaryEntryIds = ref<string[]>([])
+  const deletedMemoryEntryIds = ref<string[]>([])
   const isLoaded = ref(false)
   const isSaving = ref(false)
   const loadedScopeId = ref<string | null>(null)
@@ -170,6 +172,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
       tasks: tasks.value,
       diaryDrafts: diaryDrafts.value,
       deletedDiaryEntryIds: deletedDiaryEntryIds.value,
+      deletedMemoryEntryIds: deletedMemoryEntryIds.value,
       version: persistedVersion,
       revision: persistedRevision,
     })) as NotebookData
@@ -184,6 +187,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     tasks.value = saved.tasks
     diaryDrafts.value = saved.diaryDrafts ?? []
     deletedDiaryEntryIds.value = saved.deletedDiaryEntryIds ?? []
+    deletedMemoryEntryIds.value = saved.deletedMemoryEntryIds ?? []
     await nextTick()
     isHydrating = false
   }
@@ -249,6 +253,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
           tasks.value = data.tasks || []
           diaryDrafts.value = data.diaryDrafts || []
           deletedDiaryEntryIds.value = data.deletedDiaryEntryIds || []
+          deletedMemoryEntryIds.value = data.deletedMemoryEntryIds || []
           persistedVersion = data.version
           persistedRevision = data.revision ?? data.version
         }
@@ -257,6 +262,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
           tasks.value = []
           diaryDrafts.value = []
           deletedDiaryEntryIds.value = []
+          deletedMemoryEntryIds.value = []
           persistedVersion = 1
           persistedRevision = 0
         }
@@ -342,7 +348,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
   }
 
   // 监听变化并自动保存
-  watch([entries, tasks, diaryDrafts], () => {
+  watch([entries, tasks, diaryDrafts, deletedMemoryEntryIds], () => {
     if (isLoaded.value && !isHydrating) {
       debouncedSave()
     }
@@ -563,15 +569,21 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
       updatedAt: now,
     }
     diaryDrafts.value.push(draft)
+    lastCreatedDiaryDraft.value = { id: draft.id, title: draft.title, scope: resolveMemoryScope() }
     return draft
   }
 
   async function createDiaryDraftForScope(scope: NotebookMemoryScope, input: Omit<CharacterDiaryDraft, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
     const now = Date.now()
-    await updateNotebookForScope(scope, (data) => {
+    const draft = await updateNotebookForScope(scope, (data) => {
       data.diaryDrafts ??= []
-      data.diaryDrafts.push({ ...input, metadata: createScopedMetadata(input.metadata, scope), id: nanoid(), status: 'draft', createdAt: now, updatedAt: now })
+      const created = { ...input, metadata: createScopedMetadata(input.metadata, scope), id: nanoid(), status: 'draft' as const, createdAt: now, updatedAt: now }
+      data.diaryDrafts.push(created)
+      return created
     }, typeof input.metadata?.sourceSessionId === 'string' ? input.metadata.sourceSessionId : undefined)
+    if (draft)
+      lastCreatedDiaryDraft.value = { id: draft.id, title: draft.title, scope }
+    return draft
   }
 
   function updateDiaryDraft(id: string, updates: Partial<Pick<CharacterDiaryDraft, 'title' | 'text'>>) {
@@ -771,6 +783,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     const index = entries.value.findIndex(e => e.id === id)
     if (index !== -1) {
       entries.value.splice(index, 1)
+      deletedMemoryEntryIds.value.push(id)
     }
   }
 
@@ -807,6 +820,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
         return true
 
       removedEntries.push(entry)
+      deletedMemoryEntryIds.value.push(entry.id)
       return false
     })
 
@@ -826,6 +840,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     entries,
     tasks,
     diaryDrafts,
+    lastCreatedDiaryDraft,
     partitionDiary,
     partitionFocus,
     activePersonaCardId,

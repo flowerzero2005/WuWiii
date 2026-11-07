@@ -135,7 +135,9 @@ const presentation = computed(() => resolveChatBubblePresentation(
           :class="['ph-no-capture fixed inset-0 z-101 flex items-center justify-center p-4 outline-none']"
           @close-auto-focus="restoreImageFocus"
         >
-          <DialogTitle :class="['sr-only']">{{ t('stage.chat.composer.image') }}</DialogTitle>
+          <DialogTitle :class="['sr-only']">
+            {{ t('stage.chat.composer.image') }}
+          </DialogTitle>
           <DialogClose as-child>
             <button
               type="button"

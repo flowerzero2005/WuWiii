@@ -47,6 +47,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: 'deliveryVisible', payload: { messageId: string, requestId: string }): void
   (event: 'typingComplete', payload: { messageId: string }): void
+  (event: 'typingProgress', payload: { messageId: string, text: string }): void
 }>()
 
 const memoryAdvancedSettings = useMemoryAdvancedSettingsStore()
@@ -583,6 +584,8 @@ watch(() => props.message.metadata?.speechSyncIntentId, (intentId) => {
 
 watch(displayedText, (text) => {
   chatOrchestrator.reportAssistantTypingProgress(props.message.id, text, props.sessionId)
+  if (props.message.id)
+    emit('typingProgress', { messageId: props.message.id, text })
 }, { immediate: true })
 
 let emittedDeliveryRequestId: string | undefined
@@ -868,6 +871,13 @@ function requestOfficialInnerVoiceConsent(quote: OfficialCapabilityConsentQuote)
             <MarkdownRenderer v-else :content="displayText" />
           </div>
           <div v-if="showLoader" i-eos-icons:three-dots-loading />
+          <img
+            v-if="message.metadata?.chatStickerImageData && !showLoader && (messageCompleted || isHistoricalMessage)"
+            :src="message.metadata.chatStickerImageData"
+            alt="角色发送的表情包"
+            loading="lazy"
+            class="mt-2 max-h-40 max-w-40 rounded-xl object-contain shadow-sm"
+          >
           <div
             v-if="interrupted"
             :class="['mt-1 flex items-center gap-1 text-[11px] opacity-60']"

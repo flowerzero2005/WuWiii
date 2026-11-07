@@ -1,3 +1,44 @@
+mobile:
+  contacts: Contacts
+  microphone-permission: Allow microphone access for Wuwiii in your phone settings, then try again.
+  login: Sign in
+  account-menu: Account menu
+  signed-in-as: Signed in as
+  active-sessions: Active sessions
+  active-session-count: '{count} active sessions'
+  sessions-failed: Could not load sessions.
+  sign-out: Sign out
+  signing-out: Signing out…
+  signed-out: Signed out
+  sign-out-failed: Could not sign out. Please try again.
+  chat-sign-in-required: Sign in to use the official model.
+  chat-points-required: Not enough points for this reply. Check your account.
+  chat-rate-limited: Too many requests. Please wait a moment and try again.
+  chat-service-unavailable: 'Reply service is unavailable ({status}). Please try again later.'
+  chat-failed: Reply failed. Please check your connection and try again.
+  conversation: Conversation
+  expand-chat: Expand conversation
+  collapse-chat: Collapse conversation
+  responding: Replying
+  ready: Ready to chat
+  character-stage: Character space
+  touch-hint: Drag to move · Pinch to zoom
+  loading-character: Preparing your character
+  loading-hint: Your space is almost ready
+  start-chat: Say something to start a conversation
+  message-placeholder: Say something...
+  tools: More tools
+  open-tools: Open tools
+  close-tools: Close tools
+  background: Background
+  theme: Theme
+  settings: Settings
+  clear-chat: Clear chat
+  about: About
+  hearing: Hearing settings
+  auto-replies: Auto replies
+  adjust-character: Adjust character
+  adjust-hint: Use the controls below to adjust the character.
 chat:
   conversations:
     browse: Chats
@@ -195,6 +236,10 @@ chat:
   recommended-replies:
     failed: Failed to generate recommended replies. Please try again later.
     fill-input: Fill the message box
+    generate: Generate reply suggestions
+    generating: Generating suggestions…
+    request-note: Makes an additional model request and may incur charges.
+    retry: Retry suggestions
     title: You might reply
   message:
     character-name:

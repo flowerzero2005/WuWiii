@@ -1,13 +1,15 @@
 import type { ContextUpdate, WebSocketBaseEvent, WebSocketEvent, WebSocketEventOptionalSource, WebSocketEvents } from '@proj-airi/server-sdk'
 
 import { Client, WebSocketEventSource } from '@proj-airi/server-sdk'
-import { isStageTamagotchi, isStageWeb } from '@proj-airi/stage-shared'
+import { isStageCapacitor, isStageTamagotchi, isStageWeb } from '@proj-airi/stage-shared'
 import { useLocalStorage } from '@vueuse/core'
 import { nanoid } from 'nanoid'
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 import { useWebSocketInspectorStore } from '../../devtools/websocket-inspector'
+
+const localWebSocketUrlPattern = /^wss?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i
 
 export const useModsServerChannelStore = defineStore('mods:channels:proj-airi:server', () => {
   const connected = ref(false)
@@ -54,6 +56,10 @@ export const useModsServerChannelStore = defineStore('mods:channels:proj-airi:se
   }
 
   function canUseServerChannel() {
+    // On a phone, localhost is the phone itself, not the desktop runtime.
+    if (isStageCapacitor() && localWebSocketUrlPattern.test(websocketUrl.value))
+      return false
+
     // NOTICE: stage-tamagotchi runs multiple Electron renderers from the same app bundle.
     // The local server runtime should have a single owning peer: the transparent Live2D
     // stage at `#/`. Auxiliary windows implicitly connecting via send/onEvent create

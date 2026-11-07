@@ -25,6 +25,7 @@ const pageClass = [
   'md:flex-row',
 ]
 const settingsPanelClass = [
+  'pocket-model-settings',
   'relative',
   'z-10',
   'h-fit',
@@ -37,6 +38,7 @@ const settingsPanelClass = [
   'xl:w-[28rem]',
 ]
 const previewSceneClass = [
+  'pocket-model-preview',
   'relative',
   'h-[48dvh]',
   'min-w-0',

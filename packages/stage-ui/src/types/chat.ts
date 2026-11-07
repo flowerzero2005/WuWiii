@@ -111,6 +111,9 @@ export interface ChatAssistantMessageMetadata {
   pendingBubble?: boolean
   /** Optional follow-up replies generated from the completed assistant turn. */
   recommendedReplies?: string[]
+  /** Saved image selected from this character's QQ sticker library. */
+  chatStickerImageData?: string
+  chatStickerAssetId?: string
   /** Stable billing/display identity shared by model, speech and follow-up work. */
   turnId?: string
   /** Complete model output retained for the next turn while speech-paced UI is pending. */

@@ -332,14 +332,14 @@ export function useDetachedComposerSource(input: {
       let finish: (value: boolean) => void = () => undefined
       const returned = new Promise<boolean>((resolve) => {
         finish = resolve
-        stop = watch(snapshot, value => {
+        stop = watch(snapshot, (value) => {
           if (!isCurrentScope(sourceGeneration, sessionId, userScope))
             resolve(false)
           else if (value?.scope.leaseId === current.scope.leaseId && value.status === 'returned')
             resolve(true)
         }, { flush: 'sync' })
       })
-      const timeout = setTimeout(() => finish(false), 12_000)
+      const timeout = setTimeout(finish, 12_000, false)
       try {
         void returnInvoke({ leaseId: current.scope.leaseId, version: current.version }).catch(() => finish(false))
         if (!await returned)

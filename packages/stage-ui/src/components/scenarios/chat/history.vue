@@ -42,6 +42,7 @@ const props = withDefaults(defineProps<{
   sessionId?: string
   focusedMessageId?: string
   recommendedReplies?: string[]
+  recommendedReplyAction?: 'idle' | 'loading' | 'failed'
 }>(), {
   sending: false,
   variant: 'desktop',
@@ -53,7 +54,9 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: 'errorAction', payload: { action: ChatErrorAction, message: ErrorMessage }): void
   (event: 'recommendedReplySelect', reply: string): void
+  (event: 'recommendedReplyRequest'): void
   (event: 'typingComplete', payload: { messageId: string, sessionId: string }): void
+  (event: 'typingProgress', payload: { messageId: string, sessionId: string, text: string }): void
 }>()
 
 const SCROLL_PIN_THRESHOLD_PX = 48
@@ -575,6 +578,7 @@ watch(assistantInnerVoiceHydrationKey, () => {
           :session-id="currentSessionId"
           @delivery-visible="handleDeliveryVisible"
           @typing-complete="handleTypingComplete"
+          @typing-progress="payload => emit('typingProgress', { ...payload, sessionId: currentSessionId })"
         />
         <div v-else :class="['airi-card mx-auto max-w-[36rem] rounded-xl px-4 py-3']">
           <p :class="['airi-text m-0 text-sm font-semibold']">
@@ -638,6 +642,7 @@ watch(assistantInnerVoiceHydrationKey, () => {
       :session-id="currentSessionId"
       @delivery-visible="handleDeliveryVisible"
       @typing-complete="handleTypingComplete"
+      @typing-progress="payload => emit('typingProgress', { ...payload, sessionId: currentSessionId })"
     />
 
     <ChatAssistantItem
@@ -654,6 +659,7 @@ watch(assistantInnerVoiceHydrationKey, () => {
       :session-id="currentSessionId"
       @delivery-visible="handleDeliveryVisible"
       @typing-complete="handleTypingComplete"
+      @typing-progress="payload => emit('typingProgress', { ...payload, sessionId: currentSessionId })"
     />
 
     <ChatAssistantItem
@@ -670,11 +676,14 @@ watch(assistantInnerVoiceHydrationKey, () => {
       :session-id="currentSessionId"
       @delivery-visible="handleDeliveryVisible"
       @typing-complete="handleTypingComplete"
+      @typing-progress="payload => emit('typingProgress', { ...payload, sessionId: currentSessionId })"
     />
 
     <RecommendedReplies
-      v-if="props.recommendedReplies.length > 0"
+      v-if="props.recommendedReplies.length > 0 || props.recommendedReplyAction"
       :replies="props.recommendedReplies"
+      :action-status="props.recommendedReplyAction"
+      @generate="emit('recommendedReplyRequest')"
       @select="reply => emit('recommendedReplySelect', reply)"
     />
   </div>

@@ -1,8 +1,6 @@
-import type { Tool } from '@xsai/shared-chat'
-
 import type { VisionScreenCapture, VisionScreenSource } from '@proj-airi/stage-ui/composables/use-vision-screen-capture'
-import type { VisionAttachment } from '@proj-airi/stage-ui/stores/modules/vision'
-import type { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
+import type { useVisionStore, VisionAttachment } from '@proj-airi/stage-ui/stores/modules/vision'
+import type { Tool } from '@xsai/shared-chat'
 
 import { tool } from '@xsai/tool'
 import { z } from 'zod'

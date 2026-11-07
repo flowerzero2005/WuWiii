@@ -2,8 +2,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  CHAT_LAYOUT_STORAGE_KEYS,
   CHAT_LAYOUT_PAGE_COMPOSER_MIN_HEIGHT,
+  CHAT_LAYOUT_STORAGE_KEYS,
   CHAT_LAYOUT_WIDGET_COMPOSER_MIN_HEIGHT,
   constrainChatHistoryRatioForHeight,
   DEFAULT_CHAT_LAYOUT_RATIOS,

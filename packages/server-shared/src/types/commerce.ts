@@ -1,11 +1,15 @@
 export type CommerceRequestPurpose
   = | 'main-reply'
+    | 'diary'
     | 'tool-routing'
     | 'tool-processing'
     | 'response-enhancement'
     | 'inner-voice-note'
     | 'memory'
     | 'recommended-replies'
+    | 'sticker-selection'
+    | 'sticker-search'
+    | 'sticker-vision'
     | 'group-narration'
     | 'group-narration-speech'
     | 'group-script-evaluation'
@@ -17,6 +21,7 @@ export type CommerceRequestPurpose
 
 export type CommerceRequestSurface
   = | 'voice-call'
+    | 'qq'
     | 'group-chat'
     | 'quick-chat'
     | 'chat'
@@ -35,6 +40,8 @@ export type UsageBillingStatus
 
 export type UsageFailureCategory
   = | 'not-needed'
+    | 'reply-skipped'
+    | 'delivery-failure'
     | 'no-content'
     | 'incomplete-response'
     | 'provider-unavailable'

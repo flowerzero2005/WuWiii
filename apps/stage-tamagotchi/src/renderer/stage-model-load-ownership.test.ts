@@ -30,7 +30,7 @@ describe('stage model load ownership', () => {
   })
 
   it('keeps the rendered character visible while startup blocks input', () => {
-    expect(appSource).toContain("shouldShowRuntimeBootstrap ? 'pointer-events-none' : undefined")
-    expect(appSource).not.toContain("shouldShowRuntimeBootstrap ? 'pointer-events-none opacity-0'")
+    expect(appSource).toContain('shouldShowRuntimeBootstrap ? \'pointer-events-none\' : undefined')
+    expect(appSource).not.toContain('shouldShowRuntimeBootstrap ? \'pointer-events-none opacity-0\'')
   })
 })

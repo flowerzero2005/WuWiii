@@ -1,9 +1,10 @@
 import { onUnmounted, ref } from 'vue'
 
-export function useAudioAnalyzer() {
+export function useAudioAnalyzer(options: { intervalMs?: number } = {}) {
   const analyzer = ref<AnalyserNode>()
   const dataArray = ref<Uint8Array<ArrayBuffer>>()
   const animationFrame = ref<number>()
+  let interval: ReturnType<typeof setInterval> | undefined
 
   const onAnalyzerUpdateHooks = ref<Array<(volumeLevel: number) => void | Promise<void>>>([])
 
@@ -21,7 +22,7 @@ export function useAudioAnalyzer() {
   }
 
   function start() {
-    if (animationFrame.value)
+    if (animationFrame.value !== undefined || interval !== undefined)
       return // prevent multiple loops
 
     const analyze = () => {
@@ -43,10 +44,15 @@ export function useAudioAnalyzer() {
         hook(volumeLevel.value)
       }
 
-      animationFrame.value = requestAnimationFrame(analyze)
+      if (!options.intervalMs)
+        animationFrame.value = requestAnimationFrame(analyze)
     }
 
     analyze()
+    // Call input must keep sampling while Android hides the WebView.
+    // requestAnimationFrame stops when the application is in the background.
+    if (options.intervalMs)
+      interval = setInterval(analyze, options.intervalMs)
   }
 
   function startAnalyzer(audioContext: AudioContext) {
@@ -77,9 +83,13 @@ export function useAudioAnalyzer() {
 
   function stopAnalyzer() {
     // Stop animation frame
-    if (animationFrame.value) {
+    if (animationFrame.value !== undefined) {
       cancelAnimationFrame(animationFrame.value)
       animationFrame.value = undefined
+    }
+    if (interval !== undefined) {
+      clearInterval(interval)
+      interval = undefined
     }
 
     analyzer.value = undefined

@@ -15,8 +15,8 @@ describe('chat composer branches', () => {
         return
       const elements = node.children.filter(child => child.type === 1)
       for (let index = 0; index < elements.length; index++) {
-          const element = elements[index]
-          const widgetBranch = element.tag === 'div'
+        const element = elements[index]
+        const widgetBranch = element.tag === 'div'
           && source.slice(element.loc.start.offset, element.loc.end.offset).includes('ref="quickChatTextareaRef"')
           && element.props.some(prop => prop.type === 7 && prop.name === 'if' && prop.exp?.type === 4 && prop.exp.content === 'isWidgetSurface && !composerDetached')
         if (widgetBranch) {
@@ -39,7 +39,7 @@ describe('chat composer branches', () => {
     expect(source).toContain('data-chat-composer-recovery')
     expect(source).toContain('@click.stop="requestWidgetExpand()"')
     expect(source).toContain(':placeholder="isInitialized ? t(\'stage.chat.composer.placeholder\') : t(\'tamagotchi.stage.bootstrap.conversation\')"')
-    expect(source).not.toContain("t('stage.message')")
+    expect(source).not.toContain('t(\'stage.message\')')
     expect(source).toContain('historyResizeOutsideWindow.value = outsideWindow')
     expect(source).toContain('historyResizeTarget.setPointerCapture(event.pointerId)')
     expect(source).toContain('detachFromResize = point => void detachedComposer.detach(false, point)')
@@ -47,7 +47,7 @@ describe('chat composer branches', () => {
     expect(source).toContain('data-chat-composer-return-target')
     expect(source).not.toContain('composerReturnTargetRef')
     expect(source).toContain('v-if="isWidgetSurface && !composerDetached"')
-    expect(source).toContain("? 'minmax(0, 1fr) 32px'")
+    expect(source).toContain('? \'minmax(0, 1fr) 32px\'')
     expect(source).not.toContain('data-chat-composer-detach-controls')
     expect(source).not.toContain('@pointerdown="detachedComposer.startDrag"')
   })
@@ -57,9 +57,9 @@ describe('chat composer branches', () => {
 
     expect(source).toContain('data-chat-composer-image-picker')
     expect(source).toContain('data-quick-chat-composer-image-picker')
-    expect(source).toContain("<div class=\"i-ph:plus-bold size-4\" />")
+    expect(source).toContain('<div class="i-ph:plus-bold size-4" />')
     expect(source).not.toContain('v-if="visionEnabled && !activeGroupMeta && !isCollapsed"')
-    expect(source).toContain("if (!visionEnabled.value) {")
-    expect(source).toContain("toast.info(t('stage.chat.vision.disabled'))")
+    expect(source).toContain('if (!visionEnabled.value) {')
+    expect(source).toContain('toast.info(t(\'stage.chat.vision.disabled\'))')
   })
 })

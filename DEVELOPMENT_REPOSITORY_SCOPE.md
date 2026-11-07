@@ -2,6 +2,8 @@
 
 这是经过整理的 WuWiii 桌面开发端源码仓库。Git 历史从安全导出开始，早期工作仓库的历史和本机配置没有导入。
 
+对外开发端的 GitHub 地址为 `https://github.com/flowerzero2005/WuWiii.git`，Gitee 镜像为 `https://gitee.com/lovelylonely/wu-wiii.git`。两个仓库的 `main` 应保持同一提交。内部完整工程及其名称含 `airi` 的远端不属于本仓库，不能直接从内部工程推送或复制全部文件到这里。
+
 ## 提供的内容
 
 - Electron 桌面应用源码，包括主进程、预加载、窗口和 Vue 渲染界面。

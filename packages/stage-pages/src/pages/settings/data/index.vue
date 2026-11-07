@@ -5,6 +5,7 @@ import { defineInvoke } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/renderer'
 import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { electronClearApplicationData } from '@proj-airi/stage-shared/application-data'
+import { saveBlobDocument } from '@proj-airi/stage-ui/composables/download'
 import { useDataMaintenance } from '@proj-airi/stage-ui/composables/use-data-maintenance'
 import { Button, DoubleCheckButton } from '@proj-airi/ui'
 import { computed, ref } from 'vue'
@@ -71,12 +72,8 @@ async function runAction(action: () => Promise<void> | void, successKey: string)
 async function triggerExport() {
   try {
     const blob = await exportChatSessions()
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `wuwiii-chat-sessions-${new Date().toISOString()}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    await saveBlobDocument(blob, `wuwiii-chat-sessions-${timestamp}.json`)
     setStatus(t('settings.pages.data.status.exported'))
   }
   catch (error) {
@@ -116,12 +113,8 @@ async function handleImport(event: Event) {
 async function triggerModelExport() {
   try {
     const blob = await exportModelConfigurations()
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `airi-character-package-${new Date().toISOString()}.zip`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    await saveBlobDocument(blob, `airi-character-package-${timestamp}.zip`)
     setStatus(t('settings.pages.data.status.models_exported'))
   }
   catch (error) {

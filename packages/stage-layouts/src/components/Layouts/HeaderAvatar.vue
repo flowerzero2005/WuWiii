@@ -4,17 +4,20 @@ import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { onClickOutside, useMediaQuery } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 const authStore = useAuthStore()
 const { isAuthenticated, user } = storeToRefs(authStore)
+const { t } = useI18n()
 
 const isMobile = useMediaQuery('(max-width: 768px)')
 
 const userName = computed(() => user.value?.name)
 const userAvatar = computed(() => user.value?.image)
 const showDropdown = ref(false)
+const isSigningOut = ref(false)
 const dropdownRef = ref(null)
 const headerActionButtonClass = [
   'w-fit flex items-center justify-center rounded-xl p-2 backdrop-blur-md',
@@ -29,40 +32,52 @@ onClickOutside(dropdownRef, () => {
   showDropdown.value = false
 })
 
-function handleLogout() {
-  signOut()
+async function handleLogout() {
+  if (isSigningOut.value)
+    return
+  isSigningOut.value = true
+  try {
+    await signOut()
+    showDropdown.value = false
+    toast.success(t('stage.mobile.signed-out'))
+  }
+  catch (error) {
+    toast.error(error instanceof Error ? error.message : t('stage.mobile.sign-out-failed'))
+  }
+  finally {
+    isSigningOut.value = false
+  }
 }
 
 async function handleListSessions() {
   try {
     const { data: sessions } = await listSessions()
-    if (sessions) {
-      toast.success(`You have ${sessions.length} active sessions.`)
-    }
+    if (!sessions)
+      throw new Error(t('stage.mobile.sessions-failed'))
+    toast.success(t('stage.mobile.active-session-count', { count: sessions.length }))
   }
   catch (error) {
-    toast.error(error instanceof Error ? error.message : 'An unknown error occurred')
+    toast.error(error instanceof Error ? error.message : t('stage.mobile.sessions-failed'))
   }
 }
 </script>
 
 <template>
   <div flex items-center gap-2>
-    <!-- Non-authenticated: Settings & Login -->
+    <RouterLink
+      :class="headerActionButtonClass"
+      :title="t('stage.mobile.settings')"
+      to="/settings"
+    >
+      <div class="i-solar:settings-minimalistic-bold-duotone size-5 airi-text-muted" />
+    </RouterLink>
+
     <!-- NOTICE: The avatar is stored in the localstorage, it will be shown at the first time of the page load, so we do not need the skeleton loading here -->
     <template v-if="!isAuthenticated">
-      <RouterLink
-        :class="headerActionButtonClass"
-        title="Settings"
-        to="/settings"
-      >
-        <div class="i-solar:settings-minimalistic-bold-duotone size-5 airi-text-muted" />
-      </RouterLink>
-
       <template v-if="isMobile">
         <button
           :class="headerActionButtonClass"
-          title="Login"
+          :title="t('stage.mobile.login')"
           type="button"
           @click="authStore.isLoginOpen = true"
         >
@@ -72,7 +87,7 @@ async function handleListSessions() {
       <template v-else>
         <RouterLink
           :class="headerActionButtonClass"
-          :title="isAuthenticated ? `Logged in as ${userName}` : 'Login'"
+          :title="t('stage.mobile.login')"
           to="/auth/login"
         >
           <div i-solar:user-bold-duotone />
@@ -85,12 +100,14 @@ async function handleListSessions() {
       <button
         type="button"
         :class="[
-          'flex items-center gap-2 rounded-full p-1 pl-1 pr-3 backdrop-blur-md transition',
+          'flex items-center gap-2 rounded-full p-1 backdrop-blur-md transition',
+          !isMobile ? 'pr-3' : '',
           'airi-overlay-glass hover:bg-[var(--airi-surface-control-hover)]',
           showDropdown ? 'ring-2 ring-[var(--airi-accent-focus)]' : '',
         ]"
         aria-haspopup="true"
         :aria-expanded="showDropdown ? 'true' : 'false'"
+        :aria-label="t('stage.mobile.account-menu')"
         @click="showDropdown = !showDropdown"
       >
         <img
@@ -105,10 +122,11 @@ async function handleListSessions() {
           <div class="i-solar:user-bold-duotone text-lg" />
         </div>
 
-        <span v-if="userName" class="max-w-[100px] truncate text-sm text-[var(--airi-text)] font-medium hidden sm:block">
+        <span v-if="userName && !isMobile" class="max-w-[100px] truncate text-sm text-[var(--airi-text)] font-medium hidden sm:block">
           {{ userName }}
         </span>
         <div
+          v-if="!isMobile"
           class="i-solar:alt-arrow-down-linear airi-text-muted transition-transform duration-200"
           :class="{ 'rotate-180': showDropdown }"
         />
@@ -128,7 +146,7 @@ async function handleListSessions() {
         >
           <div class="px-3 py-2">
             <p class="text-xs airi-text-muted">
-              Signed in as
+              {{ t('stage.mobile.signed-in-as') }}
             </p>
             <p class="truncate text-sm text-[var(--airi-text)] font-medium">
               {{ userName }}
@@ -141,7 +159,7 @@ async function handleListSessions() {
               @click="handleListSessions"
             >
               <div class="i-solar:devices-bold-duotone text-lg airi-text-muted transition group-hover:text-[var(--airi-accent-text)]" />
-              Active Sessions
+              {{ t('stage.mobile.active-sessions') }}
             </button>
 
             <RouterLink
@@ -150,17 +168,18 @@ async function handleListSessions() {
               @click="showDropdown = false"
             >
               <div class="i-solar:settings-minimalistic-bold-duotone text-lg airi-text-muted transition group-hover:text-[var(--airi-accent-text)]" />
-              Settings
+              {{ t('stage.mobile.settings') }}
             </RouterLink>
           </div>
 
           <div class="py-1">
             <button
               class="group w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              :disabled="isSigningOut"
               @click="handleLogout"
             >
               <div class="i-solar:logout-3-bold-duotone text-lg transition group-hover:text-red-600 dark:group-hover:text-red-400" />
-              Logout
+              {{ isSigningOut ? t('stage.mobile.signing-out') : t('stage.mobile.sign-out') }}
             </button>
           </div>
         </div>

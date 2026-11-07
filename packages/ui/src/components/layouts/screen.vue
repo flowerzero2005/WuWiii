@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { breakpointsTailwind, useBreakpoints, useElementBounding, useWindowSize } from '@vueuse/core'
+import { breakpointsTailwind, useBreakpoints, useElementBounding, useElementSize, useWindowSize } from '@vueuse/core'
 import { computed, onMounted, ref, watch } from 'vue'
 
+const props = defineProps<{ exactSize?: boolean }>()
 const containerRef = ref<HTMLDivElement>()
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const { width, height } = useWindowSize()
 const containerElementBounding = useElementBounding(containerRef, { immediate: true, windowResize: true, reset: true })
+const { width: exactWidth, height: exactHeight } = useElementSize(containerRef)
 
 const isMobile = computed(() => breakpoints.between('sm', 'md').value || breakpoints.smaller('sm').value)
 const isTablet = computed(() => breakpoints.between('md', 'lg').value)
 const isDesktop = computed(() => breakpoints.greaterOrEqual('lg').value)
 
 const canvasWidth = computed(() => {
+  if (props.exactSize)
+    return exactWidth.value
   if (isDesktop.value)
     return containerElementBounding.width.value
   else if (isMobile.value)
@@ -67,6 +71,6 @@ onMounted(async () => {
 
 <template>
   <div ref="containerRef" h-full w-full>
-    <slot :width="canvasWidth" :height="canvasHeight" />
+    <slot :width="canvasWidth" :height="exactSize ? exactHeight : canvasHeight" />
   </div>
 </template>

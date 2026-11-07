@@ -69,6 +69,7 @@ export type { PublicUsageHistoryEntry, PublicUsageHistoryPage } from '@proj-airi
 
 export type CommercePaymentMethod = 'wechat' | 'alipay'
 export interface CommercePaymentMethodCapability {
+  appAvailable?: boolean
   available: boolean
   paymentMethod: CommercePaymentMethod
 }
@@ -95,7 +96,7 @@ export interface CommerceProduct {
 
 export interface CommerceCheckout {
   expiresAt: string
-  kind: 'image' | 'mock' | 'qr' | 'redirect'
+  kind: 'app' | 'image' | 'mock' | 'qr' | 'redirect'
   value: string
 }
 
@@ -146,6 +147,7 @@ export interface CommercePaymentOrder {
 }
 
 export interface CreateCommercePaymentOrderInput {
+  checkoutMode?: 'app' | 'native'
   clientRequestId: string
   paymentMethod: CommercePaymentMethod
   sku: string
@@ -268,6 +270,7 @@ export const useCommerceStore = defineStore('commerce', () => {
   const paymentOrdersError = ref<unknown>(null)
   const paymentCheckoutError = ref<unknown>(null)
   const paymentError = computed(() => paymentCheckoutError.value ?? paymentProductsError.value ?? paymentOrdersError.value)
+
   let paymentPollGeneration = 0
 
   const balance = computed(() => account.value?.balance)

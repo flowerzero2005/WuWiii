@@ -9,9 +9,9 @@ describe('chat idle budgets', () => {
     for (const defaultTimeout of [30_000, 35_000]) {
       const frozenBudget = resolveChatTurnIdleTimeoutMs(true, defaultTimeout)
       expect(frozenBudget).toBeGreaterThan(OFFICIAL_STREAM_FIRST_EVENT_TIMEOUT_MS)
-      expect(35_000 >= frozenBudget).toBe(false)
-      expect(90_000 >= frozenBudget).toBe(false)
-      expect(120_000 >= frozenBudget).toBe(true)
+      expect(frozenBudget <= 35_000).toBe(false)
+      expect(frozenBudget <= 90_000).toBe(false)
+      expect(frozenBudget <= 120_000).toBe(true)
     }
   })
 

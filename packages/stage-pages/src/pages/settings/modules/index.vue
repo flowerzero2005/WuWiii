@@ -44,6 +44,9 @@ const watermarkIconClass = 'i-solar:layers-bold-duotone text-60'
     <RippleGrid
       :items="primaryTopRowModules"
       :columns="{ default: 1, md: 2 }"
+      :animation-initial="{ opacity: 1, y: 0 }"
+      :animation-enter="{ opacity: 1, y: 0 }"
+      :animation-duration="0"
       :origin-index="primaryTopLastClickedIndex"
       @item-click="({ globalIndex }) => setPrimaryTopLastClickedIndex(globalIndex)"
     >
@@ -63,6 +66,9 @@ const watermarkIconClass = 'i-solar:layers-bold-duotone text-60'
     <RippleGrid
       :items="primaryBottomRowModules"
       :columns="{ default: 1, md: 3 }"
+      :animation-initial="{ opacity: 1, y: 0 }"
+      :animation-enter="{ opacity: 1, y: 0 }"
+      :animation-duration="0"
       :origin-index="primaryBottomLastClickedIndex"
       @item-click="({ globalIndex }) => setPrimaryBottomLastClickedIndex(globalIndex)"
     >
@@ -86,6 +92,9 @@ const watermarkIconClass = 'i-solar:layers-bold-duotone text-60'
       <RippleGrid
         :items="additionalModules"
         :columns="{ default: 1, sm: 2 }"
+        :animation-initial="{ opacity: 1, y: 0 }"
+        :animation-enter="{ opacity: 1, y: 0 }"
+        :animation-duration="0"
         :origin-index="additionalModulesLastClickedIndex"
         @item-click="({ globalIndex }) => setAdditionalModulesLastClickedIndex(globalIndex)"
       >

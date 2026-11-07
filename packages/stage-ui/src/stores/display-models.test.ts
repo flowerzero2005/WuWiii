@@ -78,6 +78,22 @@ describe('display models store', () => {
     expect(store.displayModels.find(item => item.id === model.id)?.name).toBe('Character A')
   })
 
+  it('reads a mobile ZIP as bytes and rejects archives without a Live2D model', async () => {
+    const archive = new JSZip()
+    archive.file('readme.txt', 'No model here')
+    const file = new File([Uint8Array.from(await archive.generateAsync({ type: 'uint8array' }))], 'character.zip')
+    vi.stubGlobal('window', { pocketBridge: {} })
+    try {
+      const store = useDisplayModelsStore()
+      await expect(store.addDisplayModel(DisplayModelFormat.Live2dZip, file)).rejects.toThrow('压缩包中没有 Live2D 模型文件')
+      expect(storedModels.size).toBe(0)
+      expect(store.displayModels).toHaveLength(0)
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('imports a picture OC package with stable identity and updates the same package in place', async () => {
     const store = useDisplayModelsStore()
     const manifest = {

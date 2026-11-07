@@ -78,12 +78,7 @@ export function removeSpecialMarkers(text: string, options?: RemoveSpecialMarker
     // MEMORY_CAPTURE is a private decision envelope. Consume an incomplete
     // envelope through EOF as well, otherwise parser.end() can expose model
     // protocol (and potentially a secret) in the final bubble/TTS.
-    result = removeActMarkers(result).replace(MEMORY_CAPTURE_MARKER_RE, '')
-      .replace(DISPLAY_MARKER_RE, '')
-      .replace(SPECIAL_MARKER_RE, '')
-      // Truncated marker names (including '<|A') are private too. Strip
-      // complete malformed closers first so their following prose survives.
-      .replace(INCOMPLETE_MARKER_RE, '')
+    result = removeActMarkers(result).replace(MEMORY_CAPTURE_MARKER_RE, '').replace(DISPLAY_MARKER_RE, '').replace(SPECIAL_MARKER_RE, '').replace(INCOMPLETE_MARKER_RE, '')
     iterations++
   }
 

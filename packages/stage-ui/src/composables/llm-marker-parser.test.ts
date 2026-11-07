@@ -11,9 +11,9 @@ describe('useLlmmarkerParser', async () => {
       const specials: string[] = []
       let completed = ''
       const parser = useLlmmarkerParser({
-        onLiteral: value => { literals.push(value) },
-        onSpecial: value => { specials.push(value) },
-        onEnd: value => { completed = value },
+        onLiteral: (value) => { literals.push(value) },
+        onSpecial: (value) => { specials.push(value) },
+        onEnd: (value) => { completed = value },
       })
       await parser.consume(text.slice(0, split))
       await parser.consume(text.slice(split))
@@ -28,8 +28,8 @@ describe('useLlmmarkerParser', async () => {
     const literals: string[] = []
     const specials: string[] = []
     const parser = useLlmmarkerParser({
-      onLiteral: value => { literals.push(value) },
-      onSpecial: value => { specials.push(value) },
+      onLiteral: (value) => { literals.push(value) },
+      onSpecial: (value) => { specials.push(value) },
     })
     for (const chunk of ['Hello <|', '|DSML||tool_', 'calls>private</||DSML||tool_calls> world!'])
       await parser.consume(chunk)
@@ -42,8 +42,8 @@ describe('useLlmmarkerParser', async () => {
     const literals: string[] = []
     let completed = ''
     const parser = useLlmmarkerParser({
-      onLiteral: value => { literals.push(value) },
-      onEnd: value => { completed = value },
+      onLiteral: (value) => { literals.push(value) },
+      onEnd: (value) => { completed = value },
     })
     await parser.consume('Hello <|A')
     await parser.end()

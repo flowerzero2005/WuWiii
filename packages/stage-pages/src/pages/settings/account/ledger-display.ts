@@ -54,15 +54,15 @@ export function buildDisplayLedger(entries: CommerceLedgerEntry[]): DisplayLedge
     const reservationPoints = usageEntries
       .filter(item => item.type === 'reserve')
       .reduce((sum, item) => sum + Math.abs(item.amount), 0)
-    const displayFailureRefund = refunds.find(item => item.note === 'reply-display-failure-refund')
-    const chosen = displayFailureRefund ?? settlements[0] ?? usageEntries.find(item => item.type === 'reserve')
+    const finalRefund = refunds.find(item => item.note === 'reply-display-failure-refund' || item.note === 'qq-send-failed' || item.note === 'qq-no-reply' || item.note === 'qq-search-failed' || item.note === 'qq-analysis-unusable' || item.note === 'qq-image-unusable')
+    const chosen = finalRefund ?? settlements[0] ?? usageEntries.find(item => item.type === 'reserve')
     if (!chosen)
       return []
 
-    if (displayFailureRefund) {
+    if (finalRefund) {
       return [{
-        ...displayFailureRefund,
-        note: normalizeLedgerNote(displayFailureRefund.note),
+        ...finalRefund,
+        note: normalizeLedgerNote(finalRefund.note),
         displayAmount: 0,
         displayType: 'refund',
         refundedPoints: refunds.reduce((sum, item) => sum + Math.abs(item.amount), 0),

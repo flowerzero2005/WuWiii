@@ -290,6 +290,8 @@ function formatMemoryCue(memory: NotebookEntry) {
     ...(typeof memory.metadata?.outcome === 'string' ? [`outcome=${compactContextLine(memory.metadata.outcome)}`] : []),
     `sourceTime=${sourceCreatedAt === undefined ? 'unknown' : new Date(sourceCreatedAt).toISOString()}`,
     `recordedAt=${new Date(memory.createdAt).toISOString()}`,
+    ...(typeof memory.metadata?.sourceSurface === 'string' ? [`sourceSurface=${memory.metadata.sourceSurface}`] : []),
+    ...(typeof memory.metadata?.sourceDevice === 'string' ? [`sourceDevice=${memory.metadata.sourceDevice}`] : []),
   ]
   const nodeSummaryCues = getNodeSummaryCues(memory.metadata?.nodeSummaries).slice(0, 3)
   const featureTimelineCues = getFeatureTimelineCues(memory.metadata?.featureTimeline).slice(0, 3)
