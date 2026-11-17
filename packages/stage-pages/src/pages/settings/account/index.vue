@@ -518,7 +518,7 @@ function amountClass(amount: number) {
 }
 
 function formatUsageKind(entry: PublicUsageHistoryEntry) {
-  const surface = t(`settings.pages.account.sections.usage-history.surfaces.${entry.surface}`)
+  const surface = t(`settings.pages.account.sections.usage-history.surfaces.${entry.surface}`, t('settings.pages.account.sections.usage-history.surfaces.unknown'))
   const purpose = t(`settings.pages.account.sections.usage-history.purposes.${entry.purpose}`, entry.purpose)
   const room = entry.roomName?.trim()
   const speaker = entry.characterName?.trim()

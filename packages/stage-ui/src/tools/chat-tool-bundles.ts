@@ -264,7 +264,7 @@ export async function buildStageChatToolBundles(input: BuildStageChatToolBundles
     }
   }
 
-  if (input.webSearchEnabled && input.webSearchTools && (!input.intentGated || intent.wantsWebSearch || intent.requiresWebSearch)) {
+  if (input.webSearchEnabled && input.webSearchTools) {
     appendToolBundle(result, {
       fallbackContext: buildWebSearchFallbackContext,
       id: WEB_SEARCH_TOOL_BUNDLE_ID,

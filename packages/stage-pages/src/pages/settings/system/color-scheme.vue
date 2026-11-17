@@ -18,6 +18,7 @@ const { darkSelectedOption, lightSelectedOption } = storeToRefs(backgroundStore)
 const { t, tm } = useI18n()
 const lightBackgroundDialogOpen = ref(false)
 const darkBackgroundDialogOpen = ref(false)
+const isPocket = import.meta.env.RUNTIME_ENVIRONMENT === 'capacitor'
 
 const themePresetOrder = ['default', 'morandi', 'monet', 'japanese', 'nordic', 'chinese'] as const
 const surfacePresetOptions = computed(() => [
@@ -186,6 +187,24 @@ function applyPreset(primaryColor?: string) {
       :format-value="value => `${Math.round(value * 100)}%`"
       :class="['mt-4']"
     />
+  </Section>
+
+  <Section
+    v-if="isPocket"
+    mb-2
+    title="手机主界面壁纸"
+    icon="i-solar:gallery-wide-bold-duotone"
+  >
+    <RouterLink
+      :to="{ path: '/settings/system/home-wallpaper' }"
+      class="airi-card airi-card-hover flex items-center justify-between gap-3 rounded-lg px-4 py-3"
+    >
+      <div>
+        <div class="text-sm font-medium airi-text">白天与夜间背景</div>
+        <div class="text-xs airi-text-muted">只更换手机主界面的人物背景</div>
+      </div>
+      <span class="i-solar:alt-arrow-right-linear size-5 shrink-0 airi-text-muted" />
+    </RouterLink>
   </Section>
 
   <BackgroundDialogPicker v-model="lightBackgroundDialogOpen" mode="light" />

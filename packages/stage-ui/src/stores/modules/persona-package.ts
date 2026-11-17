@@ -658,6 +658,15 @@ function sanitizePersonaRuntimeSource(value: string | undefined) {
     .join('\n')
 }
 
+function sanitizePersonaGenerationSource(value: string | undefined) {
+  return stripInlineDialogueExamples(value)
+    .split(/[\n\r;.!?\uFF1B\u3002\uFF01\uFF1F]+/g)
+    .map(item => item.trim())
+    .filter(item => item && !UNTRUSTED_PERSONA_RUNTIME_PATTERNS.some(pattern => pattern.test(item)))
+    .slice(0, 50)
+    .join('\n')
+}
+
 function createPersonaPackageSourceFieldTexts(card: Card, explicitWebSearchInterests?: string[]) {
   return PERSONA_PACKAGE_COMPILER_SOURCE_FIELD_KEYS.reduce((result, key) => {
     result[key] = sourceFieldText(card, key, explicitWebSearchInterests)
@@ -1132,7 +1141,14 @@ export function createPersonaPackageCompilerGuidance(
 
 function buildPersonaPackageGenerationSource(input: BuildPersonaPackageGenerationPromptInput) {
   const card = input.card
-  const runtimeSource = createPersonaPackageRuntimeSourceFieldTexts(card)
+  const runtimeSource = {
+    description: sanitizePersonaGenerationSource(card.description),
+    personality: sanitizePersonaGenerationSource(card.personality),
+    scenario: sanitizePersonaGenerationSource(card.scenario),
+    systemPrompt: sanitizePersonaGenerationSource(card.systemPrompt),
+    postHistoryInstructions: sanitizePersonaGenerationSource(card.postHistoryInstructions),
+    notes: sanitizePersonaGenerationSource(card.notes),
+  }
   const exampleStyleSignals = inferMessageExampleStyleSignals(card)
   const omittedInlineDialogueFields = PERSONA_PACKAGE_INLINE_DIALOGUE_FIELD_KEYS
     .filter(field => sourceFieldText(card, field).trim() !== runtimeSource[field].trim())
@@ -1141,11 +1157,11 @@ function buildPersonaPackageGenerationSource(input: BuildPersonaPackageGeneratio
     card.nickname ? `Nickname: ${card.nickname}` : '',
     card.creator ? `Creator: ${card.creator}` : '',
     card.tags?.length ? `Tags: ${card.tags.join(', ')}` : '',
-    runtimeSource.description ? `Description:\n${clipText(runtimeSource.description, 1200)}` : '',
-    runtimeSource.personality ? `Personality:\n${clipText(runtimeSource.personality, 900)}` : '',
-    runtimeSource.scenario ? `Scenario:\n${clipText(runtimeSource.scenario, 900)}` : '',
-    runtimeSource.systemPrompt ? `System prompt text from card:\n${clipText(runtimeSource.systemPrompt, 900)}` : '',
-    runtimeSource.postHistoryInstructions ? `Post-history instructions:\n${clipText(runtimeSource.postHistoryInstructions, 700)}` : '',
+    runtimeSource.description ? `Description:\n${clipText(runtimeSource.description, 5000)}` : '',
+    runtimeSource.personality ? `Personality:\n${clipText(runtimeSource.personality, 1800)}` : '',
+    runtimeSource.scenario ? `Scenario:\n${clipText(runtimeSource.scenario, 1800)}` : '',
+    runtimeSource.systemPrompt ? `System prompt text from card:\n${clipText(runtimeSource.systemPrompt, 1500)}` : '',
+    runtimeSource.postHistoryInstructions ? `Post-history instructions:\n${clipText(runtimeSource.postHistoryInstructions, 1000)}` : '',
     omittedInlineDialogueFields.length ? `Dialogue-like example lines omitted from fields: ${omittedInlineDialogueFields.join(', ')}` : '',
     card.greetings?.length ? `Greeting count: ${card.greetings.length}` : '',
     card.messageExample?.length ? `Message example count: ${card.messageExample.length}` : '',

@@ -22,6 +22,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
+import MemoryStarMap from './MemoryStarMap.vue'
+
 const { locale, t } = useI18n()
 const router = useRouter()
 const notebookStore = useCharacterNotebookStore()
@@ -1040,49 +1042,49 @@ async function executeMergeAll() {
       <div :class="['mt-4 flex gap-1 overflow-x-auto border-b airi-border-subtle']" role="tablist">
         <button
           :class="activeTab === 'config' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'config'"
         >
           {{ t('settings.pages.memory.tabs.config') }}
         </button>
         <button
           :class="activeTab === 'keywords' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'keywords'"
         >
           {{ t('settings.pages.memory.tabs.keywords', { count: memorySettings.customKeywords.length }) }}
         </button>
         <button
           :class="activeTab === 'manage' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'manage'"
         >
           {{ t('settings.pages.memory.tabs.manage', { count: stats.total }) }}
         </button>
         <button
           :class="activeTab === 'merge' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'merge'"
         >
           {{ t('settings.pages.memory.tabs.merge') }}
         </button>
         <button
           :class="activeTab === 'maintenance' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'maintenance'"
         >
           {{ t('settings.pages.memory.tabs.maintenance') }}
         </button>
         <button
           :class="activeTab === 'stats' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'stats'"
         >
           {{ t('settings.pages.memory.tabs.stats') }}
         </button>
         <button
           :class="activeTab === 'logs' ? 'border-b-2 border-primary-500 text-primary-600 font-semibold dark:text-primary-400' : 'airi-text-muted'"
-          class="px-4 py-2 transition-colors"
+          class="shrink-0 whitespace-nowrap px-4 py-2 transition-colors"
           @click="activeTab = 'logs'"
         >
           {{ t('settings.pages.memory.tabs.logs', { count: maintenanceLog.logs.length }) }}
@@ -1091,6 +1093,8 @@ async function executeMergeAll() {
     </section>
 
     <!-- 配置标签页 -->
+    <MemoryStarMap v-if="activeTab === 'manage'" :entries="notebookStore.entries" />
+
     <div v-if="activeTab === 'config'" class="flex flex-col gap-4">
       <div :class="['airi-status-info rounded-xl p-4']">
         <div :class="['flex items-start gap-3']">

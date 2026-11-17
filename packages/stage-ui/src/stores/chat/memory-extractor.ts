@@ -39,7 +39,10 @@ export interface MemoryExtractionPromptInput {
 export interface MemoryExtractionRuntime {
   chatProvider?: ChatProvider
   model?: string
+  providerId?: string
   providerConfig?: Record<string, unknown>
+  /** Distinguishes the model's explicit empty decision from a missing protocol. */
+  captureStatus?: 'valid' | 'empty' | 'missing' | 'invalid'
   memoryHints?: string[]
   personaContext?: string
   memoryCandidates?: MemoryExtractionCandidate[]
@@ -160,8 +163,7 @@ export function buildMemoryExtractionPrompt(input: MemoryExtractionPromptInput):
     'Existing memories:',
     JSON.stringify(existing),
     '',
-    'Return exactly {"memories":[...]} where each item has:',
-    'action (create or update), targetMemoryId (required for update), memoryKey, memoryType, summary, context, userEvidence, involvedPeople (array), importance (low/medium/high), confidence (0-1), certainty, tags (array), reason, and optional antecedent, outcome, timeExpression.',
+    'Return exactly {"memories":[...]} with at most four useful items. Include small details that may matter in a future conversation, but do not repeat existing facts. A create item only needs summary, userEvidence, and importance (low/medium/high); add memoryKey, memoryType, context, involvedPeople, confidence, certainty, tags, reason, antecedent, outcome, or timeExpression only when useful and grounded. For a changed existing fact, use action=update and its exact targetMemoryId.',
     'userEvidence should point to the user-provided basis. Never use assistant text as evidence.',
     'For an event, include every person, relevant context, antecedent/cause, outcome/impact, and time expression that the user actually supplied. Omit unknown optional details; never invent them.',
     'Use your own judgment about future continuity value. Stable preferences, plans, relationship changes, commitments, and meaningful events are examples only, not keyword triggers, hard categories, a whitelist, or frequency limits. A useful detail may be remembered even when it does not match any example or preset label. Return an empty memories array only when nothing is plausibly useful.',

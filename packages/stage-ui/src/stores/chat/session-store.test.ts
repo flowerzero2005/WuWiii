@@ -317,8 +317,9 @@ describe('chat session sync conflicts', () => {
     expect(records.get(sessionId)!.messageStars?.old).toEqual({ starred: false, revision: 2 })
     await vi.waitFor(() => expect(mocks.postSync).toHaveBeenCalled())
     const payload = mocks.postSync.mock.calls.at(-1)?.[0]
-    expect(JSON.stringify(payload)).not.toContain('messageStars')
-    expect(JSON.stringify(payload)).not.toContain('starred')
+    expect(JSON.stringify(payload.json.messages)).not.toContain('messageStars')
+    expect(JSON.stringify(payload.json.messages)).not.toContain('starred')
+    expect(payload.json.sessionRecord.messageStars).toBeDefined()
   })
 
   it('prunes obsolete star revisions on explicit clear and does not recreate them from stale history', async () => {
@@ -576,6 +577,21 @@ describe('chat session sync conflicts', () => {
         'character-1': expect.any(Object),
       }),
     }))
+  })
+
+  it('restores cloud conversations when a new install already has an empty local index', async () => {
+    mocks.isAuthenticated = true
+    mocks.indexes.set('user-1', { userId: 'user-1', characters: {} })
+    const meta = { sessionId: 'cloud-session', userId: 'user-1', characterId: 'character-1', kind: 'direct' as const, createdAt: 1, updatedAt: 2 }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ meta, messages: [{ id: 'cloud-message', role: 'user', content: 'hello', createdAt: 2 }] }]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useChatSessionStore()
+    await store.initialize()
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/chats/restore'), expect.any(Object))
+    expect(store.directSessions.map(session => session.sessionId)).toContain('cloud-session')
+    expect(records.get('cloud-session')?.messages[0]?.content).toBe('hello')
   })
 
   it('reports the concrete remote 409 response instead of swallowing it', async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 
 import { getPersonaCardConflicts, syncPersonaCards } from './persona-card-sync'
 
@@ -9,12 +10,13 @@ const mocks = vi.hoisted(() => ({
   state: new Map<string, unknown>(),
   remote: new Map<string, Array<{ cardId: string, card: { name: string }, revision: number, deletedAt: null }>>(),
   posted: [] as Array<{ owner: string, ids: string[] }>,
+  requestedUrls: [] as string[],
   storage: new Map<string, string>(),
 }))
 
 vi.mock('localforage', () => ({ default: { createInstance: () => ({
   getItem: async (key: string) => mocks.state.get(key) ?? null,
-  setItem: async (key: string, value: unknown) => { mocks.state.set(key, value) },
+  setItem: async (key: string, value: unknown) => { mocks.state.set(key, structuredClone(value)) },
 }) } }))
 vi.mock('../stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 vi.mock('../stores/modules/airi-card', () => ({ useAiriCardStore: () => ({
@@ -32,6 +34,7 @@ vi.mock('../database/repos/notebook.repo', () => ({ notebookRepo: {} }))
 vi.mock('./auth', () => ({
   SERVER_URL: 'https://example.test',
   getOfficialApiFetch: () => async (url: string, init?: RequestInit) => {
+    mocks.requestedUrls.push(url)
     const owner = mocks.auth.user.id
     const rows = mocks.remote.get(owner) ?? []
     if (url.endsWith('/sync')) {
@@ -56,6 +59,7 @@ describe('persona card account sync', () => {
     mocks.state.clear()
     mocks.remote.clear()
     mocks.posted.length = 0
+    mocks.requestedUrls.length = 0
     mocks.storage.clear()
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => mocks.storage.get(key) ?? null,
@@ -64,12 +68,15 @@ describe('persona card account sync', () => {
   })
 
   it('keeps a first-sync collision for user choice without overwriting either version', async () => {
+    mocks.cards = reactive(mocks.cards)
     mocks.remote.set('owner-a', [{ cardId: 'default', card: { name: 'Cloud' }, revision: 2, deletedAt: null }])
     const conflicts = await syncPersonaCards()
     expect(conflicts).toMatchObject([{ id: 'default', local: { name: 'Local' }, remote: { name: 'Cloud' } }])
     expect(mocks.cards.get('default')?.name).toBe('Local')
     expect(mocks.posted).toEqual([])
     expect(await getPersonaCardConflicts()).toHaveLength(1)
+    expect(mocks.requestedUrls).toContain('https://example.test/api/persona-cards')
+    expect(mocks.requestedUrls).not.toContain('https://example.test/api/persona-cards/')
   })
 
   it('does not upload the previous account cards when the user switches accounts', async () => {

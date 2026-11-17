@@ -18,6 +18,7 @@ interface CreateWritingCraftContextInput {
   relationshipState?: AiriPersonaRelationshipStateSnapshot | null
   replyIntent: AiriReplyIntent
   expressionProfile: AiriExpressionProfile
+  memeIntensity?: number
 }
 
 function buildSceneCraft(input: CreateWritingCraftContextInput) {
@@ -78,7 +79,17 @@ function buildTextureCraft(input: CreateWritingCraftContextInput) {
     crafts.push('poetry=诗词是偏好不是口头禅；日常问候先用普通话，贴题时才留一点余味')
   }
 
-  if (input.expressionProfile.allowNetSlang) {
+  if (input.memeIntensity !== undefined) {
+    if (input.memeIntensity <= 0)
+      crafts.push('meme=这轮不主动使用网络梗或流行语')
+    else if (input.memeIntensity <= 45)
+      crafts.push('meme=只在语境明确时轻轻接梗；不要把每句话都改成梗')
+    else if (input.memeIntensity <= 70)
+      crafts.push('meme=普通聊天遇到贴题场景就主动带入一句熟悉的网络梗或流行语；别等对方先抛梗，再把正事说清楚')
+    else
+      crafts.push('meme=更主动、更频繁地自然使用网络梗、流行语和熟人式调侃；严肃话题收住')
+  }
+  else if (input.expressionProfile.allowNetSlang) {
     crafts.push('meme=二次元/网络梗只当熟人语气里的小火花，贴题时一闪就够')
   }
 

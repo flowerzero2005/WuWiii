@@ -210,11 +210,11 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
 
   // Enable/disable intelligent web search
   const enabled = useLocalStorageManualReset<boolean>('settings/web-search/enabled', false)
-  const maxRequestsPerTurn = useLocalStorageManualReset<number>('settings/web-search/max-requests-per-turn', 1)
+  const maxRequestsPerTurn = useLocalStorageManualReset<number>('settings/web-search/max-requests-per-turn', 3)
   // Zero means the published per-request quote times the explicit request limit.
   const maxOfficialPointsPerTurn = useLocalStorageManualReset<number>('settings/web-search/max-official-points-per-turn', 0)
 
-  const activeProvider = useLocalStorageManualReset<string>('settings/web-search/active-provider', 'tavily')
+  const activeProvider = useLocalStorageManualReset<string>('settings/web-search/active-provider', 'official-cloud-web-search')
 
   // Legacy Tavily key storage. Keep this as a migration bridge for users who
   // configured web search before Tavily moved into the provider settings page.
@@ -228,6 +228,8 @@ export const useWebSearchStore = defineStore('web-search-store', () => {
     }
     providersStore.markProviderAdded('tavily')
   }
+  if (activeProvider.value === 'tavily' && !getProviderApiKey('tavily'))
+    activeProvider.value = 'official-cloud-web-search'
 
   const tavilyApiKey = computed({
     get: () => getProviderApiKey('tavily') || legacyTavilyApiKey.value,

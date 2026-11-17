@@ -7,6 +7,14 @@ import { bindSearchToolExecution, createSearchExecutionBudget } from './executio
 const official = { providerId: 'official-cloud-web-search', maxRequests: 2, maxPoints: 6, pointsPerRequest: 3, priceVersion: 'v1', official: true }
 
 describe('shared turn search budget', () => {
+  it('allows up to five explicitly budgeted searches', () => {
+    const budget = createSearchExecutionBudget()
+    const lease = budget.begin({ ...official, maxRequests: 6, maxPoints: 15 })
+    expect(lease.maxRequests).toBe(5)
+    lease.finish(5)
+    expect(() => budget.begin(official)).toThrow('exhausted')
+  })
+
   it('reserves backup attempts across concurrent tool calls and returns only unused slots', () => {
     const budget = createSearchExecutionBudget()
     const first = budget.begin(official)

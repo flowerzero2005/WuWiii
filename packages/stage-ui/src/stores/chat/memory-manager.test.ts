@@ -1,3 +1,5 @@
+import type { ChatProvider } from '@xsai-ext/providers/utils'
+
 import type { NotebookData } from '../../database/repos/notebook.repo'
 import type { AiriReplyFeedbackMemorySummary, AiriReplyFeedbackScope } from '../../types/reply-feedback'
 import type { MemoryExtractionCandidate } from './memory-extractor'
@@ -18,6 +20,12 @@ const replyFeedbackScope: AiriReplyFeedbackScope = {
 const repoMock = vi.hoisted(() => ({
   load: vi.fn(),
   save: vi.fn<(scopeId: string, data: NotebookData) => Promise<NotebookData>>(),
+}))
+const savedNotebooks = new Map<string, NotebookData>()
+const extractMissingMemoryCaptureMock = vi.hoisted(() => vi.fn())
+
+vi.mock('./memory-capture-fallback', () => ({
+  extractMissingMemoryCapture: extractMissingMemoryCaptureMock,
 }))
 
 function makeReplyFeedbackSummary(
@@ -117,10 +125,16 @@ vi.mock('../user-identity', async () => {
 describe('memory manager', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    savedNotebooks.clear()
     repoMock.load.mockReset()
     repoMock.save.mockReset()
-    repoMock.load.mockResolvedValue(null)
-    repoMock.save.mockImplementation(async (_scopeId, data) => structuredClone(data))
+    extractMissingMemoryCaptureMock.mockReset()
+    repoMock.load.mockImplementation(async (scopeId: string) => structuredClone(savedNotebooks.get(scopeId) ?? null))
+    repoMock.save.mockImplementation(async (scopeId, data) => {
+      const saved = structuredClone(data)
+      savedNotebooks.set(scopeId, saved)
+      return structuredClone(saved)
+    })
   })
 
   it('writes source trace metadata through the completed-turn dispatcher', async () => {
@@ -214,7 +228,7 @@ describe('memory manager', () => {
         text: '用户现在更喜欢喝茶。',
         metadata: expect.objectContaining({ personaCardId: 'persona-b' }),
       })],
-    }))
+    }), expect.anything())
     expect(notebookStore.entries).toEqual([])
   })
 
@@ -302,6 +316,62 @@ describe('memory manager', () => {
 
     expect(result).toBeUndefined()
     expect(notebookStore.entries).toEqual([])
+  })
+
+  it('recovers a missing capture in the background and traces all merged user bubbles', async () => {
+    const savedByScope = new Map<string, NotebookData>()
+    repoMock.load.mockImplementation(async scopeId => structuredClone(savedByScope.get(scopeId) ?? null))
+    repoMock.save.mockImplementation(async (scopeId, data) => {
+      const saved = structuredClone(data)
+      savedByScope.set(scopeId, saved)
+      return structuredClone(saved)
+    })
+    extractMissingMemoryCaptureMock.mockResolvedValue({
+      candidates: [makeMemoryCandidate()],
+      requestId: 'fallback-request',
+    })
+
+    const notebookStore = useCharacterNotebookStore()
+    const memoryManager = useMemoryManager()
+    await notebookStore.loadFromStorage()
+    await memoryManager.processCompletedChatTurnForMemory({
+      userMessage: '我喜欢\n雨夜散步',
+      assistantMessage: '我记得啦。',
+      sourceSessionId: 'session-merged',
+      sourceUserMessageId: 'bubble-2',
+      sourceUserMessageIds: ['bubble-1', 'bubble-2'],
+      sourceAssistantMessageId: 'reply-1',
+      extractionRuntime: {
+        captureStatus: 'missing',
+        chatProvider: { chat: () => ({}) } as unknown as ChatProvider,
+        model: 'test-model',
+        memoryCandidates: [],
+      },
+    })
+
+    expect(extractMissingMemoryCaptureMock).toHaveBeenCalledTimes(1)
+    expect(notebookStore.entries).toHaveLength(1)
+    expect(notebookStore.entries[0]?.metadata?.sourceUserMessageIds).toEqual(['bubble-1', 'bubble-2'])
+    await memoryManager.deleteMemoriesForSourceMessage({
+      sourceSessionId: 'session-merged',
+      sourceMessageId: 'bubble-1',
+    })
+    expect(notebookStore.entries).toHaveLength(0)
+  })
+
+  it('does not make a second model request after an explicit empty capture', async () => {
+    const memoryManager = useMemoryManager()
+    await memoryManager.processCompletedChatTurnForMemory({
+      userMessage: '今天天气还行',
+      assistantMessage: '嗯，挺平静的。',
+      extractionRuntime: {
+        captureStatus: 'empty',
+        chatProvider: { chat: () => ({}) } as unknown as ChatProvider,
+        model: 'test-model',
+        memoryCandidates: [],
+      },
+    })
+    expect(extractMissingMemoryCaptureMock).not.toHaveBeenCalled()
   })
 
   it('does not reject a model-approved candidate only because evidence is summarized', async () => {
@@ -476,9 +546,9 @@ describe('memory manager', () => {
           },
         ],
       },
-    })
+    }).catch(error => error)
 
-    expect(result).toMatchObject({ success: true, savedCount: 1 })
+    expect(result).toMatchObject({ message: 'Some completed-turn memories remain pending' })
     expect(notebookStore.entries.map(entry => entry.text)).toEqual(['User plans a trip next week.'])
   })
 
@@ -635,7 +705,9 @@ describe('memory manager', () => {
         })],
       },
     })
-    await Promise.all([first, second])
+    const outcomes = await Promise.allSettled([first, second])
+    expect(outcomes[0]).toMatchObject({ status: 'rejected' })
+    expect(outcomes[1]).toMatchObject({ status: 'fulfilled' })
 
     expect(notebookStore.entries.map(entry => entry.text)).toEqual(['用户早餐喜欢喝热牛奶。'])
     expect(memoryManager.isProcessing).toBe(false)
@@ -662,7 +734,7 @@ describe('memory manager', () => {
 
     expect(removedEntries.map(removedEntry => removedEntry.id)).toEqual([entry.id])
     expect(notebookStore.entries).toHaveLength(0)
-    expect(repoMock.save).toHaveBeenCalledTimes(1)
+    expect(repoMock.save).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ entries: [] }))
   })
 
   it('marks returned memories with reference trace when requested', async () => {
@@ -947,7 +1019,7 @@ describe('memory manager', () => {
     expect(avoidCandidate).toBeDefined()
     await memoryManager.solidifyPersonaGrowthCandidate(avoidCandidate!.id)
 
-    expect(avoidCandidate?.metadata).toMatchObject({
+    expect(notebookStore.entries.find(entry => entry.id === avoidCandidate?.id)?.metadata).toMatchObject({
       importance: 'medium',
       memoryKind: 'persona-growth-memory',
       personaGrowthStatus: 'solidified',

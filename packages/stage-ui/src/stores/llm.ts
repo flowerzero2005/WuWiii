@@ -904,7 +904,7 @@ function getToolBundleRoutePolicy(bundleId: string) {
     case 'workspace-edit-apply':
       return 'Use only when the user asks to apply an already prepared workspace edit.'
     case 'web-search':
-      return 'Use only when the answer requires current, recent, online, or explicitly searched information.'
+      return 'Use proactively when checking facts, names, works, references, trending internet memes, their origin and meaning, recommendations, background, uncertainty, or current information could make the answer more accurate or interesting. The user need not explicitly request a search.'
     case 'memory':
       return 'Use when the user asks you to recall or search stored memory, refers to earlier personal facts that are not in recent conversation, or the answer materially depends on long-term memory. Do not fabricate remembered details.'
     case 'butler-tasks':
@@ -958,7 +958,7 @@ If intent, authorization, or consequences are unclear, ask one focused question 
 Available bundles:
 ${bundleSummary}
 
-If the user can be answered conversationally or from existing conversation context, answer normally.
+If the user can be answered conversationally or from existing conversation context, answer normally. When web search is enabled, prefer it for factual or cultural references even if an answer from memory seems possible; skip it for purely personal exchanges.
 For greetings, small talk, emotional support, roleplay, and ordinary conversation, answer normally and do not request tools.
 Never tell the user that an app action has been set, saved, scheduled, created, sent, or otherwise carried out unless you select the required tool in this turn. If the user is asking you to perform an available app action, route to its bundle; a conversational promise or confirmation is not a substitute for execution.
 If app tools are required for current web data, workspace files, memory lookup, screen inspection, widgets, butler tasks, or MCP actions, output exactly:

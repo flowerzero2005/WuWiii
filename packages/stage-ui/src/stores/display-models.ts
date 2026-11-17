@@ -94,6 +94,10 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
   }
 
   async function getDisplayModel(id: string) {
+    const preset = displayModelsPresets.find(model => model.id === id)
+    if (preset)
+      return preset
+
     await until(displayModelsFromIndexedDBLoading).toBe(false)
 
     const modelFromFile = await localforage.getItem<DisplayModelFile>(id)
@@ -101,12 +105,8 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
       return modelFromFile
     }
 
-    // Fallback to in-memory presets if not found in localforage
-    const preset = displayModelsPresets.find(model => model.id === id)
-    if (!preset) {
-      console.warn('[DisplayModels] Model not found:', id)
-    }
-    return preset
+    console.warn('[DisplayModels] Model not found:', id)
+    return undefined
   }
 
   async function loadLive2DModelPreview(file: File, compact = false) {
@@ -131,17 +131,17 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     const isPocket = typeof window !== 'undefined' && Boolean((window as Window & { pocketBridge?: unknown }).pocketBridge)
 
     if (format === DisplayModelFormat.Live2dZip) {
-      if (isPocket) {
-        const { default: JSZip } = await import('jszip')
-        const archive = await JSZip.loadAsync(await file.arrayBuffer())
-        const paths = Object.keys(archive.files)
-        if (!paths.some(path => path.endsWith('model3.json')) && !paths.some(path => path.endsWith('.moc3')))
-          throw new Error('压缩包中没有 Live2D 模型文件。')
-        newDisplayModel.previewImage = await loadLive2DModelPreview(file, true)
-      }
-      else {
-        newDisplayModel.previewImage = await loadLive2DModelPreview(file)
-      }
+      const { default: JSZip } = await import('jszip')
+      const archive = await JSZip.loadAsync(await file.arrayBuffer())
+      const paths = Object.keys(archive.files)
+      const settingsPath = paths.find(path => path.toLowerCase().endsWith('.model3.json'))
+      if (!settingsPath && !paths.some(path => path.toLowerCase().endsWith('.moc3')))
+        throw new Error('压缩包中没有 Live2D 模型文件。')
+      const previewPath = settingsPath?.replace(/\.model3\.json$/i, '.png')
+      const suppliedPreview = previewPath && archive.file(previewPath)
+      newDisplayModel.previewImage = suppliedPreview
+        ? `data:image/png;base64,${await suppliedPreview.async('base64')}`
+        : await loadLive2DModelPreview(file, isPocket)
     }
     else if (format === DisplayModelFormat.VRM) {
       if (isPocket) {

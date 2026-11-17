@@ -5,6 +5,7 @@ import {
   BUTLER_TASKS_TOOL_BUNDLE_ID,
   MCP_EXPLICIT_ACTION_TOOL_BUNDLE_ID,
   MEMORY_TOOL_BUNDLE_ID,
+  WEB_SEARCH_TOOL_BUNDLE_ID,
   WORKSPACE_EDIT_APPLY_TOOL_BUNDLE_ID,
   WORKSPACE_EDIT_PREVIEW_TOOL_BUNDLE_ID,
   WORKSPACE_READONLY_TOOL_BUNDLE_ID,
@@ -45,7 +46,7 @@ describe('chat tool bundles', () => {
       webSearchEnabled: true,
     })
 
-    expect(result.toolBundles.map(bundle => bundle.id)).toEqual([MEMORY_TOOL_BUNDLE_ID])
+    expect(result.toolBundles.map(bundle => bundle.id)).toEqual([WEB_SEARCH_TOOL_BUNDLE_ID, MEMORY_TOOL_BUNDLE_ID])
     expect(memoryTools).not.toHaveBeenCalled()
     for (const loader of Object.values(toolLoaderMocks))
       expect(loader).not.toHaveBeenCalled()

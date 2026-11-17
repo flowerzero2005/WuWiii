@@ -29,7 +29,7 @@ describe('voice call session state', () => {
     expect(interactiveAreaSource).toContain('sourceSurface: \'voice-call\'')
     expect(interactiveAreaSource).toContain('disableMessageMerging: true')
     expect(interactiveAreaSource).toContain('targetSessionId: voiceCallSessionId')
-    expect(interactiveAreaSource).toContain('}, options.targetSessionId)')
+    expect(interactiveAreaSource).toContain('const turnSessionId = options.targetSessionId ?? activeSessionId.value')
   })
 
   it('keeps voice-call interruption detection and cleanup in the active call window', () => {
@@ -172,7 +172,7 @@ describe('voice call session state', () => {
     expect(interactiveAreaSource).toContain('data-floating-replies-toggle="chat"')
     expect(interactiveAreaSource).toContain('data-floating-replies-toggle="quick-chat"')
     expect(interactiveAreaSource).toContain('data-floating-replies-toggle="voice-call"')
-    expect(interactiveAreaSource.match(/quickChatSettingsStore\.setFloatingRepliesEnabled/g)).toHaveLength(3)
+    expect(interactiveAreaSource.match(/quickChatSettingsStore\.setFloatingRepliesEnabled/g)).toHaveLength(4)
     expect(quickChatSettingsPageSource).toContain(':model-value="settings.floatingRepliesEnabled"')
     expect(quickChatSettingsPageSource).toContain('@update:model-value="quickChatSettingsStore.setFloatingRepliesEnabled"')
   })

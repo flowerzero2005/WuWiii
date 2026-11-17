@@ -40,12 +40,13 @@ async function load(more = false) {
     hasMore.value = page.length === 50
     if (!more) {
       const contexts = await getOfficialApiFetch()(`${SERVER_URL}/api/qq/context/conversations`, { credentials: 'include' })
-      if (contexts.ok)
-        conversations.value = await contexts.json() as QqConversation[]
+      if (!contexts.ok)
+        throw new Error(`QQ 短期上下文加载失败（HTTP ${contexts.status}）`)
+      conversations.value = await contexts.json() as QqConversation[]
     }
   }
-  catch {
-    error.value = 'QQ 对话记录暂时无法加载'
+  catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'QQ 对话记录暂时无法加载'
   }
   finally {
     loading.value = false
@@ -66,13 +67,15 @@ async function clearContext(key: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationKey: key }),
     })
-    if (!response.ok || !(await response.json() as { cleared: boolean }).cleared)
-      throw new Error('clear failed')
+    if (!response.ok)
+      throw new Error(`清除 QQ 短期上下文失败（HTTP ${response.status}）`)
+    if (!(await response.json() as { cleared: boolean }).cleared)
+      throw new Error('未找到属于当前账号的 QQ 对话')
     confirmKey.value = ''
     await load()
   }
-  catch {
-    error.value = '清除 QQ 短期上下文失败，请重试'
+  catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '清除 QQ 短期上下文失败，请重试'
   }
   finally {
     clearingKey.value = ''

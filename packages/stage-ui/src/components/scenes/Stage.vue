@@ -123,6 +123,11 @@ let lastModelErrorAt = 0
 
 function handleDisplayModelError(detail: { error: string, modelId?: string }) {
   console.error('[Stage] Failed to load display model:', detail)
+  if (typeof window !== 'undefined' && !(window as Window & { pocketBridge?: unknown }).pocketBridge) {
+    const message = `${detail.modelId || 'display model'}: ${detail.error}`
+    document.documentElement.dataset.airiStageRendererError = message
+    window.dispatchEvent(new CustomEvent('airi:stage-renderer-error', { detail: message }))
+  }
   if (typeof window === 'undefined' || !(window as Window & { pocketBridge?: unknown }).pocketBridge)
     return
   const currentModel = stageModelSelectedDisplayModel.value
@@ -224,6 +229,10 @@ function releaseAutomaticEmotion(options: { scopeId?: string, transitionMs?: num
 }
 
 const showStage = ref(true)
+watch(stageModelRenderer, (renderer) => {
+  if (renderer === 'disabled')
+    componentState.value = 'mounted'
+}, { immediate: true })
 const viewUpdateCleanups: Array<() => void> = []
 
 // Caption + Presentation broadcast channels

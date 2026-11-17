@@ -94,10 +94,10 @@ describe('intelligentWebSearch', () => {
     expect(result).toMatchObject({ success: true })
   })
 
-  it('caps multi-round search at two requests and passes one cancellation signal to each round', async () => {
+  it('caps multi-round search at five requests and passes one cancellation signal to each round', async () => {
     mocks.buildSearchQueryStrategy.mockReturnValue({
       depth: 'shallow',
-      fallbackQueries: ['second query', 'third query'],
+      fallbackQueries: ['second query', 'third query', 'fourth query', 'fifth query', 'sixth query'],
       filters: {},
       keywords: ['first query'],
       multiRound: true,
@@ -124,13 +124,17 @@ describe('intelligentWebSearch', () => {
       { abortSignal: controller.signal, messages: [], toolCallId: 'search-call' },
     )
 
-    expect(mocks.performWebSearch).toHaveBeenCalledTimes(2)
+    expect(mocks.performWebSearch).toHaveBeenCalledTimes(5)
     expect(mocks.performWebSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
       query: 'first query',
       signal: expect.any(AbortSignal),
     }))
     expect(mocks.performWebSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({
       query: 'second query',
+      signal: expect.any(AbortSignal),
+    }))
+    expect(mocks.performWebSearch).toHaveBeenNthCalledWith(5, expect.objectContaining({
+      query: 'fifth query',
       signal: expect.any(AbortSignal),
     }))
   })

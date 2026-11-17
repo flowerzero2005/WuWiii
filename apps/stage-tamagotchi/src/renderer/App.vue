@@ -378,9 +378,29 @@ async function registerRuntimeBridges() {
 
 async function initializeCardRuntime() {
   const { useAiriCardStore } = await import('@proj-airi/stage-ui/stores/modules/airi-card')
+  const { DEFAULT_STAGE_MODEL_ID, useSettingsStageModel } = await import('@proj-airi/stage-ui/stores/settings/stage-model')
   const cardStore = useAiriCardStore()
+  const stageModelStore = useSettingsStageModel()
   cardStore.initialize()
-  await cardStore.applyActiveDisplayModel()
+  if (cardStore.activeCard)
+    await cardStore.applyActiveDisplayModel()
+  if (!stageModelStore.stageModelRenderer)
+    await stageModelStore.updateStageModel()
+  if (stageModelStore.stageModelRenderer === 'disabled' && stageModelStore.stageModelSelected !== DEFAULT_STAGE_MODEL_ID) {
+    const unavailableModelId = stageModelStore.stageModelSelected
+    if (unavailableModelId) {
+      try {
+        localStorage.setItem('settings/stage/last-unavailable-model', unavailableModelId)
+      }
+      catch (error) {
+        console.warn('[App] Failed to save unavailable stage model ID:', error)
+      }
+    }
+    console.warn('[App] Selected stage model is unavailable; loading the built-in model:', unavailableModelId)
+    await stageModelStore.applyPersonaDisplayModel(DEFAULT_STAGE_MODEL_ID)
+  }
+  if (stageModelStore.stageModelRenderer === 'disabled' && shouldInitializeStageRuntime.value)
+    throw new Error('The built-in stage model could not be loaded.')
 }
 
 async function initializeChatRuntime() {
@@ -918,6 +938,10 @@ onUnmounted(() => {
           <span :class="['runtime-bootstrap-pulse size-1.5 rounded-full']" />
           <span>{{ i18n.t('tamagotchi.stage.bootstrap.waiting') }}</span>
         </div>
+
+        <p v-if="runtimeError && runtimeErrorDetails" :class="['max-h-24 overflow-y-auto break-words text-xs leading-5 airi-text-muted']">
+          {{ runtimeErrorDetails }}
+        </p>
 
         <div v-if="runtimeError" :class="['mt-1 grid grid-cols-3 gap-2']">
           <button

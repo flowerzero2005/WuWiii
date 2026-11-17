@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { PageHeader } from '@proj-airi/stage-ui/components'
+import { isStageCapacitor } from '@proj-airi/stage-shared'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { getSettingsSurfaceStyle, useSettingsTheme } from '@proj-airi/stage-ui/stores/settings/theme'
 import { useTheme } from '@proj-airi/ui'
@@ -113,7 +114,7 @@ onMounted(() => updateThemeColor())
         class="settings-page-header"
         :title="routeHeaderMetadata?.title || ''"
         :subtitle="routeHeaderMetadata?.subtitle"
-        :disable-back-button="route.path === '/settings' && !isMobile"
+        :disable-back-button="!isStageCapacitor() && route.path.replace(/\/+$/, '') === '/settings'"
         :back-to="isMobile ? settingsBackTo : undefined"
       />
       <div ref="scrollContainer" relative min-h-0 flex-1 overflow-y-auto :class="showMemoryScrollbar ? 'settings-memory-scrollbar' : 'scrollbar-none'">

@@ -26,9 +26,11 @@ export function usePersonaPackageGenerator(options: PersonaPackageGeneratorOptio
 
   const isGeneratingPersonaPackage = ref(false)
   const personaPackageGenerationError = ref<PersonaPackageGenerationErrorCode>('')
+  const personaPackageGenerationErrorDetail = ref('')
 
   function clearPersonaPackageGenerationError() {
     personaPackageGenerationError.value = ''
+    personaPackageGenerationErrorDetail.value = ''
   }
 
   async function generatePersonaPackageWithCurrentModel() {
@@ -73,20 +75,9 @@ export function usePersonaPackageGenerator(options: PersonaPackageGeneratorOptio
         growthMemories: options.getGrowthMemories?.(),
       }
       const prompt = buildPersonaPackageGenerationPrompt(generationInput)
-      const providerConfig = providersStore.getProviderConfig(providerName)
-      const providerConfigObject = typeof providerConfig === 'object' && providerConfig !== null
-        ? providerConfig as Record<string, any>
-        : {}
       const chatConfig = provider.chat(model)
-      const response = await generateText({
+      const request = () => generateText({
         ...chatConfig,
-        ...providerConfigObject,
-        headers: {
-          ...chatConfig.headers,
-          ...(typeof providerConfigObject.headers === 'object' && providerConfigObject.headers !== null
-            ? providerConfigObject.headers
-            : {}),
-        },
         messages: [
           {
             role: 'system',
@@ -98,8 +89,19 @@ export function usePersonaPackageGenerator(options: PersonaPackageGeneratorOptio
           },
         ],
         model,
-        temperature: 0.25,
       })
+      let response
+      try {
+        response = await request()
+      }
+      catch (error) {
+        const status = (error as { status?: unknown })?.status
+        const message = error instanceof Error ? error.message : String(error)
+        if (![502, 503, 504].includes(Number(status)) && !/\b50[234]\b/.test(message))
+          throw error
+        await new Promise(resolve => setTimeout(resolve, 450))
+        response = await request()
+      }
 
       const profile = parseGeneratedPersonaExpandedProfile(String(response.text ?? '').trim())
       if (!profile) {
@@ -111,6 +113,7 @@ export function usePersonaPackageGenerator(options: PersonaPackageGeneratorOptio
     }
     catch (error) {
       personaPackageGenerationError.value = 'request-failed'
+      personaPackageGenerationErrorDetail.value = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)
       console.error(`[${options.logLabel}] Failed to generate persona package:`, error)
     }
     finally {
@@ -123,5 +126,6 @@ export function usePersonaPackageGenerator(options: PersonaPackageGeneratorOptio
     generatePersonaPackageWithCurrentModel,
     isGeneratingPersonaPackage,
     personaPackageGenerationError,
+    personaPackageGenerationErrorDetail,
   }
 }

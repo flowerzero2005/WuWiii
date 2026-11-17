@@ -1108,6 +1108,8 @@ chatHookCleanups.push(onBeforeMessageComposed(async (_message, context) => {
         priority: 'normal',
         behavior: 'queue',
         segmentation: speechSnapshot.segmentation,
+        selection: speechSnapshot.selection,
+        tone: speechSnapshot.tone,
       })
     : undefined
   chatSpeechIntents.set(speechSnapshot.intentId, { handle, segmentation: speechSnapshot.segmentation })

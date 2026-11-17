@@ -394,6 +394,7 @@ const cardPostHistoryInstructions = makeComputed('postHistoryInstructions')
 
 const {
   characterSettingsGenerationError,
+  characterSettingsGenerationErrorDetail,
   generateCharacterSettingsWithCurrentModel,
   isGeneratingCharacterSettings,
 } = useCardCharacterGenerator({
@@ -416,7 +417,7 @@ async function handleGenerateCharacterSettings() {
   const result = await generateCharacterSettingsWithCurrentModel()
   if (!result) {
     const code = characterSettingsGenerationError.value || 'request-failed'
-    toast.error(t(`settings.pages.card.creation.character_generation_errors.${code}`))
+    toast.error(`${t(`settings.pages.card.creation.character_generation_errors.${code}`)}${characterSettingsGenerationErrorDetail.value ? `：${characterSettingsGenerationErrorDetail.value}` : ''}`)
     return
   }
 

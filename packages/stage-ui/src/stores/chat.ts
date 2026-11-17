@@ -39,8 +39,9 @@ import { useCharacterNotebookStore } from './character/notebook'
 import { buildAiriAntiTemplateGuard, buildAiriAntiTemplateRewritePressure } from './chat/anti-template-guard'
 import { recordCharacterStickerUse, selectCharacterSticker } from './chat/character-stickers'
 import { isChatDiagnosticsEnabled, logChatTrace } from './chat/chat-diagnostics'
-import { ANTI_TEMPLATE_GUARD_CONTEXT_ID, createAntiTemplateGuardContext, createCharacterPerformanceContext, createDatetimeContext, createEmotionHistoryContext, createMemeWikiContextMessage, createMemoryCapturePrompt, createMemorySystemPrompt, createNotebookMemoryContext, createPersonaStateContext, createPsychologicalCueContext, createRelationshipStateContext, createReplyFeedbackMemoryContext, createReplyIntentContext, createSceneModeContext, createWritingCraftContext, EMOTION_HISTORY_CONTEXT_ID, EMOTION_MEMORY_CONTEXT_ID, lookupMemeWikiContext, MEMORY_SYSTEM_CONTEXT_ID, NOTEBOOK_MEMORY_CONTEXT_ID, REPLY_FEEDBACK_MEMORY_CONTEXT_ID } from './chat/context-providers'
+import { ANTI_TEMPLATE_GUARD_CONTEXT_ID, createAntiTemplateGuardContext, createCharacterPerformanceContext, createDatetimeContext, createEmotionHistoryContext, createMemeWikiContextMessage, createMemeWikiStyleContextMessage, createMemoryCapturePrompt, createMemorySystemPrompt, createNotebookMemoryContext, createPersonaStateContext, createPsychologicalCueContext, createRelationshipStateContext, createReplyFeedbackMemoryContext, createReplyIntentContext, createSceneModeContext, createWritingCraftContext, EMOTION_HISTORY_CONTEXT_ID, EMOTION_MEMORY_CONTEXT_ID, lookupMemeWikiContext, MEMORY_SYSTEM_CONTEXT_ID, NOTEBOOK_MEMORY_CONTEXT_ID, REPLY_FEEDBACK_MEMORY_CONTEXT_ID } from './chat/context-providers'
 import { resolveEmotionMemoryContext } from './chat/context-providers/emotion-memory'
+import { createUserMessageSequenceContext } from './chat/context-providers/user-message-sequence'
 import { useChatContextStore } from './chat/context-store'
 import { fitMessagesToContextWindow } from './chat/context-window'
 import { createConversationInitContext } from './chat/conversation-initializer'
@@ -85,7 +86,9 @@ import { useLLM } from './llm'
 import { useAiriCardStore } from './modules/airi-card'
 import { useSpeechStore } from './modules/speech'
 import { useProvidersStore } from './providers'
+import { useMemorySettingsStore } from './settings/memory'
 import { useMemoryAdvancedSettingsStore } from './settings/memory-advanced'
+import { useMemeWikiSettingsStore } from './settings/meme-wiki'
 import { useSpeechPlaybackSettingsStore } from './settings/speech-playback'
 import { useSettingsStageModel } from './settings/stage-model'
 import { useSpeechDisplaySyncStore } from './speech-display-sync'
@@ -124,6 +127,7 @@ export interface SendOptions {
   runtimeSignal?: ChatTrustedRuntimeSignal
   sourceCreatedAt?: number
   sourceUserMessageId?: string
+  sourceUserMessageIds?: string[]
   sourceSurface?: string
   disableMessageMerging?: boolean
   personaRuntime?: GroupChatPersonaRuntime
@@ -398,6 +402,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const replyFeedbackStore = useReplyFeedbackStore()
   const replyFeedbackReflection = useReplyFeedbackReflectionStore()
   const memoryManager = useMemoryManager()
+  const memorySettings = useMemorySettingsStore()
   const memoryAdvancedSettings = useMemoryAdvancedSettingsStore()
   const speechPlaybackSettings = useSpeechPlaybackSettingsStore()
   const speechStore = useSpeechStore()
@@ -504,7 +509,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   // 消息合并功能：用于累积用户连续发送的消息
   interface PendingMergeState {
     generation: number
-    messages: string[]
+    messages: Array<{ id: string, text: string, createdAt: number }>
     options: SendOptions
     timer: ReturnType<typeof setTimeout> | null
     deferreds: Array<{ resolve: () => void, reject: (error: unknown) => void }>
@@ -876,8 +881,12 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       sessionId,
     }))
     turnContext.ingestContextMessage(createMemeWikiContextMessage())
-    const memeContextPromise = authStore.isAuthenticated
-      ? resolveOptionalContext(lookupMemeWikiContext(providerInputText), 500)
+    turnContext.ingestContextMessage(createMemeWikiStyleContextMessage())
+    const memeWikiSettings = useMemeWikiSettingsStore()
+    const memeWikiEnabled = memeWikiSettings.settings.enabled
+    const memeWikiIntensity = memeWikiSettings.settings.intensity
+    const memeContextPromise = authStore.isAuthenticated && memeWikiEnabled && memeWikiIntensity > 0
+      ? resolveOptionalContext(lookupMemeWikiContext(providerInputText, undefined, memeWikiIntensity), 900)
       : Promise.resolve(undefined)
 
     // 对话初始化：在对话开始时注入个性化提示
@@ -900,6 +909,9 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       console.warn('[Chat] Conversation init feature error:', error)
     }
 
+    if (memeWikiEnabled)
+      turnContext.ingestContextMessage(createMemeWikiStyleContextMessage(memeWikiIntensity))
+
     const sessionMessages = chatSession.getSessionMessages(sessionId)
     // Every group speaker needs the public room transcript, not only its own
     // previous turns. This keeps serial replies grounded in what the other
@@ -910,6 +922,11 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
     // Inject current datetime context before composing the message.
     turnContext.ingestContextMessage(createDatetimeContext({ recentMessages: recentSessionMessages }))
+    const userMessageSequence = !options.hiddenUserMessage && !groupRuntime
+      ? createUserMessageSequenceContext(recentSessionMessages)
+      : undefined
+    if (userMessageSequence)
+      turnContext.ingestContextMessage(userMessageSequence)
     const memeContext = await memeContextPromise
     if (memeContext)
       turnContext.ingestContextMessage(memeContext)
@@ -1150,6 +1167,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       relationshipState: relationshipStateSnapshot,
       replyIntent,
       expressionProfile: turnExpressionProfile,
+      memeIntensity: memeWikiEnabled ? memeWikiIntensity : undefined,
     }))
 
     const antiTemplateGuard = buildAiriAntiTemplateGuard(recentSessionMessages, {
@@ -1208,9 +1226,11 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
     }
 
     const memoryContextMode = options.memoryContextMode ?? 'automatic'
+    const memoryCaptureEnabled = memoryContextMode !== 'disabled'
+      && memorySettings.settings.enabled && memorySettings.settings.autoExtract
     turnContext.clearContext(MEMORY_SYSTEM_CONTEXT_ID)
     turnContext.clearContext(NOTEBOOK_MEMORY_CONTEXT_ID)
-    if (memoryContextMode !== 'disabled')
+    if (memoryCaptureEnabled)
       turnContext.ingestContextMessage(createMemoryCapturePrompt())
 
     if (!groupRuntime && memoryContextMode === 'tool') {
@@ -1424,12 +1444,14 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
           // streaming 下不产出任何 TTS/播放事件（60s 宽限仍无事件→按失败揭示、
           // 群聊看门狗 45s 强杀），回退 whole：整段合成完开播、事件链已验证正常。
           // 首声等待 = 合成时长，属官方云整段合成特性，不在客户端环节卡锁。
-          segmentation: groupRuntime || streamingMessageContext.internal?.sourceSurface === 'voice-call'
+          segmentation: groupRuntime
             ? 'whole'
-            : resolveChatSpeechSegmentation(
-                speechPlaybackSettings.settings.displaySyncWithSpeech,
-                speechRequestConfig?.providerId,
-              ),
+            : streamingMessageContext.internal?.sourceSurface === 'voice-call'
+              ? 'streaming'
+              : resolveChatSpeechSegmentation(
+                  speechPlaybackSettings.settings.displaySyncWithSpeech,
+                  speechRequestConfig?.providerId,
+                ),
           selection: speechSelection,
           tone: streamingMessageContext.internal?.speechTone ?? null,
         }
@@ -1942,6 +1964,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
       // are validated before they can reach memory; visible text is handled by
       // the marker parser and never includes this envelope.
       let memoryCandidates: import('./chat/memory-extractor').MemoryExtractionCandidate[] = []
+      let memoryCaptureStatus: 'valid' | 'empty' | 'missing' | 'invalid' = 'missing'
       let rawProviderText = ''
       const headers = (options.providerConfig?.headers || {}) as Record<string, string>
       const openingStreamPlan = createAiriOpeningStreamPlan(replyIntent)
@@ -3039,13 +3062,18 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
             return
 
           const captured = parseMemoryCaptureMarker(special)
-          if (captured)
+          if (captured !== undefined) {
+            memoryCaptureStatus = captured.length ? 'valid' : 'empty'
             memoryCandidates = [...memoryCandidates, ...captured].slice(0, 4)
+          }
           // MEMORY_CAPTURE is private application data, never a generic
           // performance/action marker. Invalid envelopes are intentionally
           // discarded as well; they must not trigger any special hook.
-          if (MEMORY_CAPTURE_MARKER_RE.test(special))
+          if (MEMORY_CAPTURE_MARKER_RE.test(special)) {
+            if (captured === undefined && memoryCaptureStatus === 'missing')
+              memoryCaptureStatus = 'invalid'
             return
+          }
 
           // Buffered replies commit performance markers after the optional persona rewrite.
           if (!bufferReplyUntilSafetyDecision)
@@ -3134,6 +3162,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
                 toolActivitySummary,
                 antiTemplateGuard: rewriteAntiTemplateGuard,
                 expressionProfile: turnExpressionProfile,
+                memeIntensity: memeWikiEnabled ? memeWikiIntensity : undefined,
                 personaFingerprint: turnPersonaFingerprint,
                 emotionDimensions: turnEmotionDimensions,
                 toolOutcome: toolOutcomeForRewrite,
@@ -3578,7 +3607,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         })
       }
 
-      const languageInstruction = `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}. Do not draft the final reply in English and translate it afterward. Preserve code, proper names, and user-provided quotations when appropriate. Never append analysis, reasoning, planning notes, prompt summaries, or memory commentary as ordinary reply text. If an application instruction requires a private <|...|> marker, emit only that exact marker without explaining it.`
+      const languageInstruction = `Reply directly in ${streamingMessageContext.turn.language.targetLanguage}. Do not draft the final reply in English and translate it afterward. Preserve code, proper names, and user-provided quotations when appropriate. Never append analysis, reasoning, planning notes, prompt summaries, or memory commentary as ordinary reply text. If an application instruction requires a private <|...|> marker, emit only that exact marker without explaining it.${userMessageSequence ? ' Several recent user bubbles form one unfolding turn. Use the private timestamped sequence to resolve corrections, additions, and topic changes before replying; do not answer each bubble mechanically.' : ''}${memoryCaptureEnabled ? ' After the visible reply, always append exactly one private <|MEMORY_CAPTURE {"memories":[...]}|> envelope according to the memory protocol, using an empty array only when nothing is useful. Keep it out of visible prose.' : ''}`
       const firstMessage = newMessages[0]
       newMessages = firstMessage?.role === 'system'
         ? [
@@ -4245,14 +4274,16 @@ ${contextTexts}
       const readableFinalText = createReadableFinalText(fullText, turnProviderId)
       const readableFinalSpeechText = createReadableSpeechText(finalSpeechSource, turnProviderId)
       const visibleAssistantText = readableFinalText
-      if (!groupRuntime && !options.hiddenUserMessage && authStore.isAuthenticated && visibleAssistantText && visibleAssistantMessageId) {
+      if (!groupRuntime && !options.hiddenUserMessage && visibleAssistantText && visibleAssistantMessageId) {
         const stickerTurnMessages = chatSession.getSessionMessages(sessionId).filter(item => item.role === 'assistant' && item.metadata?.assistantTurnId === assistantTurnId)
-        const stickerTargetMessageId = stickerTurnMessages.at(-1)?.id ?? visibleAssistantMessageId
         void selectCharacterSticker({
           characterId: turnPersonaCardId,
           turnId,
           userText: sendingMessage,
           assistantText: visibleAssistantText,
+          placementText: typeof stickerTurnMessages.at(-1)?.content === 'string'
+            ? stickerTurnMessages.at(-1)!.content as string
+            : visibleAssistantText,
           chatProvider: options.chatProvider,
           model: options.model,
           headers,
@@ -4261,10 +4292,13 @@ ${contextTexts}
         }).then(async (sticker) => {
           if (!sticker || shouldAbort())
             return
+          const stickerTargetMessageId = sticker.placement === 'before'
+            ? stickerTurnMessages[0]?.id ?? visibleAssistantMessageId
+            : stickerTurnMessages.at(-1)?.id ?? visibleAssistantMessageId
           const message = chatSession.getSessionMessages(sessionId).find(item => item.id === stickerTargetMessageId && item.role === 'assistant')
           if (!message)
             return
-          message.metadata = { ...message.metadata, chatStickerAssetId: sticker.id, chatStickerImageData: sticker.imageData }
+          message.metadata = { ...message.metadata, chatStickerAssetId: sticker.id, chatStickerImageData: sticker.imageData, chatStickerPlacement: sticker.placement, ...('paragraphIndex' in sticker ? { chatStickerParagraphIndex: sticker.paragraphIndex } : {}) }
           await chatSession.persistSessionMessages(sessionId, { immediate: true })
           await recordCharacterStickerUse(turnPersonaCardId, sticker.id)
         }).catch((error) => {
@@ -4357,10 +4391,17 @@ ${contextTexts}
         sourceSessionId: sessionId,
         sourceCreatedAt: options.sourceCreatedAt ?? sendingCreatedAt,
         sourceUserMessageId: options.sourceUserMessageId ?? streamingMessageContext.message?.id,
+        sourceUserMessageIds: options.sourceUserMessageIds,
         sourceAssistantMessageId: visibleAssistantMessageId,
         sourceAssistantMessageIds,
         sourceSurface: options.sourceSurface ?? 'chat-store',
-        extractionRuntime: { memoryCandidates },
+        extractionRuntime: {
+          memoryCandidates,
+          captureStatus: memoryCaptureStatus,
+          ...(memoryCaptureEnabled && (memoryCaptureStatus === 'missing' || memoryCaptureStatus === 'invalid')
+            ? { chatProvider: options.chatProvider, model: options.model, providerId: turnProviderId }
+            : {}),
+        },
         ...turnMemoryScope,
         memoryScope: 'current-persona',
       }
@@ -4829,8 +4870,12 @@ ${contextTexts}
             }
         if (state.timer)
           clearTimeout(state.timer)
-        state.messages.push(sendingMessage)
-        state.options = optionsWithSourceTrace
+        state.messages.push({ id: userMessageId, text: sendingMessage, createdAt: userMessageCreatedAt })
+        state.options = {
+          ...optionsWithSourceTrace,
+          sourceCreatedAt: state.messages[0].createdAt,
+          sourceUserMessageIds: state.messages.map(message => message.id),
+        }
         pendingMerges.set(sessionId, state)
 
         return new Promise<void>((resolve, reject) => {
@@ -4839,7 +4884,7 @@ ${contextTexts}
             if (pendingMerges.get(sessionId) !== state)
               return
             pendingMerges.delete(sessionId)
-            const mergedMessage = state.messages.join('\n')
+            const mergedMessage = state.messages.map(message => message.text).join('\n')
             sendQueue.enqueue({
               sendingMessage: mergedMessage,
               options: state.options,

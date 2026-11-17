@@ -9,6 +9,7 @@ import { defineStore, storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import { client } from '../../composables/api'
+import { getOfficialApiFetch, SERVER_URL } from '../../libs/auth'
 import { useLocalFirstRequest } from '../../composables/use-local-first'
 import { chatSessionsRepo } from '../../database/repos/chat-sessions.repo'
 import { summarizeChatHistoryMessage } from '../../utils/chat-message-summary'
@@ -755,6 +756,7 @@ export const useChatSessionStore = defineStore('chat-session', () => {
             },
             members,
             messages: buildSyncMessages(normalizedMessages),
+            sessionRecord: cachedRecord,
           },
         })
 
@@ -952,6 +954,42 @@ export const useChatSessionStore = defineStore('chat-session', () => {
     if (!stored && usesScopedLocalUser()) {
       await migrateIndexForScopedUser(currentUserId)
       stored = await chatSessionsRepo.getIndex(currentUserId)
+    }
+
+    const hasLocalSessions = Object.values(stored?.characters ?? {}).some(character => Object.keys(character?.sessions ?? {}).length > 0)
+    if (!hasLocalSessions && isAuthenticated.value) {
+      try {
+        const response = await getOfficialApiFetch()(`${SERVER_URL}/api/chats/restore`, {
+          credentials: 'include',
+          signal: AbortSignal.timeout(5000),
+        })
+        if (response.ok && getCurrentUserId() === currentUserId) {
+          const records = await response.json() as ChatSessionRecord[]
+          const restored: ChatSessionsIndex = { userId: currentUserId, characters: {} }
+          for (const raw of records) {
+            try {
+              const record = normalizeSessionRecord(raw)
+              const meta = record.meta
+              if (meta.userId !== currentUserId || !meta.sessionId || isSessionMemoryWorkCancelled(meta.sessionId))
+                continue
+              const character = restored.characters[meta.characterId] ?? { activeSessionId: meta.sessionId, sessions: {} }
+              character.sessions[meta.sessionId] = meta
+              restored.characters[meta.characterId] = character
+              await chatSessionsRepo.saveSession(meta.sessionId, record)
+            }
+            catch (error) {
+              console.warn('[ChatSession] Skipped unreadable cloud session:', error)
+            }
+          }
+          if (Object.keys(restored.characters).length) {
+            await chatSessionsRepo.saveIndex(restored)
+            stored = restored
+          }
+        }
+      }
+      catch (error) {
+        console.warn('[ChatSession] Cloud session restore unavailable:', error)
+      }
     }
 
     if (getCurrentUserId() !== currentUserId)
@@ -1181,6 +1219,15 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       console.warn('[ChatSession] Session deleted; index repair is pending:', error)
     }
     adoptPersistedIndex(latest)
+    if (isAuthenticated.value) {
+      void getOfficialApiFetch()(`${SERVER_URL}/api/chats/backup/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      }).then((response) => {
+        if (!response.ok)
+          console.warn('[ChatSession] Cloud session deletion failed:', response.status)
+      }).catch(error => console.warn('[ChatSession] Cloud session deletion failed:', error))
+    }
   }
 
   function fenceCommittedSessionDeletion(sessionId: string) {
@@ -2047,6 +2094,12 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       await ensureActiveSessionForCharacter()
       catalogOwnerId.value = getCurrentUserId()
       ready.value = true
+      if (isAuthenticated.value && index.value) {
+        for (const character of Object.values(index.value.characters)) {
+          for (const sessionId of Object.keys(character.sessions))
+            scheduleSync(sessionId)
+        }
+      }
     })()
 
     try {

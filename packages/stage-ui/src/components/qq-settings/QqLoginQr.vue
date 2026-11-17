@@ -6,8 +6,21 @@ import { ref, watch } from 'vue'
 const props = defineProps<{ value: string }>()
 const imageUrl = ref('')
 
-watch(() => props.value, async (value) => {
-  imageUrl.value = value ? await QRCode.toDataURL(value, { width: 224, margin: 2, errorCorrectionLevel: 'M' }) : ''
+watch(() => props.value, async (value, _previous, onCleanup) => {
+  let active = true
+  onCleanup(() => { active = false })
+  imageUrl.value = ''
+  if (!value)
+    return
+  try {
+    const next = await QRCode.toDataURL(value, { width: 224, margin: 2, errorCorrectionLevel: 'M' })
+    if (active)
+      imageUrl.value = next
+  }
+  catch {
+    if (active)
+      imageUrl.value = ''
+  }
 }, { immediate: true })
 </script>
 

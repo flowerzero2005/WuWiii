@@ -65,7 +65,7 @@ async function request(path: string, init?: RequestInit) {
 }
 
 async function fetchRemote(): Promise<RemoteCard[]> {
-  return request('/')
+  return request('')
 }
 
 async function submit(operations: Operation[]): Promise<{ cards: RemoteCard[], conflicts: string[] }> {
@@ -139,7 +139,7 @@ async function syncPersonaCardsNow(ownerId: string): Promise<PersonaCardConflict
     const firstSyncCollision = !!before && !known && (item.deletedAt !== null || cardHash(before) !== cardHash(item.card))
     if (serverConflicts.has(item.cardId) || firstSyncCollision || (localChanged && remoteChanged && (item.deletedAt !== null || cardHash(before!) !== cardHash(item.card))) || changedDuringRequest) {
       if (current)
-        conflicts.push({ id: item.cardId, local: current, remote: item.card, revision: item.revision })
+        conflicts.push({ id: item.cardId, local: JSON.parse(JSON.stringify(current)) as AiriCard, remote: item.card, revision: item.revision })
       continue
     }
     if (item.deletedAt) {

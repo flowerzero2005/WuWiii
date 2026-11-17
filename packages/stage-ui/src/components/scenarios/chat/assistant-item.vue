@@ -626,6 +626,15 @@ onUnmounted(() => {
 // Keep the exact streamed text for rendering. Trimming here made completed
 // Markdown bubbles lose intentional leading/trailing whitespace and blank lines.
 const displayText = computed(() => displayedText.value)
+const stickerParagraphParts = computed(() => {
+  if (props.message.metadata?.chatStickerPlacement !== 'paragraph' || !props.message.metadata.chatStickerImageData)
+    return undefined
+  const index = props.message.metadata.chatStickerParagraphIndex
+  const paragraphs = displayText.value.split(/\n\s*\n/)
+  if (!Number.isInteger(index) || !index || index < 1 || index >= paragraphs.length)
+    return undefined
+  return [paragraphs.slice(0, index).join('\n\n'), paragraphs.slice(index).join('\n\n')] as const
+})
 const hasDisplayableText = computed(() => displayText.value.trim().length > 0)
 const isToolStatusOnly = computed(() => Boolean(trustedToolStatus.value) && !hasDisplayableText.value)
 
@@ -864,15 +873,27 @@ function requestOfficialInnerVoiceConsent(quote: OfficialCapabilityConsentQuote)
           <div>
             <span :class="['inline text-sm font-normal opacity-65', hasGroupSpeaker ? '' : '<sm:hidden']">{{ label }}</span>
           </div>
+          <img
+            v-if="message.metadata?.chatStickerImageData && message.metadata.chatStickerPlacement === 'before' && !showLoader && (messageCompleted || isHistoricalMessage)"
+            :src="message.metadata.chatStickerImageData"
+            alt="角色发送的表情包"
+            loading="lazy"
+            class="mb-2 max-h-40 max-w-40 rounded-xl object-contain shadow-sm"
+          >
           <div v-if="!showLoader && hasDisplayableText" class="break-words">
-            <div v-if="shouldRenderPlainText" whitespace-pre-wrap>
+            <template v-if="stickerParagraphParts && (messageCompleted || isHistoricalMessage)">
+              <MarkdownRenderer :content="stickerParagraphParts[0]" />
+              <img :src="message.metadata?.chatStickerImageData" alt="角色发送的表情包" loading="lazy" class="my-2 max-h-40 max-w-40 rounded-xl object-contain shadow-sm">
+              <MarkdownRenderer :content="stickerParagraphParts[1]" />
+            </template>
+            <div v-else-if="shouldRenderPlainText" whitespace-pre-wrap>
               {{ displayText }}
             </div>
             <MarkdownRenderer v-else :content="displayText" />
           </div>
           <div v-if="showLoader" i-eos-icons:three-dots-loading />
           <img
-            v-if="message.metadata?.chatStickerImageData && !showLoader && (messageCompleted || isHistoricalMessage)"
+            v-if="message.metadata?.chatStickerImageData && message.metadata.chatStickerPlacement !== 'before' && message.metadata.chatStickerPlacement !== 'paragraph' && !showLoader && (messageCompleted || isHistoricalMessage)"
             :src="message.metadata.chatStickerImageData"
             alt="角色发送的表情包"
             loading="lazy"

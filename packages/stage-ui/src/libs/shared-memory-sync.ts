@@ -153,6 +153,8 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
   const operations: Array<{ id: string, baseRevision: number, deleted?: boolean, entry?: ReturnType<typeof comparable> }> = []
 
   for (const entry of local.entries) {
+    if (entry.id.startsWith('qq-diary:'))
+      continue
     if (unresolved.has(entry.id))
       continue
     const known = previous.records[entry.id]
@@ -161,6 +163,8 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
       operations.push({ id: entry.id, baseRevision: known?.revision ?? 0, entry: comparable(entry, targetScope) })
   }
   for (const [id, known] of Object.entries(previous.records)) {
+    if (id.startsWith('qq-diary:'))
+      continue
     if (!unresolved.has(id) && !currentIds.has(id) && known.hash)
       operations.push({ id, baseRevision: known.revision, deleted: true })
   }
@@ -171,7 +175,7 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
   for (const batch of operationBatches(operations)) {
     if (auth.user?.id !== ownerId)
       return 0
-    response = await request(`/sync/${encodeURIComponent(personaCardId)}`, { method: 'POST', body: JSON.stringify({ operations: batch, knownRevision: previous.serverRevision }) }) as SyncResponse
+    response = await request(`/sync/${encodeURIComponent(personaCardId)}`, { method: 'POST', body: JSON.stringify({ operations: batch, knownRevision: previous.conflicts.some(item => item.id.startsWith('qq-diary:')) ? undefined : previous.serverRevision }) }) as SyncResponse
     if (auth.user?.id !== ownerId)
       return 0
     if (!response.enabled)
@@ -188,7 +192,7 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
   if (auth.user?.id !== ownerId)
     return 0
 
-  const conflictIds = new Set([...previous.conflicts.map(item => item.id), ...serverConflicts])
+  const conflictIds = new Set([...previous.conflicts.map(item => item.id), ...serverConflicts].filter(id => !id.startsWith('qq-diary:')))
   const snapshot = new Map(local.entries.map(entry => [entry.id, entry]))
   const snapshotTombstones = new Set(local.deletedMemoryEntryIds ?? [])
   const sentIds = new Set(operations.map(operation => operation.id))
@@ -198,17 +202,18 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
     const tombstones = new Set(current.deletedMemoryEntryIds ?? [])
     for (const remote of response.entries) {
       const old = merged.get(remote.id)
+      const serverOwnedDiary = remote.id.startsWith('qq-diary:')
       const before = snapshot.get(remote.id)
       const beforeHash = before ? hash(before, entryScope(before, previous.records[remote.id])) : ''
       const currentHash = old ? hash(old, entryScope(old, previous.records[remote.id])) : ''
       const changedDuringRequest = currentHash !== beforeHash || tombstones.has(remote.id) !== snapshotTombstones.has(remote.id)
-      if (changedDuringRequest && !sentIds.has(remote.id) && remote.revision !== previous.records[remote.id]?.revision)
+      if (!serverOwnedDiary && changedDuringRequest && !sentIds.has(remote.id) && remote.revision !== previous.records[remote.id]?.revision)
         conflictIds.add(remote.id)
       if (conflictIds.has(remote.id))
         continue
       if (remote.deletedAt) {
         records[remote.id] = { revision: remote.revision, hash: '', scope: remote.scope }
-        if (!changedDuringRequest) {
+        if (serverOwnedDiary || !changedDuringRequest) {
           merged.delete(remote.id)
           tombstones.add(remote.id)
         }
@@ -223,7 +228,7 @@ async function syncCharacterMemoryNow(personaCardId: string, ownerId: string): P
         metadata: { ...sharedMetadata(remote.metadata), userId: scope.userId, characterId: scope.characterId, personaCardId: localCardId, ...localReferenceMetadata(old?.metadata) },
       }
       records[remote.id] = { revision: remote.revision, hash: hash(entry, remote.scope), scope: remote.scope }
-      if (!changedDuringRequest) {
+      if (serverOwnedDiary || !changedDuringRequest) {
         tombstones.delete(remote.id)
         merged.set(remote.id, entry)
       }

@@ -340,20 +340,9 @@ export function useCardDescriptionOptimizer(options: CardDescriptionOptimizerOpt
 
       const { generateText } = await import('@xsai/generate-text')
       const webContext = await buildDescriptionOptimizationWebContext(sourceDescription)
-      const providerConfig = providersStore.getProviderConfig(providerName)
-      const providerConfigObject = typeof providerConfig === 'object' && providerConfig !== null
-        ? providerConfig as Record<string, any>
-        : {}
       const chatConfig = provider.chat(model)
       const response = await generateText({
         ...chatConfig,
-        ...providerConfigObject,
-        headers: {
-          ...chatConfig.headers,
-          ...(typeof providerConfigObject.headers === 'object' && providerConfigObject.headers !== null
-            ? providerConfigObject.headers
-            : {}),
-        },
         messages: [
           {
             role: 'system',
@@ -384,7 +373,6 @@ export function useCardDescriptionOptimizer(options: CardDescriptionOptimizerOpt
           },
         ],
         model,
-        temperature: 0.35,
       })
 
       const optimizedDescription = String(response.text ?? '').trim()

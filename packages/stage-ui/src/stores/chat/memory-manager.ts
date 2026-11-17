@@ -6,12 +6,14 @@ import type { MemoryExtractionCandidate, MemoryExtractionRuntime } from './memor
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+import { acknowledgeOfficialCloudChatDelivery } from '../../libs/providers/providers/official-cloud/delivery-ack'
 import { useCharacterNotebookStore } from '../character/notebook'
 import { useMemorySettingsStore } from '../settings/memory'
 import { useMemoryAdvancedSettingsStore } from '../settings/memory-advanced'
+import { extractMissingMemoryCapture } from './memory-capture-fallback'
 import { calculateSimilarity, findDuplicates, mergeDuplicates } from './memory-deduplication'
 import { validateMemoryExtractionCandidates } from './memory-extractor'
-import { canRecoverMemoryWork, completeMemoryWork, journalCompletedMemoryWork, readPendingMemoryWork } from './memory-work-journal'
+import { canRecoverMemoryWork, completeMemoryWork, isCompletedMemoryWork, journalCompletedMemoryWork, readPendingMemoryWork } from './memory-work-journal'
 import { isSessionMemoryWorkCancelled } from './session-memory-lifecycle'
 
 const RECENT_PROCESSED_TURN_TTL_MS = 60_000
@@ -32,6 +34,7 @@ export interface MemorySourceTrace {
   sourceSessionId?: string
   sourceCreatedAt?: number
   sourceUserMessageId?: string
+  sourceUserMessageIds?: string[]
   sourceAssistantMessageId?: string
   sourceAssistantMessageIds?: string[]
   sourceSurface?: string
@@ -767,6 +770,10 @@ export const useMemoryManager = defineStore('memory-manager', () => {
   function stageCompletedChatTurnForMemory(turn: CompletedChatTurnForMemory) {
     if (!memorySettings.settings.enabled || !memorySettings.settings.autoExtract)
       return
+    // Missing or malformed primary envelopes need a fresh model decision before
+    // a recoverable journal can contain actual candidates.
+    if (turn.extractionRuntime?.captureStatus === 'missing' || turn.extractionRuntime?.captureStatus === 'invalid')
+      return
     journalCompletedMemoryWork({ ...turn, ...notebookStore.resolveMemoryScope(turn) })
   }
 
@@ -775,6 +782,49 @@ export const useMemoryManager = defineStore('memory-manager', () => {
     turn = { ...turn, ...scope }
     if (!memorySettings.settings.enabled || !memorySettings.settings.autoExtract || isSessionMemoryWorkCancelled(turn.sourceSessionId))
       return
+    if (isCompletedMemoryWork(turn))
+      return
+    let fallbackRequestId: string | undefined
+    const runtime = turn.extractionRuntime
+    if ((runtime?.captureStatus === 'missing' || runtime?.captureStatus === 'invalid')
+      && runtime.chatProvider && runtime.model) {
+      try {
+        const existing = await notebookStore.getMemoryEntriesForScope(scope)
+        const fallback = await extractMissingMemoryCapture({
+          assistantMessage: turn.assistantMessage,
+          chatProvider: runtime.chatProvider,
+          existingMemories: existing
+            .filter(entry => entry.kind === 'note' || entry.kind === 'focus')
+            .slice(-12)
+            .map(entry => ({
+              id: entry.id,
+              memoryKey: typeof entry.metadata?.memoryKey === 'string' ? entry.metadata.memoryKey : '',
+              memoryType: typeof entry.metadata?.memoryType === 'string' ? entry.metadata.memoryType : 'fact',
+              text: entry.text.slice(0, 240),
+              context: typeof entry.metadata?.memoryContext === 'string' ? entry.metadata.memoryContext.slice(0, 160) : undefined,
+            })),
+          memoryHints: memorySettings.customKeywords.filter(keyword => keyword.enabled).slice(0, 12).map(keyword => keyword.keyword.slice(0, 80)),
+          model: runtime.model,
+          trace: turn.trace ?? {
+            sourceSurface: turn.sourceSurface ?? 'chat-store',
+            turnId: turn.sourceUserMessageId ?? turn.sourceAssistantMessageId ?? 'memory-capture',
+          },
+          userMessage: turn.userMessage,
+        })
+        if (isSessionMemoryWorkCancelled(turn.sourceSessionId))
+          return
+        turn.extractionRuntime = {
+          memoryCandidates: fallback.candidates,
+          captureStatus: fallback.candidates.length ? 'valid' : 'empty',
+        }
+        fallbackRequestId = runtime.providerId === 'official-cloud' ? fallback.requestId : undefined
+      }
+      catch (error) {
+        emitLog('warning', '本轮长期记忆补提取失败，聊天回复不受影响')
+        console.warn('[MemoryManager] Missing capture fallback failed:', error)
+        return
+      }
+    }
     if (turn.sourceAssistantMessageId && !journalCompletedMemoryWork(turn))
       return
     const result = await processConversationTurn(turn.userMessage, turn.assistantMessage, {
@@ -784,6 +834,7 @@ export const useMemoryManager = defineStore('memory-manager', () => {
         sourceSessionId: turn.sourceSessionId,
         sourceCreatedAt: turn.sourceCreatedAt,
         sourceUserMessageId: turn.sourceUserMessageId,
+        sourceUserMessageIds: turn.sourceUserMessageIds,
         sourceAssistantMessageId: turn.sourceAssistantMessageId,
         sourceAssistantMessageIds: turn.sourceAssistantMessageIds,
         sourceSurface: turn.sourceSurface,
@@ -794,6 +845,8 @@ export const useMemoryManager = defineStore('memory-manager', () => {
       },
     })
     completeMemoryWork(turn)
+    if (fallbackRequestId)
+      void acknowledgeOfficialCloudChatDelivery(fallbackRequestId).catch(error => console.warn('[MemoryManager] Memory extraction delivery acknowledgement failed:', error))
     return result
   }
 

@@ -28,7 +28,7 @@ watch(() => props.avatarUrl, () => {
     ]"
   >
     <CharacterAvatarImage
-      v-if="avatarUrl && !imageFailed"
+      v-if="(avatarUrl || avatarModelId) && !imageFailed"
       :src="avatarUrl"
       :model-id="avatarModelId"
       class="size-full"

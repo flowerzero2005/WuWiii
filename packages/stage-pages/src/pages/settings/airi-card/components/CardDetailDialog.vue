@@ -345,6 +345,7 @@ const {
 
 const {
   characterSettingsGenerationError,
+  characterSettingsGenerationErrorDetail,
   generateCharacterSettingsWithCurrentModel,
   isGeneratingCharacterSettings,
 } = useCardCharacterGenerator({
@@ -361,7 +362,7 @@ async function handleGenerateCharacterSettings() {
   const result = await generateCharacterSettingsWithCurrentModel()
   if (!result) {
     const code = characterSettingsGenerationError.value || 'request-failed'
-    toast.error(t(`settings.pages.card.creation.character_generation_errors.${code}`))
+    toast.error(`${t(`settings.pages.card.creation.character_generation_errors.${code}`)}${characterSettingsGenerationErrorDetail.value ? `：${characterSettingsGenerationErrorDetail.value}` : ''}`)
     return
   }
 
@@ -374,6 +375,7 @@ const {
   generatePersonaPackageWithCurrentModel,
   isGeneratingPersonaPackage,
   personaPackageGenerationError,
+  personaPackageGenerationErrorDetail,
 } = usePersonaPackageGenerator({
   getCard: () => selectedCard.value,
   getGrowthMemories: () => getPersonaGrowthMemoryTexts(),
@@ -1334,7 +1336,7 @@ function getResourceDisplayValue(
                     border="~ amber-300/60 dark:amber-500/30"
                     bg="amber-50/70 dark:amber-950/20"
                   >
-                    {{ t(`settings.pages.card.persona_package.generation_error.${personaPackageGenerationError}`) }}
+                    {{ t(`settings.pages.card.persona_package.generation_error.${personaPackageGenerationError}`) }}{{ personaPackageGenerationErrorDetail ? `：${personaPackageGenerationErrorDetail}` : '' }}
                   </div>
 
                   <div

@@ -352,6 +352,9 @@ export const useAiriCardStore = defineStore('airi-card', () => {
         includeDefaultAiriSeed ? t('base.prompt.prefix') : '',
         t('base.prompt.suffix'),
       ).content,
+      card.description?.trim()
+        ? `# 当前角色卡的核心设定\n以下描述由用户为当前角色填写。请在对话、QQ 和电话中持续遵守其中的人格、关系边界与表达方式；结合实际对话自然扮演，不要把设定当作已发生的现实经历，也不要照抄成固定台词。\n${card.description.trim().slice(0, 2_000)}`
+        : '',
       buildPersonaRuntimePromptSection({
         card,
         extension: extension.personaPackage,

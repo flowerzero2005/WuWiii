@@ -11,7 +11,7 @@ import { z } from 'zod'
 import { createLinkedSearchAbortSignal } from './abort-signal'
 import { createSearchExecutionBudget } from './execution-budget'
 
-const MAX_SEARCH_ROUNDS = 2
+const MAX_SEARCH_ROUNDS = 5
 const MIN_RESULTS_BEFORE_STOP = 5
 const WHITESPACE_RE = /\s+/g
 
@@ -112,6 +112,7 @@ export const intelligentWebSearch = tool({
   Use this tool when:
   - The answer depends on information outside the conversation or your reliable knowledge
   - Freshness, accuracy, verification, sources, or real-world state matter
+  - A recent internet meme, phrase, trend, its origin, or its meaning would help you respond naturally
   - Searching can replace uncertainty or a guess with useful evidence
   - The user explicitly or implicitly asks you to find information
 

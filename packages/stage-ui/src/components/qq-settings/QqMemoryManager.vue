@@ -66,8 +66,8 @@ async function load() {
       throw new Error(`HTTP ${response.status}`)
     entries.value = await response.json() as QqMemory[]
   }
-  catch {
-    error.value = 'QQ 长期记忆加载失败，请稍后重试。'
+  catch (cause) {
+    error.value = `QQ 长期记忆加载失败：${cause instanceof Error ? cause.message : '请稍后重试'}`
   }
   finally {
     busy.value = false
@@ -153,7 +153,10 @@ watch(() => auth.isAuthenticated, enabled => enabled && void load())
       <p v-if="notice" role="status" class="text-sm text-emerald-600">
         {{ notice }}
       </p>
-      <p v-if="!busy && !visible.length" class="airi-surface-panel rounded-xl p-6 text-sm airi-text-muted">
+      <p v-if="!auth.isAuthenticated" class="airi-surface-panel rounded-xl p-6 text-sm airi-text-muted">
+        登录 Wuwiii 账号后可查看 QQ 记忆。
+      </p>
+      <p v-else-if="!busy && !error && !visible.length" class="airi-surface-panel rounded-xl p-6 text-sm airi-text-muted">
         没有符合条件的 QQ 记忆。
       </p>
       <article v-for="entry in visible" :key="`${entry.personaCardId}:${entry.id}`" class="airi-surface-panel rounded-xl p-4 space-y-3">

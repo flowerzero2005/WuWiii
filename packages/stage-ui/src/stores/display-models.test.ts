@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import localforage from 'localforage'
 
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -78,6 +79,17 @@ describe('display models store', () => {
     expect(store.displayModels.find(item => item.id === model.id)?.name).toBe('Character A')
   })
 
+  it('loads the bundled default without waiting for IndexedDB', async () => {
+    const store = useDisplayModelsStore()
+    const readsBefore = vi.mocked(localforage.getItem).mock.calls.length
+
+    await expect(store.getDisplayModel('preset-live2d-1')).resolves.toMatchObject({
+      id: 'preset-live2d-1',
+      type: 'url',
+    })
+    expect(vi.mocked(localforage.getItem).mock.calls.length).toBe(readsBefore)
+  })
+
   it('reads a mobile ZIP as bytes and rejects archives without a Live2D model', async () => {
     const archive = new JSZip()
     archive.file('readme.txt', 'No model here')
@@ -92,6 +104,17 @@ describe('display models store', () => {
     finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('uses a supplied Live2D portrait as the avatar without rendering the large model again', async () => {
+    const archive = new JSZip()
+    archive.file('character/大肥鱼.model3.json', JSON.stringify({ Version: 3, FileReferences: { Moc: '大肥鱼.moc3' } }))
+    archive.file('character/大肥鱼.png', png)
+    const file = new File([Uint8Array.from(await archive.generateAsync({ type: 'uint8array' }))], 'character.zip')
+    const store = useDisplayModelsStore()
+    const model = await store.addDisplayModel(DisplayModelFormat.Live2dZip, file)
+    expect(model.previewImage).toBe(`data:image/png;base64,${Buffer.from(png).toString('base64')}`)
+    expect(storedModels.get(model.id)).toMatchObject({ previewImage: model.previewImage })
   })
 
   it('imports a picture OC package with stable identity and updates the same package in place', async () => {

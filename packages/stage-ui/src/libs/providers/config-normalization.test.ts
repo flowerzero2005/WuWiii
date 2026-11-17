@@ -90,12 +90,20 @@ describe('provider configuration normalization', () => {
     }
     const normalized = normalizeNewModuleConfiguration(settings)
     expect(normalizeNewModuleConfiguration(normalized)).toEqual(normalized)
-    expect(normalized).toMatchObject({ ...settings, 'settings/web-search/max-requests-per-turn': '1' })
+    expect(normalized).toMatchObject({ ...settings, 'settings/web-search/max-requests-per-turn': '3' })
     const persisted = storage(settings)
     expect(await createNewModuleConfigurationMigration(persisted, lock)()).toBe('ready')
     expect(persisted.getItem('settings/unknown/extension')).toBe('retained')
     expect(persisted.getItem('settings/vision/automatic-screenshot-enabled')).toBe('true')
     expect(persisted.getItem('settings/vision/aliyun-api-key')).toBe('private-user-key')
+  })
+
+  it('preserves the expanded search limit and selects official search for new users', () => {
+    const normalized = normalizeNewModuleConfiguration({
+      'settings/web-search/max-requests-per-turn': '5',
+    })
+    expect(normalized['settings/web-search/max-requests-per-turn']).toBe('5')
+    expect(normalized['settings/web-search/active-provider']).toBe('official-cloud-web-search')
   })
 
   it.each([

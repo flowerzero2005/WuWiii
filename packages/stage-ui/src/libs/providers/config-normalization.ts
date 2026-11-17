@@ -115,8 +115,8 @@ const moduleDefaults: Record<string, { defaultValue: string, valid: (value: stri
   'settings/vision/gemini-base-url': { defaultValue: VISION_DEFAULT_SETTINGS.geminiBaseUrl, valid: () => true },
   'settings/vision/gemini-model': { defaultValue: VISION_DEFAULT_SETTINGS.geminiModel, valid: () => true },
   'settings/web-search/enabled': { defaultValue: 'false', valid: value => value === 'true' || value === 'false' },
-  'settings/web-search/active-provider': { defaultValue: 'tavily', valid: () => true },
-  'settings/web-search/max-requests-per-turn': { defaultValue: '1', valid: value => value === '1' || value === '2' },
+  'settings/web-search/active-provider': { defaultValue: 'official-cloud-web-search', valid: () => true },
+  'settings/web-search/max-requests-per-turn': { defaultValue: '3', valid: value => ['1', '2', '3', '4', '5'].includes(value) },
   'settings/web-search/max-official-points-per-turn': { defaultValue: '0', valid: value => value.trim() !== '' && Number.isSafeInteger(Number(value)) && Number(value) === Number.parseFloat(value) && Number(value) >= 0 },
 }
 const MODULE_CONFIGURATION_VERSION_KEY = 'settings/new-module-configuration-version'

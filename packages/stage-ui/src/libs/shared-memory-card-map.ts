@@ -22,6 +22,12 @@ export function mappedServerMemoryCardIds(ownerId: string): string[] {
   return Object.keys(readMappings(ownerId))
 }
 
+export function serverMemoryCardIdsForLocalCard(ownerId: string, localCardId: string, localCardIds: Iterable<string>): string[] {
+  const ids = [...localCardIds]
+  return [...new Set([localCardId, ...mappedServerMemoryCardIds(ownerId)])]
+    .filter(serverId => resolveLocalMemoryCardId(ownerId, serverId, ids) === localCardId)
+}
+
 export function setLocalMemoryCardId(ownerId: string, serverPersonaId: string, localCardId: string) {
   const mappings = readMappings(ownerId)
   mappings[serverPersonaId] = localCardId

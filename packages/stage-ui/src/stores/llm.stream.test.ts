@@ -725,7 +725,7 @@ describe('llm stream error bridging', () => {
     expect(routerSystemMessage?.content).toContain('Always obtain current, explicit, informed confirmation before payments')
     expect(routerSystemMessage?.content).toContain('completes, confirms, or corrects a pending action')
     expect(routerSystemMessage?.content).toContain('supplies its date, time, title, or other missing detail')
-    expect(routerSystemMessage?.content).toContain('web-search: Use only')
+    expect(routerSystemMessage?.content).toContain('web-search: Use proactively')
     expect(events).toEqual([
       { text: 'Hi.', type: 'text-delta' },
       { finishReason: 'stop', type: 'finish' },
@@ -1774,7 +1774,7 @@ describe('llm stream error bridging', () => {
         toolChoice: { function: { name: 'butler_tasks' }, type: 'function' },
         tools: [butlerTool],
       }],
-    })).rejects.toThrow('The tool service is temporarily unavailable')
+    })).rejects.toThrow('The tool response timed out')
 
     expect(streamText).toHaveBeenCalledTimes(2)
     expect(store.lastToolRouteDiagnostic).toMatchObject({

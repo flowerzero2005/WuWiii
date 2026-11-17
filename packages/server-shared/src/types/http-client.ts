@@ -1,6 +1,6 @@
 import type { InferOutput } from 'valibot'
 
-import { array, boolean, literal, number, object, optional, record, strictObject, string, union } from 'valibot'
+import { array, boolean, literal, number, object, optional, record, strictObject, string, union, unknown } from 'valibot'
 
 /** Public request contract shared by the desktop client and chat sync route. */
 export const ChatSyncMessageSchema = object({
@@ -25,6 +25,7 @@ export const ChatSyncSchema = object({
     characterId: optional(string()),
   }))),
   messages: array(ChatSyncMessageSchema),
+  sessionRecord: optional(unknown()),
 })
 
 export type ChatSyncPayload = InferOutput<typeof ChatSyncSchema>

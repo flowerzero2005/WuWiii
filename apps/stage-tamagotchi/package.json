@@ -1,7 +1,7 @@
 {
   "name": "@proj-airi/stage-tamagotchi",
   "type": "module",
-  "version": "1.0.1",
+  "version": "1.0.8",
   "private": true,
   "description": "A desktop digital companion with customizable characters, voice interaction, and local tools.",
   "author": {

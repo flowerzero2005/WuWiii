@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { getOfficialApiFetch, SERVER_URL } from '@proj-airi/stage-ui/libs/auth'
 import { syncPersonaCards } from '@proj-airi/stage-ui/libs/persona-card-sync'
+import { serverMemoryCardIdsForLocalCard } from '@proj-airi/stage-ui/libs/shared-memory-card-map'
 import { syncEnabledCharacterMemories } from '@proj-airi/stage-ui/libs/shared-memory-sync'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
@@ -94,11 +95,14 @@ async function check() {
     return
   void syncEnabledCharacterMemories().catch(error => console.warn('[SharedMemory] Background sync failed:', error))
   try {
-    const response = await getOfficialApiFetch()(`${SERVER_URL}/api/qq/diaries?limit=1`, { credentials: 'include' })
-    if (response.ok) {
-      const diaries = await response.json() as Array<{ id: string, metadata?: { diaryTitle?: string } }>
-      const latest = diaries[0]
-      const storageKey = `airi-qq-diary-notified:${ownerId}`
+    const localCardId = cards.activeCardId
+    const groups = await Promise.all(serverMemoryCardIdsForLocalCard(ownerId, localCardId, cards.cards.keys()).map(async (serverId) => {
+      const response = await getOfficialApiFetch()(`${SERVER_URL}/api/qq/diaries?limit=1&personaCardId=${encodeURIComponent(serverId)}`, { credentials: 'include' })
+      return response.ok ? await response.json() as Array<{ id: string, recordedAt: string, metadata?: { diaryTitle?: string } }> : []
+    }))
+    if (auth.user?.id === ownerId && cards.activeCardId === localCardId) {
+      const latest = groups.flat().sort((left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime())[0]
+      const storageKey = `airi-qq-diary-notified:${ownerId}:${localCardId}`
       if (latest && latest.id !== localStorage.getItem(storageKey) && canShowNotice()) {
         localStorage.setItem(storageKey, latest.id)
         const id = `qq-diary-${latest.id}`

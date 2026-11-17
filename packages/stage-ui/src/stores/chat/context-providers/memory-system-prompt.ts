@@ -36,6 +36,8 @@ export function createMemoryCapturePrompt(): ContextMessage {
 After the visible reply, append exactly one private envelope with at most four structured memory candidates. Use {"memories":[]} when nothing is plausibly useful. This is an internal protocol and is never shown, spoken, or added to chat history. Do not add an analysis, reasoning, memory decision, or explanation in ordinary text before or after the envelope:
 <|MEMORY_CAPTURE {"memories":[{"action":"create","targetMemoryId":null,"memoryKey":"preference:food","memoryType":"preference","summary":"用户喜欢吃香菜。","context":"用户主动说明的稳定偏好。","userEvidence":"我爱吃香菜","involvedPeople":["用户"],"antecedent":null,"outcome":null,"importance":"medium","confidence":0.9,"certainty":"stated","tags":["偏好"],"reason":"稳定偏好有助于未来交流。","timeExpression":null}]}|>
 
+For ordinary captures, keep the envelope short: summary, userEvidence, and importance are enough; add other fields only when they preserve useful context. A smaller valid envelope is better than omitting or truncating the private decision.
+
 importance 只用于已经决定记录后的检索排序，不是“必须记忆”的最低分。若判断为 0 分或不值得记录，就不要生成候选项，直接放进空 memories 数组；不得为了填满协议而创建 low 条目。
 创建前先比较本轮提供的相关既有记忆：同一事实没有变化时不要重复创建；只有事实、状态或必要上下文确实变化时才使用 update。模型无法看到的旧条目仍由本地去重兜底，去重只维护数据一致性，不替模型判断什么值得记。
 

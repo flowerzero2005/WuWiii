@@ -72,7 +72,7 @@ import { useMemoryAdvancedSettingsStore } from '@proj-airi/stage-ui/stores/setti
 import { requiresOfficialCapabilityConsent, useOfficialCapabilityConsentStore } from '@proj-airi/stage-ui/stores/settings/official-capability-consent'
 import { useSettingsQuickChat } from '@proj-airi/stage-ui/stores/settings/quick-chat'
 import { useSpeechPlaybackSettingsStore } from '@proj-airi/stage-ui/stores/settings/speech-playback'
-import { DEFAULT_STAGE_MODEL_ID } from '@proj-airi/stage-ui/stores/settings/stage-model'
+import { DEFAULT_STAGE_MODEL_ID, useSettingsStageModel } from '@proj-airi/stage-ui/stores/settings/stage-model'
 import { useSettingsTheme } from '@proj-airi/stage-ui/stores/settings/theme'
 import { useSpeechDisplaySyncStore } from '@proj-airi/stage-ui/stores/speech-display-sync'
 import { useSpeechRuntimeStore } from '@proj-airi/stage-ui/stores/speech-runtime'
@@ -331,6 +331,7 @@ const { activeTurnId, activeTurnSessionId, responding, sending } = storeToRefs(c
 const { activeCardId, cards } = storeToRefs(airiCardStore)
 const displayModelsStore = useDisplayModelsStore()
 const { displayModels } = storeToRefs(displayModelsStore)
+const stageModelStore = useSettingsStageModel()
 const { isAuthenticated, user: authUser } = storeToRefs(authStore)
 const { locale, t } = useI18n()
 const route = useRoute()
@@ -915,7 +916,6 @@ async function sendVoiceCallTranscript(rawText: string, turnId: string) {
 const enqueueVoiceCallTranscript = createVoiceCallTranscriptQueue(
   transcript => sendVoiceCallTranscript(transcript.text, transcript.turnId),
   createVoiceCallTurnId,
-  { graceMs: 700 },
 )
 
 function createVoiceCallSpeechTimingResolver(speechRef: { intentId: string, streamId?: string } | undefined, segments: string[], onSegmentReady?: (segmentId: string) => void) {
@@ -2076,12 +2076,13 @@ function getParticipantAvatarModelId(characterId: string, participantModelId?: s
 }
 
 function resolvePersonaAvatarModelId(characterId: string, participantModelId?: string) {
-  return participantModelId ?? airiCardStore.getCardRuntime(characterId)?.displayModelId ?? DEFAULT_STAGE_MODEL_ID
+  return participantModelId ?? airiCardStore.getCardRuntime(characterId)?.displayModelId
+    ?? (characterId === activeCardId.value ? stageModelStore.stageModelSelected : DEFAULT_STAGE_MODEL_ID)
 }
 
 function resolvePersonaAvatarUrl(characterId: string, fallback?: string, participantModelId?: string) {
   const runtime = airiCardStore.getCardRuntime(characterId)
-  const modelId = participantModelId ?? runtime?.displayModelId ?? DEFAULT_STAGE_MODEL_ID
+  const modelId = resolvePersonaAvatarModelId(characterId, participantModelId)
   const boundModelPreview = displayModels.value.find(model => model.id === modelId)?.previewImage
   const defaultModelPreview = displayModels.value.find(model => model.id === DEFAULT_STAGE_MODEL_ID)?.previewImage
   return fallback

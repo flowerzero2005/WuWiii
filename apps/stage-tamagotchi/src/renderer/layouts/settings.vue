@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { PageHeader } from '@proj-airi/stage-ui/components/layouts'
 import { useModulesList } from '@proj-airi/stage-ui/composables/use-modules-list'
 import { getSettingsSurfaceStyle, useSettingsTheme } from '@proj-airi/stage-ui/stores/settings/theme'
@@ -94,6 +93,7 @@ const moduleShortcuts = computed(() => [
   })),
 ])
 const showModuleShortcuts = computed(() => route.path === '/settings/modules' || route.path.startsWith('/settings/modules/'))
+const isSettingsHome = computed(() => route.path.replace(/\/+$/, '') === '/settings')
 const settingsSurfaceStyle = computed(() => getSettingsSurfaceStyle(settingsSurfacePreset.value, isDark.value))
 </script>
 
@@ -118,7 +118,7 @@ const settingsSurfaceStyle = computed(() => getSettingsSurfaceStyle(settingsSurf
           <PageHeader
             :title="routeHeaderMetadata?.title ?? ''"
             :subtitle="routeHeaderMetadata?.subtitle ?? ''"
-            :disable-back-button="isStageTamagotchi() && route.path === '/settings'"
+            :disable-back-button="isSettingsHome"
             px-4
           />
           <nav

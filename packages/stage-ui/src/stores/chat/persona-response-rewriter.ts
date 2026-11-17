@@ -98,6 +98,7 @@ export interface AiriResponseRewriteInput {
   antiTemplateGuard?: AiriAntiTemplateGuard | null
   calibrationReasons?: AiriResponseCalibrationReason[]
   expressionProfile?: AiriExpressionProfile
+  memeIntensity?: number
   personaFingerprint?: AiriPersonaFingerprint
   emotionDimensions?: readonly AiriPersonaEmotionDimension[]
   toolOutcome?: AssistantToolOutcome | null
@@ -904,6 +905,15 @@ export function buildAiriResponseRewriteMessages(input: AiriResponseRewriteInput
         `Calibration rules:\n${calibrationRules}`,
         personaFingerprintSection,
         profileConstraintSection,
+        input.memeIntensity === undefined
+          ? ''
+          : input.memeIntensity <= 0
+            ? 'Meme style setting: avoid adding internet memes or catchphrases during this edit.'
+            : input.memeIntensity > 70
+              ? 'Meme style setting: preserve natural internet memes, current slang, and familiar teasing in the draft when they fit; do not flatten them merely for being playful.'
+              : input.memeIntensity > 45
+                ? 'Meme style setting: preserve natural, context-fitting meme language in the draft.'
+                : 'Meme style setting: keep any meme language light and context-fitting.',
         `Scene mode: ${input.inferredSceneMode.mode}`,
         `Scene rule: ${buildSceneConstraint(input.inferredSceneMode, input.replyIntent)}`,
         `Dialogue layer: ${input.replyIntent.dialogueLayer}`,

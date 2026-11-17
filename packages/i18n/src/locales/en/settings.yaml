@@ -1184,6 +1184,7 @@ pages:
           reference: Reference
           request-outcome: Request outcome
         surfaces:
+          qq: QQ chat
           automatic-screenshot: Automatic screenshot
           voice-call: Phone call
           group-chat: Group chat
@@ -1466,6 +1467,7 @@ pages:
           compress-overstuffed: Compress first
         risk:
           message-example-copy-pool: Examples detected; keep them as style signals, not standard replies.
+          inline-dialogue-example-source: Dialogue examples detected; extract the style without copying the lines into persona anchors.
           fixed-catchphrase-rule: Fixed suffixes or reply shapes detected; convert them into anti-template boundaries.
           relationship-overclaim: Relationship overclaims detected; keep affection bounded by memory and context.
           runtime-instruction-leakage: Runtime or hidden-prompt wording detected; keep it out of visible identity.
@@ -1511,6 +1513,9 @@ pages:
       title: Character diary
       description: Review diary drafts and confirmed summaries from your recent conversations.
       drafts: Drafts awaiting review
+      qq-source: From QQ chat
+      qq-load-failed: Could not load QQ diaries. Please try again later.
+      qq-edit-invalid: Enter a title and 30 to 4000 characters of text.
       history: Confirmed diary
       empty: No confirmed diary entries yet.
       untitled: Untitled diary

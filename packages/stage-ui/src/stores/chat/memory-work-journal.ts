@@ -32,6 +32,19 @@ export function memoryWorkKey(turn: CompletedChatTurnForMemory) {
   return PREFIX + JSON.stringify([turn.characterId, turn.sourceSessionId, turn.sourceUserMessageId, turn.sourceAssistantMessageId])
 }
 
+/** Avoid paying for a fallback extraction after another hook already finished this turn. */
+export function isCompletedMemoryWork(turn: CompletedChatTurnForMemory) {
+  const key = memoryWorkKey(turn)
+  if (!key)
+    return false
+  try {
+    return isCompletedReceipt(globalThis.localStorage?.getItem(key) ?? null)
+  }
+  catch {
+    return false
+  }
+}
+
 /** Only primary-completion candidates are journaled. Never persist a provider or replay chat. */
 export function journalCompletedMemoryWork(turn: CompletedChatTurnForMemory) {
   try {

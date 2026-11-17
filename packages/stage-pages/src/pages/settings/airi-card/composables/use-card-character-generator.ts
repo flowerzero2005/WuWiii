@@ -21,12 +21,14 @@ export function useCardCharacterGenerator(options: {
   const { activeProvider, activeModel } = storeToRefs(consciousnessStore)
   const isGeneratingCharacterSettings = ref(false)
   const characterSettingsGenerationError = ref<CharacterSettingsGenerationErrorCode>('')
+  const characterSettingsGenerationErrorDetail = ref('')
 
   async function generateCharacterSettingsWithCurrentModel() {
     if (isGeneratingCharacterSettings.value)
       return undefined
 
     characterSettingsGenerationError.value = ''
+    characterSettingsGenerationErrorDetail.value = ''
     const source = options.getSource()
     if (!source.description.trim()) {
       characterSettingsGenerationError.value = 'missing-description'
@@ -47,26 +49,14 @@ export function useCardCharacterGenerator(options: {
 
       const { generateText } = await import('@xsai/generate-text')
       const prompt = buildCharacterSettingsGenerationPrompt(source)
-      const providerConfig = providersStore.getProviderConfig(activeProvider.value)
-      const providerConfigObject = typeof providerConfig === 'object' && providerConfig !== null
-        ? providerConfig as Record<string, any>
-        : {}
       const chatConfig = provider.chat(activeModel.value)
       const response = await generateText({
         ...chatConfig,
-        ...providerConfigObject,
-        headers: {
-          ...chatConfig.headers,
-          ...(typeof providerConfigObject.headers === 'object' && providerConfigObject.headers !== null
-            ? providerConfigObject.headers
-            : {}),
-        },
         messages: [
           { role: 'system', content: prompt.system },
           { role: 'user', content: prompt.user },
         ],
         model: activeModel.value,
-        temperature: 0.3,
       })
       const result = parseGeneratedCharacterSettings(String(response.text ?? ''))
       if (!result)
@@ -75,6 +65,7 @@ export function useCardCharacterGenerator(options: {
     }
     catch (error) {
       characterSettingsGenerationError.value = 'request-failed'
+      characterSettingsGenerationErrorDetail.value = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)
       console.error(`[${options.logLabel}] Failed to generate character settings:`, error)
     }
     finally {
@@ -84,6 +75,7 @@ export function useCardCharacterGenerator(options: {
 
   return {
     characterSettingsGenerationError,
+    characterSettingsGenerationErrorDetail,
     generateCharacterSettingsWithCurrentModel,
     isGeneratingCharacterSettings,
   }

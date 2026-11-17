@@ -17,6 +17,7 @@ import { useSpeechStore } from '../stores/modules/speech'
 import { useTwitterStore } from '../stores/modules/twitter'
 import { useVisionStore } from '../stores/modules/vision'
 import { useWebSearchStore } from '../stores/modules/web-search'
+import { useMemeWikiSettingsStore } from '../stores/settings/meme-wiki'
 
 export interface Module {
   id: string
@@ -42,12 +43,22 @@ export function useModulesList() {
   const factorioStore = useFactorioStore()
   const visionStore = useVisionStore()
   const webSearchStore = useWebSearchStore()
+  const memeWikiSettingsStore = useMemeWikiSettingsStore()
   const mcpRuntimeStatusStore = useMcpRuntimeStatusStore()
   const authStore = useAuthStore()
   const beatSyncState = ref<BeatSyncDetectorState>()
   const qqConfigured = ref(false)
 
   const modulesList = computed<Module[]>(() => [
+    {
+      id: 'chat-stickers',
+      name: '应用聊天表情包',
+      description: '导入图片或 QQ 收藏表情，编辑描述和发送频率',
+      icon: 'i-solar:emoji-funny-square-bold-duotone',
+      to: '/settings/modules/chat-stickers',
+      configured: true,
+      category: 'essential',
+    },
     {
       id: 'consciousness',
       name: t('settings.pages.modules.consciousness.title'),
@@ -91,6 +102,15 @@ export function useModulesList() {
       icon: 'i-solar:global-bold-duotone',
       to: '/settings/modules/web-search',
       configured: webSearchStore.configured,
+      category: 'essential',
+    },
+    {
+      id: 'meme-wiki',
+      name: '梗百科与玩梗',
+      description: '让应用聊天理解网络梗，并控制主动玩梗程度',
+      icon: 'i-solar:emoji-funny-square-bold-duotone',
+      to: '/settings/modules/meme-wiki',
+      configured: memeWikiSettingsStore.settings.enabled,
       category: 'essential',
     },
     {

@@ -20,7 +20,7 @@ export function createSearchExecutionBudget() {
     const next = {
       providerId: input.providerId,
       priceVersion: input.priceVersion,
-      maxRequests: Math.min(2, Math.max(1, Math.floor(input.maxRequests || 1))),
+      maxRequests: Math.min(5, Math.max(1, Math.floor(input.maxRequests || 1))),
       maxPoints: input.maxPoints,
     }
     if (configuration && (configuration.providerId !== next.providerId || configuration.priceVersion !== next.priceVersion))

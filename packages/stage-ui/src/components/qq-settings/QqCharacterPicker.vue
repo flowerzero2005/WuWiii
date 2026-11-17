@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { SERVER_URL } from '@proj-airi/stage-ui/libs/auth'
-import { ref } from 'vue'
+import CharacterAvatarImage from '../scenarios/chat/avatar-image.vue'
 
 interface CharacterOption {
   id: string
   avatarUrl?: string | null
   coverUrl?: string | null
+  modelId?: string
   i18n?: Array<{ name: string }>
 }
 
@@ -19,11 +20,9 @@ const emit = defineEmits<{
   select: [id: string]
 }>()
 
-const failedImages = ref<string[]>([])
-
 function imageFor(character: CharacterOption) {
   const source = character.avatarUrl || character.coverUrl
-  if (!source || failedImages.value.includes(character.id))
+  if (!source)
     return ''
   try {
     return new URL(source, SERVER_URL).toString()
@@ -47,17 +46,19 @@ function nameFor(character: CharacterOption) {
       :disabled="disabled"
       :aria-pressed="selectedId === character.id"
       :aria-label="`${nameFor(character)}${selectedId === character.id ? '，已选中' : ''}`"
-      class="max-w-48 min-w-38 flex flex-1 items-center gap-2.5 border rounded-2xl p-2 text-left transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-sky-500"
+      class="qq-character-option max-w-48 min-w-38 flex flex-1 items-center gap-2.5 border rounded-2xl p-2 text-left transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-sky-500"
       :class="selectedId === character.id ? 'border-sky-500 bg-sky-50 text-sky-950 shadow-sm dark:border-sky-400 dark:bg-sky-400/15 dark:text-white' : 'border-neutral-200 bg-white/60 hover:border-neutral-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:border-white/25'"
       @click="emit('select', character.id)"
     >
-      <img
-        v-if="imageFor(character)"
+      <CharacterAvatarImage
+        v-if="imageFor(character) || character.modelId"
         :src="imageFor(character)"
-        alt=""
-        class="size-11 shrink-0 rounded-xl object-cover"
-        @error="failedImages.push(character.id)"
+        :model-id="character.modelId"
+        :alt="nameFor(character)"
+        class="size-11 shrink-0 rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/10 dark:text-neutral-300"
       >
+        <span class="size-full flex items-center justify-center text-lg font-semibold">{{ nameFor(character).slice(0, 1) }}</span>
+      </CharacterAvatarImage>
       <span v-else class="size-11 flex shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-lg text-neutral-500 font-semibold dark:bg-white/10 dark:text-neutral-300">
         {{ nameFor(character).slice(0, 1) }}
       </span>
@@ -72,3 +73,15 @@ function nameFor(character: CharacterOption) {
     暂无可用角色卡。请先创建角色，再绑定 QQ 小号。
   </p>
 </template>
+
+<style scoped>
+@media (max-width: 767px) {
+  .qq-character-option {
+    background: var(--airi-surface-card);
+  }
+
+  .qq-character-option[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--airi-accent-strong) 14%, var(--airi-surface-card));
+  }
+}
+</style>

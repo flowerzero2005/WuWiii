@@ -1181,6 +1181,7 @@ pages:
           reference: 参考编号
           request-outcome: 请求结果
         surfaces:
+          qq: QQ 对话
           automatic-screenshot: 自动截图
           voice-call: 电话
           group-chat: 群聊
@@ -1459,6 +1460,7 @@ pages:
           compress-overstuffed: 先压缩
         risk:
           message-example-copy-pool: 检测到示例；只作为风格信号，不作为标准回复。
+          inline-dialogue-example-source: 检测到对话式示例；只提取表达风格，不把示例原文写入人格锚点。
           fixed-catchphrase-rule: 检测到固定语尾或回复形状；应转成反模板边界。
           relationship-overclaim: 检测到关系过度承诺；亲密表达需受记忆和上下文约束。
           runtime-instruction-leakage: 检测到运行时或隐藏提示词写法；不要进入可见身份。
@@ -1504,6 +1506,9 @@ pages:
       title: 角色日记
       description: 查看角色根据近期对话生成的日记草稿和已确认日记。
       drafts: 待确认草稿
+      qq-source: 来自 QQ 对话
+      qq-load-failed: QQ 日记暂时无法读取，请稍后重试。
+      qq-edit-invalid: 标题不能为空，正文需为 30 至 4000 字。
       history: 已确认日记
       empty: 还没有已确认的日记。
       untitled: 未命名日记

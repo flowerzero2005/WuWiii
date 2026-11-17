@@ -152,7 +152,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     return `default::card:${activePersonaCardId.value}`
   })
 
-  const partitionDiary = computed(() => entries.value.filter(entry => entry.kind === 'diary'))
+  const partitionDiary = computed(() => entries.value.filter(entry => entry.kind === 'diary' && (entry.id.startsWith('qq-diary:') ? entry.metadata?.reviewStatus === 'confirmed' : entry.metadata?.reviewStatus !== 'draft')))
   const partitionFocus = computed(() => entries.value.filter(entry => entry.kind === 'focus'))
 
   // 加载状态跟踪
@@ -532,7 +532,7 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
     sourceSessionId?: string
   }, data?: Pick<NotebookData, 'entries' | 'diaryDrafts'>) {
     const now = input.now ?? Date.now()
-    const scopedDiaries = data ? data.entries.filter(entry => entry.kind === 'diary') : partitionDiary.value
+    const scopedDiaries = data ? data.entries.filter(entry => entry.kind === 'diary' && (entry.id.startsWith('qq-diary:') ? entry.metadata?.reviewStatus === 'confirmed' : entry.metadata?.reviewStatus !== 'draft')) : partitionDiary.value
     const hasPendingDraft = (data?.diaryDrafts ?? diaryDrafts.value).some((draft) => {
       if (draft.status !== 'draft')
         return false
@@ -801,6 +801,11 @@ export const useCharacterNotebookStore = defineStore('character-notebook', () =>
 
     if (metadata.sourceUserMessageId === target.sourceMessageId)
       return true
+
+    if (Array.isArray(metadata.sourceUserMessageIds)
+      && metadata.sourceUserMessageIds.includes(target.sourceMessageId)) {
+      return true
+    }
 
     if (metadata.sourceAssistantMessageId === target.sourceMessageId)
       return true

@@ -193,6 +193,14 @@ describe('persona-package', () => {
     expect(prompt.user).not.toContain('欢迎回来，我的小星星')
   })
 
+  it('includes character description details beyond the old 1200-character draft limit', () => {
+    const description = Array.from({ length: 18 }, (_, index) => `设定片段${index}：${'认真而温柔'.repeat(16)}`).join('\n')
+    const prompt = buildPersonaPackageGenerationPrompt({ card: createCard({ description }), now: 100 })
+    expect(prompt.user).toContain('设定片段17')
+    const longParagraph = buildPersonaPackageGenerationPrompt({ card: createCard({ description: `${'角色设定'.repeat(400)}后续重要设定` }), now: 100 })
+    expect(longParagraph.user).toContain('后续重要设定')
+  })
+
   it('parses generated persona profile JSON through profile normalization', () => {
     const profile = parseGeneratedPersonaExpandedProfile(`\`\`\`json
 {

@@ -9,6 +9,7 @@ import type { CallOverlayMessage, CallPresentationEvent } from '../../utils/mobi
 import ChatCleanupDialog from '@proj-airi/stage-ui/components/chat-cleanup-dialog'
 
 import { ChatHistory, HearingConfigDialog } from '@proj-airi/stage-ui/components'
+import { CharacterAvatarImage } from '@proj-airi/stage-ui/components/chat'
 import { useAudioAnalyzer, useManualSpeechInput } from '@proj-airi/stage-ui/composables'
 import { useAudioContext, useSpeakingStore } from '@proj-airi/stage-ui/stores/audio'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
@@ -163,8 +164,9 @@ const { directSessions, groupSessions } = storeToRefs(chatSession)
 const { activeCardId, cards } = storeToRefs(useAiriCardStore())
 const airiCardStore = useAiriCardStore()
 const avatarFramingStore = useAvatarFramingSettingsStore()
-const { displayModels } = storeToRefs(useDisplayModelsStore())
-const { stageModelSelectedDisplayModel, stageModelRenderer } = storeToRefs(useSettingsStageModel())
+const displayModelsStore = useDisplayModelsStore()
+const { displayModels } = storeToRefs(displayModelsStore)
+const { stageModelSelected, stageModelSelectedDisplayModel, stageModelRenderer } = storeToRefs(useSettingsStageModel())
 const { actionRequest: overlayActionRequest, emotionTransitionRequest: overlayEmotionRequest, availableMotions: live2dAvailableMotions } = storeToRefs(useLive2d())
 const { mouthOpenSize: overlayMouthOpenSize, textMouthForm: overlayMouthForm, textSpeaking: overlayTextSpeaking } = storeToRefs(useSpeakingStore())
 const { streamingMessage, interSegmentPlaceholder } = storeToRefs(chatStream)
@@ -211,6 +213,40 @@ watch(() => props.callError, value => showVisibleCallError(value || ''), { immed
 const backgroundDialogOpen = ref(false)
 const chatCleanupDialogOpen = ref(false)
 const chatExpanded = ref(false)
+const chatFullscreen = ref(false)
+const chatFeedHeight = ref(0)
+let chatResizeStart: { pointerId: number, y: number, height: number } | undefined
+
+function toggleChatExpanded() {
+  chatExpanded.value = !chatExpanded.value
+  if (!chatExpanded.value)
+    chatFullscreen.value = false
+  contactsOpen.value = false
+}
+
+function startChatResize(event: PointerEvent) {
+  if (event.button !== 0)
+    return
+  const handle = event.currentTarget as HTMLElement
+  const feed = handle.parentElement?.querySelector<HTMLElement>('.chat-feed')
+  chatResizeStart = { pointerId: event.pointerId, y: event.clientY, height: feed?.getBoundingClientRect().height || 180 }
+  handle.setPointerCapture(event.pointerId)
+  chatExpanded.value = true
+  chatFullscreen.value = false
+  event.preventDefault()
+}
+
+function moveChatResize(event: PointerEvent) {
+  if (!chatResizeStart || chatResizeStart.pointerId !== event.pointerId)
+    return
+  const available = Math.max(180, (viewportHeight.value || window.innerHeight) - 220)
+  chatFeedHeight.value = Math.min(available, Math.max(120, chatResizeStart.height + chatResizeStart.y - event.clientY))
+}
+
+function stopChatResize(event: PointerEvent) {
+  if (chatResizeStart?.pointerId === event.pointerId)
+    chatResizeStart = undefined
+}
 const toolsOpen = ref(false)
 const attachmentActionsOpen = ref(false)
 const moreToolsOpen = ref(false)
@@ -238,18 +274,16 @@ const drafts = new Map<string, string>()
 function contactAvatarUrl(characterId: string) {
   const cardAvatar = cards.value.get(characterId)?.metadata?.avatar
   const runtime = airiCardStore.getCardRuntime(characterId)
-  const modelId = runtime?.displayModelId || DEFAULT_STAGE_MODEL_ID
-  return displayModels.value.find(model => model.id === modelId)?.previewImage
-    || (typeof cardAvatar === 'string' && cardAvatar.trim() ? cardAvatar : undefined)
+  const modelId = contactAvatarModelId(characterId)
+  return (typeof cardAvatar === 'string' && cardAvatar.trim() ? cardAvatar : undefined)
     || runtime?.avatarUrl
+    || displayModels.value.find(model => model.id === modelId)?.previewImage
     || displayModels.value.find(model => model.id === DEFAULT_STAGE_MODEL_ID)?.previewImage
 }
 
-function contactAvatarFramingStyle(characterId: string) {
-  const modelId = airiCardStore.getCardRuntime(characterId)?.displayModelId || DEFAULT_STAGE_MODEL_ID
-  return displayModels.value.some(model => model.id === modelId && model.previewImage)
-    ? createAvatarFramingStyle(avatarFramingStore.getFraming(modelId))
-    : undefined
+function contactAvatarModelId(characterId: string) {
+  return airiCardStore.getCardRuntime(characterId)?.displayModelId
+    || (characterId === activeCardId.value ? stageModelSelected.value : DEFAULT_STAGE_MODEL_ID)
 }
 
 const contacts = computed(() => buildPersonaChatContacts({
@@ -466,6 +500,8 @@ const panelStyle = computed(() => ({
   'bottom': keyboardInset.value > 0 ? `${keyboardInset.value + 10}px` : 'max(16px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
   '--mobile-viewport-height': `${viewportHeight.value || window.innerHeight}px`,
   '--dock-bottom-padding': '8px',
+  '--mobile-chat-surface-opacity': `${Math.round(chatSurfaceOpacity.value * 100)}%`,
+  '--mobile-chat-feed-height': `${chatFeedHeight.value || Math.round(Math.min((viewportHeight.value || window.innerHeight) * 0.46, (viewportHeight.value || window.innerHeight) - 220))}px`,
 }))
 
 function updateViewport() {
@@ -1573,6 +1609,7 @@ onUnmounted(() => {
 })
 
 onMounted(() => {
+  void displayModelsStore.loadDisplayModelsFromIndexedDB()
   void characterNotebook.loadFromStorage()
   window.addEventListener('pocket-overlay-send', handleOverlaySend)
   window.addEventListener('pocket-overlay-voice-input', handleOverlayVoiceInput)
@@ -1651,19 +1688,24 @@ onMounted(() => {
       <ViewControlInputs ref="viewControlsInputs" :mode="viewControlsActiveMode" />
     </div>
 
-    <section class="conversation-sheet" :class="{ 'is-expanded': chatExpanded, 'has-tools': toolsOpen, 'has-contacts': contactsOpen, 'is-empty': !hasConversation }" :aria-label="t('stage.mobile.conversation')">
+    <section class="conversation-sheet" :class="{ 'is-expanded': chatExpanded, 'is-fullscreen': chatFullscreen, 'has-custom-height': chatFeedHeight > 0, 'has-tools': toolsOpen, 'has-contacts': contactsOpen, 'is-empty': !hasConversation }" :aria-label="t('stage.mobile.conversation')">
+      <div class="sheet-resize-handle" role="slider" tabindex="0" :aria-label="label('拖动调整聊天记录高度', 'Drag to resize chat history')" aria-valuemin="120" :aria-valuemax="Math.max(180, viewportHeight - 220)" :aria-valuenow="chatFeedHeight || Math.round(Math.min(viewportHeight * 0.46, viewportHeight - 220))" @pointerdown="startChatResize" @pointermove="moveChatResize" @pointerup="stopChatResize" @pointercancel="stopChatResize" @keydown.up.prevent="chatExpanded = true; chatFullscreen = false; chatFeedHeight = Math.min(Math.max(180, viewportHeight - 220), (chatFeedHeight || 180) + 40)" @keydown.down.prevent="chatExpanded = true; chatFullscreen = false; chatFeedHeight = Math.max(120, (chatFeedHeight || 180) - 40)">
+        <span class="sheet-grip" aria-hidden="true" />
+      </div>
       <div class="sheet-heading">
         <button
           type="button"
           class="sheet-heading-main"
           :aria-label="chatExpanded ? t('stage.mobile.collapse-chat') : t('stage.mobile.expand-chat')"
           :aria-expanded="chatExpanded"
-          @click="chatExpanded = !chatExpanded; contactsOpen = false"
+          @click="toggleChatExpanded"
         >
-          <span class="sheet-grip" aria-hidden="true" />
           <span class="sheet-title">{{ stageViewControlsEnabled ? t('stage.mobile.adjust-character') : activeSessionTitle }}</span>
           <span v-if="responding || groupSending" class="sheet-state">{{ t('stage.mobile.responding') }}</span>
           <span class="i-solar:alt-arrow-up-outline sheet-chevron" :class="{ 'rotate-180': chatExpanded }" aria-hidden="true" />
+        </button>
+        <button v-if="chatExpanded" type="button" class="sheet-icon" :aria-label="chatFullscreen ? label('退出全屏聊天', 'Exit full-screen chat') : label('全屏聊天', 'Full-screen chat')" :aria-pressed="chatFullscreen" @click="chatFullscreen = !chatFullscreen; toolsOpen = false; contactsOpen = false">
+          <span :class="chatFullscreen ? 'i-lucide:minimize' : 'i-lucide:maximize'" class="size-4" aria-hidden="true" />
         </button>
         <button v-if="chatExpanded" type="button" class="sheet-character-switch" :aria-label="label('切换角色或会话', 'Switch character or conversation')" :aria-expanded="contactsOpen" @click="contactsOpen = !contactsOpen; toolsOpen = false">
           <span class="i-lucide:users-round size-4" aria-hidden="true" />
@@ -1705,8 +1747,9 @@ onMounted(() => {
             <button type="button" class="contact-row" :class="{ 'is-current': activeSessionId === session.sessionId }" :disabled="contactSwitchBlocked" :aria-current="activeSessionId === session.sessionId ? 'true' : undefined" @click="openSession(session)">
               <span class="contact-avatar">
                 <span v-if="session.kind === 'room'" class="i-lucide:users-round size-5" aria-hidden="true" />
-                <img v-else-if="contactAvatarUrl(session.characterId)" :src="contactAvatarUrl(session.characterId)" :style="contactAvatarFramingStyle(session.characterId)" alt="">
-                <span v-else>{{ (session.title || contacts.find(item => item.characterId === session.characterId)?.displayName || 'A').slice(0, 1) }}</span>
+                <CharacterAvatarImage v-else :src="contactAvatarUrl(session.characterId)" :model-id="contactAvatarModelId(session.characterId)" class="size-full">
+                  <span>{{ (session.title || contacts.find(item => item.characterId === session.characterId)?.displayName || 'A').slice(0, 1) }}</span>
+                </CharacterAvatarImage>
               </span>
               <span class="contact-copy">
                 <strong>{{ session.title || (session.kind === 'room' ? label('群聊', 'Group chat') : contacts.find(item => item.characterId === session.characterId)?.displayName || session.characterId) }}</strong>
@@ -1748,7 +1791,7 @@ onMounted(() => {
           </div>
           <div v-for="contact in contacts" :key="contact.characterId" class="character-choice" :class="{ 'is-current': activeContact?.characterId === contact.characterId }">
             <button type="button" class="character-choice-main" :disabled="contactSwitchBlocked" @click="selectCharacter(contact.characterId)">
-              <span class="contact-avatar character-choice-avatar"><img v-if="contactAvatarUrl(contact.characterId)" :src="contactAvatarUrl(contact.characterId)" :style="contactAvatarFramingStyle(contact.characterId)" alt=""><span v-else>{{ contact.displayName.slice(0, 1) }}</span></span>
+              <span class="contact-avatar character-choice-avatar"><CharacterAvatarImage :src="contactAvatarUrl(contact.characterId)" :model-id="contactAvatarModelId(contact.characterId)" class="size-full"><span>{{ contact.displayName.slice(0, 1) }}</span></CharacterAvatarImage></span>
               <span class="character-choice-copy">
                 <strong>{{ contact.displayName }}</strong>
                 <small>{{ contact.lastMessagePreview || label('还没有会话', 'No conversation yet') }}</small>
@@ -1799,6 +1842,11 @@ onMounted(() => {
           @typing-complete="handleTypingComplete"
           @typing-progress="handleTypingProgress"
         />
+        <div v-if="chatFullscreen && !hasConversation" class="fullscreen-empty-state" aria-hidden="true">
+          <span class="fullscreen-empty-mark">W</span>
+          <strong>{{ label('从这里开始聊天', 'Start a conversation') }}</strong>
+          <span>{{ label('说说今天的事，或者问一个问题', 'Share your day or ask a question') }}</span>
+        </div>
       </div>
       <div v-else class="adjustment-hint">
         {{ t('stage.mobile.adjust-hint') }}
@@ -2122,9 +2170,41 @@ onMounted(() => {
   padding: 5px 6px var(--dock-bottom-padding);
   border: 1px solid color-mix(in srgb, var(--airi-border-accent) 50%, rgb(255 255 255 / 0.4));
   border-radius: 24px;
-  background: color-mix(in srgb, var(--airi-surface-overlay) 72%, transparent);
+  background: color-mix(in srgb, var(--airi-surface-overlay-base) var(--mobile-chat-surface-opacity), transparent);
   box-shadow: 0 18px 44px rgb(14 24 43 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.34);
   backdrop-filter: blur(22px) saturate(1.18);
+  pointer-events: auto;
+}
+
+.conversation-sheet.is-fullscreen {
+  height: calc(var(--mobile-viewport-height) - 80px);
+  border-color: color-mix(in srgb, var(--airi-border-accent) 72%, transparent);
+  background: color-mix(in srgb, var(--airi-surface-overlay-base) 92%, transparent);
+  box-shadow: 0 24px 56px rgb(14 24 43 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.44);
+}
+
+.is-fullscreen .sheet-resize-handle { display: none; }
+.is-fullscreen .sheet-heading {
+  min-height: 52px;
+  padding: 4px 5px 8px 10px;
+  border-bottom: 1px solid var(--airi-border-subtle);
+}
+.is-fullscreen .sheet-heading-main { min-height: 40px; }
+.is-fullscreen .sheet-title { font-size: 15px; font-weight: 730; }
+.is-fullscreen .sheet-icon[aria-pressed='true'] {
+  border-color: var(--airi-border-accent);
+  background: var(--airi-accent-surface);
+  color: var(--airi-accent-strong);
+}
+
+.sheet-resize-handle {
+  display: grid;
+  width: 100%;
+  height: 12px;
+  flex: none;
+  place-items: center;
+  cursor: ns-resize;
+  touch-action: none;
   pointer-events: auto;
 }
 
@@ -2392,11 +2472,55 @@ onMounted(() => {
 }
 
 .is-expanded .chat-feed {
-  max-height: min(46dvh, calc(var(--mobile-viewport-height) - 220px));
+  height: min(var(--mobile-chat-feed-height), calc(var(--mobile-viewport-height) - 220px));
+  max-height: calc(var(--mobile-viewport-height) - 220px);
   margin-top: 6px;
   border: 1px solid var(--airi-border-subtle);
-  background: color-mix(in srgb, var(--airi-surface-field) 68%, transparent);
+  background: color-mix(in srgb, var(--airi-surface-field-base) var(--mobile-chat-surface-opacity), transparent);
 }
+
+.is-fullscreen .chat-feed {
+  height: auto;
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.fullscreen-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 20px;
+  color: var(--airi-text-muted);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+.fullscreen-empty-mark {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 9px;
+  place-items: center;
+  border: 1px solid var(--airi-border-accent);
+  border-radius: 19px;
+  background: var(--airi-accent-surface);
+  color: var(--airi-accent-strong);
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  transform: rotate(-7deg);
+}
+.fullscreen-empty-state strong { color: var(--airi-text); font-size: 15px; font-weight: 700; }
 
 .has-tools .chat-feed {
   max-height: 0;
@@ -2404,13 +2528,13 @@ onMounted(() => {
 
 .has-contacts .chat-feed { max-height: 0; }
 
-.is-empty .chat-feed {
+.is-empty:not(.is-fullscreen):not(.has-custom-height) .chat-feed {
   max-height: 0;
 }
 
 .chat-history {
-  height: auto;
-  max-height: min(46dvh, calc(var(--mobile-viewport-height) - 220px));
+  height: 100%;
+  max-height: 100%;
   padding: 8px 6px 10px;
 }
 
@@ -2687,6 +2811,14 @@ onMounted(() => {
 .composer-row:focus-within {
   background: color-mix(in srgb, var(--airi-surface-field) 56%, transparent);
   box-shadow: inset 0 0 0 1px var(--airi-border-accent);
+}
+
+.is-fullscreen .composer-row {
+  min-height: 53px;
+  margin-top: 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--airi-border-subtle);
+  background: var(--airi-surface-field);
 }
 
 .send-error {

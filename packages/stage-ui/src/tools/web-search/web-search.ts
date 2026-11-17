@@ -250,7 +250,7 @@ export async function performWebSearch({
 
     const provider = await providersStore.getProviderInstance<WebSearchProvider>(providerId)
     assertCurrent()
-    const maxRequests = Math.min(2, Math.max(1, Math.floor(webSearchStore.maxRequestsPerTurn || 1)))
+    const maxRequests = Math.min(5, Math.max(1, Math.floor(webSearchStore.maxRequestsPerTurn || 1)))
     const configuredPoints = webSearchStore.maxOfficialPointsPerTurn
     const lease = budget.begin({
       providerId,

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ getSession: vi.fn() }))
 vi.mock('../../database/repos/chat-sessions.repo', () => ({ chatSessionsRepo: mocks }))
 
-const { canRecoverMemoryWork } = await import('./memory-work-journal')
+const { canRecoverMemoryWork, isCompletedMemoryWork, memoryWorkKey } = await import('./memory-work-journal')
 
 describe('deleted session memory recovery', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -23,5 +23,25 @@ describe('deleted session memory recovery', () => {
     expect(await canRecoverMemoryWork(turn)).toBe(true)
     mocks.getSession.mockRejectedValue(new Error('temporarily offline'))
     await expect(canRecoverMemoryWork(turn)).rejects.toThrow('temporarily offline')
+  })
+})
+
+describe('completed memory work receipt', () => {
+  it('prevents a second extraction for an already completed assistant turn', () => {
+    const turn = {
+      characterId: 'card-a',
+      sourceSessionId: 'session-a',
+      sourceUserMessageId: 'user-a',
+      sourceAssistantMessageId: 'assistant-a',
+    } as CompletedChatTurnForMemory
+    const key = memoryWorkKey(turn)
+    vi.stubGlobal('localStorage', { getItem: (requested: string) => requested === key ? 'completed:123' : null })
+    try {
+      expect(isCompletedMemoryWork(turn)).toBe(true)
+      expect(isCompletedMemoryWork({ ...turn, sourceAssistantMessageId: 'assistant-b' })).toBe(false)
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

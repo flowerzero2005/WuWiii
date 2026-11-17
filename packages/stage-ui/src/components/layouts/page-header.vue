@@ -17,7 +17,12 @@ const router = useRouter()
 const { t } = useI18n()
 
 function handleBack() {
-  if (props.backTo)
+  const pocketBack = (window as Window & { __pocketHandleBack?: () => boolean }).__pocketHandleBack
+  if (pocketBack?.())
+    return
+  if (window.history.state?.back)
+    router.back()
+  else if (props.backTo)
     void router.push(props.backTo)
   else
     router.back()

@@ -508,6 +508,22 @@ describe('character notebook store', () => {
     notebookStore.cleanup()
   })
 
+  it('does not show a legacy QQ diary as confirmed before server review', async () => {
+    vi.mocked(notebookRepo.load).mockResolvedValue({
+      entries: [
+        { id: 'qq-diary:legacy', kind: 'diary', text: 'Old local copy', createdAt: 1 },
+        { id: 'qq-diary:reviewed', kind: 'diary', text: 'Reviewed on server', createdAt: 2, metadata: { reviewStatus: 'confirmed' } },
+      ],
+      tasks: [],
+      version: 1,
+    })
+    const notebookStore = useCharacterNotebookStore()
+    await notebookStore.loadFromStorage()
+
+    expect(notebookStore.partitionDiary.map(entry => entry.id)).toEqual(['qq-diary:reviewed'])
+    notebookStore.cleanup()
+  })
+
   it('restores a draft or diary entry when its explicit discard or deletion cannot be saved', async () => {
     vi.mocked(notebookRepo.load).mockResolvedValue({
       entries: [{ id: 'diary-1', kind: 'diary', text: 'Still saved', createdAt: 1 }],

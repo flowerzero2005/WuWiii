@@ -3,6 +3,7 @@ import type { Live2DActionBinding, Live2DActionCleanupMode, Live2DAvailableExpre
 
 import { createLive2DCompositeExpressionKey, createLive2DPerformanceExpressionResourceId, createLive2DPerformanceMotionResourceId, createLive2DRandomIdleCustomActionKey, createLive2DRandomIdleMotionKey, defaultModelParameters, filterLive2DCompositeExpressionPresetsByModel, LIVE2D_RANDOM_IDLE_MAX_INTERVAL_MS_DEFAULT, LIVE2D_RANDOM_IDLE_MIN_INTERVAL_MS_DEFAULT, normalizeLive2DRandomIdleIntervalMs, useLive2d } from '@proj-airi/stage-ui-live2d'
 import { Button, Checkbox, DoubleCheckButton, FieldRange, Input, SelectTab, Textarea } from '@proj-airi/ui'
+import { useMediaQuery } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -68,6 +69,12 @@ type ParsedExpressionOption
     | { kind: 'composite', id: string }
 
 const { t } = useI18n()
+const compactResourceEditor = useMediaQuery('(max-width: 767px)')
+const expandedResourceId = ref('')
+
+function toggleResourceEditor(id: string) {
+  expandedResourceId.value = expandedResourceId.value === id ? '' : id
+}
 
 const settings = useSettings()
 const {
@@ -141,8 +148,8 @@ const settingsPanelOptions = computed(() => [
   { value: 'parameters', label: t('settings.live2d.panels.natural') },
   { value: 'advanced', label: t('settings.live2d.panels.advanced') },
 ])
-const live2dSectionClass = ['rounded-xl', 'airi-surface-glass', 'backdrop-blur-lg']
-const live2dListItemClass = ['rounded-lg', 'airi-surface-panel']
+const live2dSectionClass = ['min-w-0', 'w-full', 'max-w-full', 'rounded-xl', 'airi-surface-glass', 'backdrop-blur-lg']
+const live2dListItemClass = ['min-w-0', 'max-w-full', 'rounded-lg', 'airi-surface-panel']
 const live2dDropdownTriggerClass = [
   'w-full',
   'flex items-center justify-between gap-2',
@@ -1316,7 +1323,7 @@ onUnmounted(() => {
       <div
         v-for="motion in runtimeMotions"
         :key="motionResourceId(motion)"
-        :class="[live2dListItemClass, 'p-3', 'flex', 'flex-col', 'gap-3']"
+        :class="[live2dListItemClass, 'p-3', 'flex', 'min-w-0', 'flex-col', compactResourceEditor ? 'gap-2' : 'gap-3']"
       >
         <div :class="['flex', 'items-start', 'justify-between', 'gap-3']">
           <div :class="['min-w-0']">
@@ -1327,41 +1334,55 @@ onUnmounted(() => {
               {{ motion.displayPath }}
             </div>
           </div>
-          <Checkbox
-            :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).aiSelectable"
-            @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { aiSelectable: Boolean(value) })"
-          />
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              v-if="compactResourceEditor"
+              type="button"
+              class="rounded-lg border border-[var(--airi-border-subtle)] px-2 py-1 text-xs airi-text"
+              :aria-expanded="expandedResourceId === `motion:${motionResourceId(motion)}`"
+              :aria-label="`${t('settings.live2d.custom-expressions.actions.edit')} ${motionOptionLabel(motion)}`"
+              @click="toggleResourceEditor(`motion:${motionResourceId(motion)}`)"
+            >
+              {{ t('settings.live2d.custom-expressions.actions.edit') }}
+            </button>
+            <Checkbox
+              :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).aiSelectable"
+              @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { aiSelectable: Boolean(value) })"
+            />
+          </div>
         </div>
-        <Input
-          :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).label"
-          size="sm"
-          variant="primary-dimmed"
-          :placeholder="t('settings.live2d.performance-resources.label')"
-          @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { label: String(value ?? '') })"
-        />
-        <div :class="['grid', 'grid-cols-1', 'gap-2', 'md:grid-cols-2']">
+        <div v-if="!compactResourceEditor || expandedResourceId === `motion:${motionResourceId(motion)}`" class="grid min-w-0 gap-2">
           <Input
-            :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).emotionTags.join(', ')"
+            :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).label"
             size="sm"
             variant="primary-dimmed"
-            :placeholder="t('settings.live2d.performance-resources.emotion-tags')"
-            @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { emotionTags: parseMetadataList(String(value ?? '')) })"
+            :placeholder="t('settings.live2d.performance-resources.label')"
+            @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { label: String(value ?? '') })"
           />
-          <Input
-            :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).sceneTags.join(', ')"
-            size="sm"
-            variant="primary-dimmed"
-            :placeholder="t('settings.live2d.performance-resources.scene-tags')"
-            @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { sceneTags: parseMetadataList(String(value ?? '')) })"
+          <div :class="['grid', 'grid-cols-1', 'gap-2', 'md:grid-cols-2']">
+            <Input
+              :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).emotionTags.join(', ')"
+              size="sm"
+              variant="primary-dimmed"
+              :placeholder="t('settings.live2d.performance-resources.emotion-tags')"
+              @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { emotionTags: parseMetadataList(String(value ?? '')) })"
+            />
+            <Input
+              :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).sceneTags.join(', ')"
+              size="sm"
+              variant="primary-dimmed"
+              :placeholder="t('settings.live2d.performance-resources.scene-tags')"
+              @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { sceneTags: parseMetadataList(String(value ?? '')) })"
+            />
+          </div>
+          <Textarea
+            :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).aiDescription ?? ''"
+            :maxlength="1200"
+            :class="['min-h-24']"
+            :placeholder="t('settings.live2d.performance-resources.ai-description')"
+            @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { aiDescription: String(value ?? '') })"
           />
         </div>
-        <Textarea
-          :model-value="performanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion)).aiDescription ?? ''"
-          :maxlength="1200"
-          :class="['min-h-24']"
-          :placeholder="t('settings.live2d.performance-resources.ai-description')"
-          @update:model-value="value => updatePerformanceResourceMetadata('motions', motionResourceId(motion), motionOptionLabel(motion), { aiDescription: String(value ?? '') })"
-        />
       </div>
     </div>
   </Section>
@@ -1380,7 +1401,7 @@ onUnmounted(() => {
       <div
         v-for="expression in runtimeModelExpressions"
         :key="expressionResourceId(expression)"
-        :class="[live2dListItemClass, 'p-3', 'flex', 'flex-col', 'gap-3']"
+        :class="[live2dListItemClass, 'p-3', 'flex', 'min-w-0', 'flex-col', compactResourceEditor ? 'gap-2' : 'gap-3']"
       >
         <div :class="['flex', 'items-start', 'justify-between', 'gap-3']">
           <div :class="['min-w-0']">
@@ -1391,41 +1412,55 @@ onUnmounted(() => {
               {{ expression.fileName }}
             </div>
           </div>
-          <Checkbox
-            :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).aiSelectable"
-            @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { aiSelectable: Boolean(value) })"
-          />
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              v-if="compactResourceEditor"
+              type="button"
+              class="rounded-lg border border-[var(--airi-border-subtle)] px-2 py-1 text-xs airi-text"
+              :aria-expanded="expandedResourceId === `expression:${expressionResourceId(expression)}`"
+              :aria-label="`${t('settings.live2d.custom-expressions.actions.edit')} ${expressionOptionLabel(expression)}`"
+              @click="toggleResourceEditor(`expression:${expressionResourceId(expression)}`)"
+            >
+              {{ t('settings.live2d.custom-expressions.actions.edit') }}
+            </button>
+            <Checkbox
+              :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).aiSelectable"
+              @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { aiSelectable: Boolean(value) })"
+            />
+          </div>
         </div>
-        <Input
-          :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).label"
-          size="sm"
-          variant="primary-dimmed"
-          :placeholder="t('settings.live2d.performance-resources.label')"
-          @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { label: String(value ?? '') })"
-        />
-        <div :class="['grid', 'grid-cols-1', 'gap-2', 'md:grid-cols-2']">
+        <div v-if="!compactResourceEditor || expandedResourceId === `expression:${expressionResourceId(expression)}`" class="grid min-w-0 gap-2">
           <Input
-            :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).emotionTags.join(', ')"
+            :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).label"
             size="sm"
             variant="primary-dimmed"
-            :placeholder="t('settings.live2d.performance-resources.emotion-tags')"
-            @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { emotionTags: parseMetadataList(String(value ?? '')) })"
+            :placeholder="t('settings.live2d.performance-resources.label')"
+            @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { label: String(value ?? '') })"
           />
-          <Input
-            :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).sceneTags.join(', ')"
-            size="sm"
-            variant="primary-dimmed"
-            :placeholder="t('settings.live2d.performance-resources.scene-tags')"
-            @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { sceneTags: parseMetadataList(String(value ?? '')) })"
+          <div :class="['grid', 'grid-cols-1', 'gap-2', 'md:grid-cols-2']">
+            <Input
+              :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).emotionTags.join(', ')"
+              size="sm"
+              variant="primary-dimmed"
+              :placeholder="t('settings.live2d.performance-resources.emotion-tags')"
+              @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { emotionTags: parseMetadataList(String(value ?? '')) })"
+            />
+            <Input
+              :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).sceneTags.join(', ')"
+              size="sm"
+              variant="primary-dimmed"
+              :placeholder="t('settings.live2d.performance-resources.scene-tags')"
+              @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { sceneTags: parseMetadataList(String(value ?? '')) })"
+            />
+          </div>
+          <Textarea
+            :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).aiDescription ?? ''"
+            :maxlength="1200"
+            :class="['min-h-24']"
+            :placeholder="t('settings.live2d.performance-resources.ai-description')"
+            @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { aiDescription: String(value ?? '') })"
           />
         </div>
-        <Textarea
-          :model-value="performanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression)).aiDescription ?? ''"
-          :maxlength="1200"
-          :class="['min-h-24']"
-          :placeholder="t('settings.live2d.performance-resources.ai-description')"
-          @update:model-value="value => updatePerformanceResourceMetadata('expressions', expressionResourceId(expression), expressionOptionLabel(expression), { aiDescription: String(value ?? '') })"
-        />
       </div>
     </div>
   </Section>

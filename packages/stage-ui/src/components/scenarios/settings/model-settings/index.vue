@@ -112,10 +112,13 @@ function resumeLive2DPreview(activeMs = LIVE2D_PREVIEW_IDLE_DELAY_MS) {
   }, activeMs)
 }
 
-watch(selectedModel, async () => {
-  stageModelSelected.value = selectedModel.value?.id ?? ''
+watch(() => selectedModel.value?.id, async (modelId) => {
+  stageModelSelected.value = modelId ?? ''
   await settingsStore.updateStageModel()
-}, { deep: true })
+  const cardId = airiCardStore.activeCardId
+  if (modelId && cardId && airiCardStore.getCardRuntime(cardId)?.displayModelId !== modelId)
+    airiCardStore.setCardDisplayModel(cardId, modelId)
+})
 
 async function initializeModelSettings() {
   if (modelSettingsInitialized)

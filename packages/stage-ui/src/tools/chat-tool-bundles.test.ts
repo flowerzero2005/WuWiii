@@ -243,7 +243,7 @@ describe('buildStageChatToolBundles', () => {
       messageText: 'tell me a story',
       webSearchEnabled: true,
     })
-    expect(ordinary.requestedToolBundleIds).toEqual([])
+    expect(ordinary.requestedToolBundleIds).toEqual([WEB_SEARCH_TOOL_BUNDLE_ID])
 
     const search = await buildStageChatToolBundles({
       ...loaders,
